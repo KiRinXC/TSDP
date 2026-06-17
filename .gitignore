@@ -1,0 +1,10 @@
+# Large local dataset artifacts
+/dataset/**
+!/dataset/
+!/dataset/.gitkeep
+!/dataset/README.md
+!/dataset/*.sh
+
+# Common local/editor files
+.ipynb_checkpoints/
+.DS_Store
