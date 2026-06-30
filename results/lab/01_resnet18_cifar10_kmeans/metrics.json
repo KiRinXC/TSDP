@@ -1,0 +1,69 @@
+{
+  "created_at": "2026-06-30T14:53:22",
+  "experiment": "01_resnet18_cifar10_kmeans",
+  "model": "resnet18",
+  "pretraining": "imagenet-1k",
+  "method": "feature_kmeans",
+  "uses_cifar10_labels_for_training": false,
+  "uses_cifar10_labels_for_cluster_matching": true,
+  "cifar10_split": "test",
+  "dataset_root": "/root/autodl-tmp/TSDP/dataset/public/cifar10",
+  "weight_path": "/root/autodl-tmp/TSDP/weights/pre_train/resnet18-5c106cde.pth",
+  "num_samples": 10000,
+  "feature_dim": 512,
+  "num_clusters": 10,
+  "seed": 42,
+  "kmeans_iters": 100,
+  "kmeans_restarts": 10,
+  "kmeans_inertia": 4239421.5,
+  "nmi": 0.5186935910119613,
+  "optimal_one_to_one": {
+    "description": "全局一对一最佳匹配；每个 cluster 只能对应一个标签，每个标签也只能被一个 cluster 使用。",
+    "cluster_to_label": {
+      "0": 6,
+      "1": 4,
+      "2": 3,
+      "3": 8,
+      "4": 5,
+      "5": 0,
+      "6": 7,
+      "7": 9,
+      "8": 1,
+      "9": 2
+    },
+    "matched_accuracy": 0.6319,
+    "matched_accuracy_percent": 63.190000000000005,
+    "confusion_matrix_png": "/root/autodl-tmp/TSDP/results/lab/01_resnet18_cifar10_kmeans/confusion_matrix_optimal.png"
+  },
+  "greedy_majority": {
+    "description": "逐 cluster 选择该 cluster 内样本数最多的真实标签；允许多个 cluster 映射到同一个标签。",
+    "cluster_to_label": {
+      "0": 6,
+      "1": 4,
+      "2": 3,
+      "3": 8,
+      "4": 5,
+      "5": 0,
+      "6": 7,
+      "7": 9,
+      "8": 1,
+      "9": 2
+    },
+    "matched_accuracy": 0.6319,
+    "matched_accuracy_percent": 63.190000000000005,
+    "confusion_matrix_png": "/root/autodl-tmp/TSDP/results/lab/01_resnet18_cifar10_kmeans/confusion_matrix_greedy.png"
+  },
+  "cifar10_classes": [
+    "airplane",
+    "automobile",
+    "bird",
+    "cat",
+    "deer",
+    "dog",
+    "frog",
+    "horse",
+    "ship",
+    "truck"
+  ],
+  "note": "KMeans 聚类过程没有使用 CIFAR-10 标签；标签只在评估阶段用于 cluster 到类别的映射和绘制混淆矩阵。"
+}

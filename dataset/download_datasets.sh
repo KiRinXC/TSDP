@@ -2,25 +2,26 @@
 set -Eeuo pipefail
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-DATASET_DIR="${DATASET_DIR:-$SCRIPT_DIR}"
+DATASET_DIR="${DATASET_DIR:-$SCRIPT_DIR/public}"
 ARCHIVE_DIR="${ARCHIVE_DIR:-$DATASET_DIR/_archives}"
 FORCE="${FORCE:-0}"
 
 usage() {
     cat <<'USAGE'
-Download the four datasets used by TensorShield into this project's dataset/ dir.
+Download the four public datasets into this project's dataset/public/ dir.
 
 Usage:
   bash dataset/download_datasets.sh [all|cifar10|cifar100|stl10|tiny-imagenet ...]
 
 By default, all four datasets are downloaded and extracted:
-  dataset/cifar10/cifar-10-batches-py
-  dataset/cifar100/cifar-100-python
-  dataset/stl10/stl10_binary
-  dataset/tiny-imagenet-200
+  dataset/public/cifar10/cifar-10-batches-py
+  dataset/public/cifar100/cifar-100-python
+  dataset/public/stl10/stl10_binary
+  dataset/public/tiny-imagenet-200
 
 Environment:
-  DATASET_DIR=/path/to/dataset   Override output directory.
+  DATASET_DIR=/path/to/dataset/public
+                                 Override public dataset directory.
   ARCHIVE_DIR=/path/to/archives  Override archive cache directory.
   FORCE=1                        Re-download and re-extract existing files.
 

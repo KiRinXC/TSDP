@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the local TensorShield dataset layout and sample counts."""
+"""验证本地公开数据集目录结构和样本数量。"""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ from pathlib import Path
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
-DEFAULT_DATASET_ROOT = REPO_ROOT / "dataset"
+DEFAULT_DATASET_ROOT = REPO_ROOT / "dataset" / "public"
 
 
 EXPECTED_ARCHIVE_MD5 = {
@@ -210,7 +210,7 @@ class Verifier:
             wnids = [line.strip() for line in reader if line.strip()]
         self.expect_equal("Tiny-ImageNet wnids", len(wnids), 200)
 
-        # TensorShield 的两份源码分别读取 val 和 val2，因此这里要求 val2 可用。
+        # 不同实验脚本可能使用 val 或 val2，因此这里要求 val2 可用。
         if val2_root.exists():
             val2_images = self.count_images(val2_root)
             self.expect_equal("Tiny-ImageNet val2 images", val2_images, 10000)
@@ -250,12 +250,12 @@ class Verifier:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="Verify TensorShield datasets.")
+    parser = argparse.ArgumentParser(description="Verify public datasets.")
     parser.add_argument(
         "--dataset-root",
         type=Path,
         default=DEFAULT_DATASET_ROOT,
-        help=f"dataset directory, default: {DEFAULT_DATASET_ROOT}",
+        help=f"公开数据集根目录，默认：{DEFAULT_DATASET_ROOT}",
     )
     parser.add_argument(
         "--skip-archives",

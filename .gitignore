@@ -4,6 +4,15 @@
 !/dataset/.gitkeep
 !/dataset/README.md
 !/dataset/*.sh
+!/dataset/*.py
+!/dataset/derived/
+!/dataset/derived/README.md
+!/dataset/pseudo_labels/
+!/dataset/pseudo_labels/README.md
+
+# 训练产生的大体积模型输出
+/weights/victim/
+/weights/pre_train
 
 # Common local/editor files
 .ipynb_checkpoints/
