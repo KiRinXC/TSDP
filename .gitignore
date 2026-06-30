@@ -1,18 +1,14 @@
-# Large local dataset artifacts
-/dataset/**
-!/dataset/
-!/dataset/.gitkeep
-!/dataset/README.md
-!/dataset/*.sh
-!/dataset/*.py
-!/dataset/derived/
-!/dataset/derived/README.md
-!/dataset/pseudo_labels/
-!/dataset/pseudo_labels/README.md
+# Python cache
+__pycache__/
+*.py[cod]
 
-# 训练产生的大体积模型输出
-/weights/victim/
-/weights/pre_train
+# 原始公开数据
+/dataset/public/**
+
+# 本地模型权重
+/weights/pre_train/*.pth
+/weights/pre_train/*.part
+/weights/victim/**
 
 # Common local/editor files
 .ipynb_checkpoints/

@@ -90,7 +90,7 @@ def resolve_split_name(dataset_name: str, split: str) -> str:
 
 def default_query_manifest_path(derived_root: Path, dataset_name: str, split_name: str) -> Path:
     """返回无标签查询集 manifest 默认路径。"""
-    return derived_root / dataset_name / split_name / "manifest.json"
+    return derived_root / dataset_name / "manifest.json"
 
 
 def read_manifest(path: Path) -> dict:
@@ -201,10 +201,9 @@ def default_output_dir(
     pseudo_label_root: Path,
     dataset_name: str,
     model_name: str,
-    split_name: str,
 ) -> Path:
     """返回伪标签数据集默认输出目录。"""
-    return pseudo_label_root / dataset_name / model_name / split_name
+    return pseudo_label_root / dataset_name / model_name
 
 
 @torch.inference_mode()
@@ -301,7 +300,7 @@ def pseudo_label_main(spec: ModelSpec) -> None:
     out_dir = (
         Path(args.out_dir).expanduser().resolve()
         if args.out_dir
-        else default_output_dir(pseudo_label_root, dataset_name, spec.name, split_name)
+        else default_output_dir(pseudo_label_root, dataset_name, spec.name)
     )
 
     print(f"[INFO] 模型: {spec.display_name}")

@@ -91,10 +91,10 @@ TensorShield demo 默认 lr_step = 30
 论文配置是每 60 epochs 衰减一次
 ```
 
-本项目已经把 guarded CIFAR-10 victim 训练入口设为：
+本项目采用论文配置，victim 训练入口设为：
 
 ```bash
---lr-step 30
+--lr-step 60
 ```
 
 

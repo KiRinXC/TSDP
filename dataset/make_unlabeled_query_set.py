@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""从评估 split 中构造无标签查询子集，采样规模以训练集大小为基准。"""
+"""从验证集中构造无标签查询子集，采样规模以训练集大小为基准。"""
 
 from __future__ import annotations
 
@@ -16,7 +16,7 @@ from torchvision import datasets as tv_datasets
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATASET_ROOT = REPO_ROOT / "dataset" / "public"
 DEFAULT_DERIVED_ROOT = REPO_ROOT / "dataset" / "derived"
-DEFAULT_RATIO = 0.005
+DEFAULT_RATIO = 0.01
 
 
 DATASET_ALIASES = {
@@ -48,7 +48,7 @@ def resolve_split_name(dataset_name: str, split: str) -> str:
     normalized = split.strip().lower()
     if normalized in {"eval", "validation", "valid", "val", "test"}:
         return "val" if dataset_name == "tiny-imagenet-200" else "test"
-    raise ValueError("当前脚本只从评估 split 构造无标签查询集，可选 split: eval / val / test")
+    raise ValueError("当前脚本只从验证集构造无标签查询集，可选 split: eval / val / test")
 
 
 def build_dataset(dataset_name: str, dataset_root: Path, split_name: str):
@@ -98,23 +98,22 @@ def build_train_reference_dataset(dataset_name: str, dataset_root: Path):
 def default_output_dir(
     derived_root: Path,
     dataset_name: str,
-    split_name: str,
 ) -> Path:
-    return derived_root / dataset_name / split_name
+    return derived_root / dataset_name
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="从评估 split 中构造小比例无标签查询子集，采样规模以训练集大小为基准。")
+    parser = argparse.ArgumentParser(description="从验证集中构造无标签查询子集，默认采样训练集规模的 1%。")
     parser.add_argument("--dataset", required=True, help="数据集名称，如 cifar10 / stl10")
     parser.add_argument(
         "--split",
         default="eval",
-        help="评估 split，默认 eval。CIFAR/STL 映射为 test，Tiny-ImageNet 映射为 val。",
+        help="验证集来源，默认 eval。CIFAR/STL 使用官方 test，Tiny-ImageNet 使用 val。",
     )
     parser.add_argument("--dataset-root", type=Path, default=DEFAULT_DATASET_ROOT, help="公开数据集根目录")
     parser.add_argument("--derived-root", type=Path, default=DEFAULT_DERIVED_ROOT, help="派生数据根目录")
-    parser.add_argument("--ratio", type=float, default=DEFAULT_RATIO, help="相对训练集大小的采样比例，默认 0.005")
-    parser.add_argument("--max-samples", type=int, default=None, help="直接指定样本数，仍需小于训练集 1%%")
+    parser.add_argument("--ratio", type=float, default=DEFAULT_RATIO, help="相对训练集大小的采样比例，默认 0.01")
+    parser.add_argument("--max-samples", type=int, default=None, help="直接指定样本数，仍需不超过训练集 1%%")
     parser.add_argument("--seed", type=int, default=42, help="采样随机种子")
     parser.add_argument("--force", action="store_true", help="允许覆盖已有 manifest")
     parser.add_argument("--dry-run", action="store_true", help="只打印计划，不写入文件")
@@ -144,9 +143,9 @@ def main() -> int:
 
     if sample_count <= 0:
         raise ValueError(f"采样数量为 {sample_count}，请增大 --ratio 或 --max-samples")
-    if sample_count >= one_percent:
+    if sample_count > one_percent:
         raise ValueError(
-            f"采样数量必须小于训练集 1%%。当前 {sample_count}/{train_reference_size}，"
+            f"采样数量必须不超过训练集 1%%。当前 {sample_count}/{train_reference_size}，"
             f"1%% 阈值为 {one_percent:.2f}"
         )
     if sample_count > source_size:
@@ -158,7 +157,6 @@ def main() -> int:
     output_dir = default_output_dir(
         derived_root=derived_root,
         dataset_name=dataset_name,
-        split_name=split_name,
     )
     manifest_path = output_dir / "manifest.json"
     samples_path = output_dir / "samples.tsv"
@@ -192,7 +190,7 @@ def main() -> int:
         "sample_count": sample_count,
         "actual_ratio": actual_ratio,
         "train_reference_ratio": sample_count / train_reference_size,
-        "max_ratio_policy": "样本数必须小于训练集 1%。样本仍从评估 split 抽取。",
+        "max_ratio_policy": "默认样本数为 floor(训练集大小 * 1%)；样本从验证集中抽取。CIFAR/STL 使用官方 test，Tiny-ImageNet 使用 val。",
         "seed": args.seed,
         "public_dataset_root": str(dataset_root),
         "derived_root": str(derived_root),

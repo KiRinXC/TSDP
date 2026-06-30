@@ -21,15 +21,15 @@ dataset/pseudo_labels/<dataset>/
   mobilenetv2/
 ```
 
-具体伪标签数据集再按来源 split 和查询集标识分层：
+具体伪标签数据集直接保存在对应模型目录下：
 
 ```text
-dataset/pseudo_labels/<dataset>/<model>/<split>/
+dataset/pseudo_labels/<dataset>/<model>/
   manifest.json
   samples.tsv
 ```
 
-比例、样本数、随机种子和来源查询集路径等信息只写入 `manifest.json`，不编码进目录名。
+查询样本来自哪个验证来源、比例、样本数、随机种子和来源查询集路径等信息只写入 `manifest.json`，不编码进目录名。
 
 ## 生成方式
 
@@ -45,14 +45,14 @@ bash exp/make_pseudo_labels/resnet50/run.sh tiny-imagenet-200
 默认读取：
 
 ```text
-dataset/derived/<dataset>/<split>/manifest.json
+dataset/derived/<dataset>/manifest.json
 weights/victim/<model>/<dataset>/target.pth
 ```
 
 默认输出：
 
 ```text
-dataset/pseudo_labels/<dataset>/<model>/<split>/
+dataset/pseudo_labels/<dataset>/<model>/
   manifest.json
   samples.tsv
 ```

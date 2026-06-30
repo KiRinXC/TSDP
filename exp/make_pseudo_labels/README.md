@@ -23,7 +23,7 @@ run.sh
 本实验读取 `dataset/derived/` 中已有的无标签查询集 manifest。默认路径为：
 
 ```text
-dataset/derived/<dataset>/<split>/manifest.json
+dataset/derived/<dataset>/manifest.json
 ```
 
 其中默认 split 映射为：
@@ -44,13 +44,13 @@ weights/victim/<model>/<dataset>/target.pth
 伪标签数据集默认写入：
 
 ```text
-dataset/pseudo_labels/<dataset>/<model>/<split>/
+dataset/pseudo_labels/<dataset>/<model>/
   manifest.json
   samples.tsv
 ```
 
 这里先按数据集分层，再按模型分层，便于比较不同模型在同一无标签查询集上的伪标签结果。
-比例、样本数、随机种子和来源查询集路径等信息只写入 `manifest.json`，不编码进目录名。
+验证来源、比例、样本数、随机种子和来源查询集路径等信息只写入 `manifest.json`，不编码进目录名。
 
 `samples.tsv` 只写入：
 

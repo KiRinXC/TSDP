@@ -81,6 +81,6 @@ model-stealing 代码，权重文件需要保留 `last_linear.*` key。
 ## 关键入口
 
 ```bash
-make prepare      # 准备环境，不训练
-make verify       # 验证环境，不训练
+make prepare      # 下载公开数据集和 ImageNet 预训练权重，不训练
+make verify       # 验证公开数据集目录和样本数量，不训练
 ```

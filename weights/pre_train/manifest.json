@@ -1,0 +1,32 @@
+{
+  "weights": [
+    {
+      "model": "mobilenetv2",
+      "filename": "mobilenet_v2-b0353104.pth",
+      "url": "https://download.pytorch.org/models/mobilenet_v2-b0353104.pth",
+      "bytes": 14212972,
+      "sha256": "b03531047ffacf1e2488318dcd2aba1126cde36e3bfe1aa5cb07700aeeee9889"
+    },
+    {
+      "model": "resnet18",
+      "filename": "resnet18-5c106cde.pth",
+      "url": "https://download.pytorch.org/models/resnet18-5c106cde.pth",
+      "bytes": 46827520,
+      "sha256": "5c106cde386e87d4033832f2996f5493238eda96ccf559d1d62760c4de0613f8"
+    },
+    {
+      "model": "resnet50",
+      "filename": "resnet50-19c8e357.pth",
+      "url": "https://download.pytorch.org/models/resnet50-19c8e357.pth",
+      "bytes": 102502400,
+      "sha256": "19c8e3572231adff6824a2da93fd67b5986919a2e65f8b6007eab4edee220097"
+    },
+    {
+      "model": "vgg16_bn",
+      "filename": "vgg16_bn-6c64b313.pth",
+      "url": "https://download.pytorch.org/models/vgg16_bn-6c64b313.pth",
+      "bytes": 553507836,
+      "sha256": "6c64b3138f2f4fcb3bcc4cafde11619c4f440eb1631787e93a682fd88305888a"
+    }
+  ]
+}

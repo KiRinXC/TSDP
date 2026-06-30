@@ -18,7 +18,7 @@
 4. 正式实验脚本放在 `exp/`，小型验证和临时探索放在 `lab/`。实验目录可使用短编号加关键词，例如 `01_resnet18_cifar10`；详细目的写在该目录的 `README.md`。
 5. 实验输出放在 `results/` 或 `weights/`，不要混入 `exp/`、`lab/` 或 `models/` 代码目录。可以被后续训练或评估直接消费的数据集产物应放在 `dataset/` 下的专门目录。
 6. `dataset/public/` 只保存原始公开数据；`dataset/derived/` 只保存由公开数据派生出的索引、查询集等中间数据；`dataset/pseudo_labels/` 保存由 victim 模型生成的伪标签数据集。
-7. `dataset/derived/` 顶层只保留 `README.md` 和四个数据集目录：`cifar10/`、`cifar100/`、`stl10/`、`tiny-imagenet-200/`。不要新增 `README/` 目录，也不要在顶层再新增 `unlabeled/`、`pseudo_labels/` 这类产物类型目录；具体产物类型和生成规则写入各数据集目录下的 manifest。派生数据文件直接放在对应 split 目录下，例如 `dataset/derived/cifar10/test/manifest.json` 和 `dataset/derived/cifar10/test/samples.tsv`；不要再用 `ratio-*`、`seed-*`、日期或 run name 增加额外子目录，这些元数据统一写入 `manifest.json`。
+7. `dataset/derived/` 顶层只保留 `README.md` 和四个数据集目录：`cifar10/`、`cifar100/`、`stl10/`、`tiny-imagenet-200/`。不要新增 `README/` 目录，也不要在顶层再新增 `unlabeled/`、`pseudo_labels/` 这类产物类型目录；具体产物类型、验证来源和生成规则写入各数据集目录下的 manifest。派生数据文件直接放在对应数据集目录下，例如 `dataset/derived/cifar10/manifest.json` 和 `dataset/derived/cifar10/samples.tsv`；不要再用 `ratio-*`、`seed-*`、日期、验证来源或 run name 增加额外子目录，这些元数据统一写入 `manifest.json`。
 8. `dataset/pseudo_labels/` 顶层只保留 `README.md` 和四个数据集目录：`cifar10/`、`cifar100/`、`stl10/`、`tiny-imagenet-200/`。各数据集目录下按模型分层，例如 `resnet18/`、`resnet50/`、`vgg16_bn/`、`mobilenetv2/`。
 9. 新增或调整目录结构时，同步更新最近一层的 `README.md`，让可读性主要来自文档而不是冗长路径。
 10. 项目需要维护两个总览图：`STRUCTURE.md` 是目录结构图，只用目录树形式展示同级目录和下一层目录的作用；`FLOW.md` 是实验流程图，只用目录树形式展示当前实验主要做了什么、读写哪些关键产物。每次新增任何 `exp/` 或 `lab/` 实验，都必须完善这两个图；调整关键目录、改变实验输入输出或新增数据产物时，也必须同步更新这两个图。不能只新增实验代码和 README 而遗漏 `STRUCTURE.md` 与 `FLOW.md`。

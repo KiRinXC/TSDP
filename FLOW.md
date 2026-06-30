@@ -30,10 +30,10 @@ TSDP 实验流程
 │   ├── 输入
 │   │   └── dataset/public/<dataset>/
 │   ├── 规则
-│   │   ├── 样本从评估 split 抽取
-│   │   └── 样本数必须小于训练集 1%
+│   │   ├── 样本从验证集中抽取
+│   │   └── 默认样本数为 floor(训练集大小 * 1%)
 │   └── 输出
-│       └── dataset/derived/<dataset>/<split>/
+│       └── dataset/derived/<dataset>/
 │           ├── manifest.json
 │           └── samples.tsv
 ├── 4. exp 实验：训练 victim 模型
@@ -69,11 +69,11 @@ TSDP 实验流程
     ├── 命令
     │   └── bash exp/make_pseudo_labels/<model>/run.sh <dataset>
     ├── 输入
-    │   ├── dataset/derived/<dataset>/<split>/manifest.json
+    │   ├── dataset/derived/<dataset>/manifest.json
     │   ├── dataset/public/<dataset>/
     │   └── weights/victim/<model>/<dataset>/target.pth
     └── 输出
-        └── dataset/pseudo_labels/<dataset>/<model>/<split>/
+        └── dataset/pseudo_labels/<dataset>/<model>/
             ├── manifest.json
             └── samples.tsv
 ```

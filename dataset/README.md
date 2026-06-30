@@ -56,13 +56,13 @@ dataset/pseudo_labels/<dataset>/<model>/
   保存指定数据集和指定 victim 模型生成的伪标签数据集。
 ```
 
-构造一个小于训练集 1% 的无标签查询集：
+构造一个训练集规模 1% 的无标签查询集：
 
 ```bash
-python3 dataset/make_unlabeled_query_set.py --dataset cifar10 --ratio 0.005 --seed 42
+python3 dataset/make_unlabeled_query_set.py --dataset cifar10 --ratio 0.01 --seed 42
 ```
 
-该命令默认从 `cifar10` 的 `test` split 中抽取相当于训练集 0.5% 的样本，即 250 张图像。脚本只保存源样本索引和 manifest，不保存真实标签。后续查询受害者模型时再根据这些索引读取图像，并把伪标签数据集写入 `dataset/pseudo_labels/`。
+该命令默认从 `cifar10` 的 `test` split 中抽取相当于训练集 1% 的样本，即 500 张图像。这里的 `split` 指查询样本来自公开数据集的哪个评估切分；CIFAR-10、CIFAR-100 和 STL-10 默认使用 `test`，Tiny-ImageNet-200 默认使用 `val`。脚本只保存源样本索引和 manifest，不保存真实标签。后续查询受害者模型时再根据这些索引读取图像，并把伪标签数据集写入 `dataset/pseudo_labels/`。
 
 ## 原始尺寸与当前训练入口的处理方式
 
