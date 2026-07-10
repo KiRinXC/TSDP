@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import csv
 import json
 import os
 import random
@@ -21,7 +22,7 @@ from torchvision import transforms
 from tqdm import tqdm
 
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+REPO_ROOT = Path(__file__).resolve().parents[4]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
@@ -34,21 +35,18 @@ except ImportError:
     np = None
 
 
-DATASET_ALIASES = {
-    "cifar10": "cifar10",
-    "cifar_10": "cifar10",
-    "cifar-10": "cifar10",
-    "cifar100": "cifar100",
-    "cifar_100": "cifar100",
-    "cifar-100": "cifar100",
-    "stl10": "stl10",
-    "stl-10": "stl10",
-    "tiny-imagenet-200": "tiny-imagenet-200",
-    "tinyimagenet200": "tiny-imagenet-200",
-    "tiny_imagenet200": "tiny-imagenet-200",
-    "tiny_imagenet_200": "tiny-imagenet-200",
-    "tinyimagenet": "tiny-imagenet-200",
+DATASET_IDS = ("c10", "c100", "s10", "t200")
+MS_EVAL_SOURCES = {
+    "c10": "official_test",
+    "c100": "official_test",
+    "s10": "official_test",
+    "t200": "official_val",
 }
+
+
+def valid_dataset_message() -> str:
+    return ", ".join(DATASET_IDS)
+
 
 
 @dataclass(frozen=True)
@@ -62,12 +60,11 @@ class ModelSpec:
 
 
 def resolve_dataset_name(name: str) -> str:
-    """把外部输入统一成内部数据集名称。"""
+    """校验并返回 canonical 数据集 id。"""
     normalized = name.strip().lower()
-    if normalized not in DATASET_ALIASES:
-        valid = ", ".join(sorted(DATASET_ALIASES))
-        raise ValueError(f"不支持的数据集：{name}。可选值：{valid}")
-    return DATASET_ALIASES[normalized]
+    if normalized not in DATASET_IDS:
+        raise ValueError(f"不支持的数据集：{name}。可选值：{valid_dataset_message()}")
+    return normalized
 
 
 def default_weight_path(spec: ModelSpec) -> Path:
@@ -128,7 +125,7 @@ def build_generator(seed: int | None, offset: int = 0) -> torch.Generator | None
 
 def build_transforms(dataset_name: str):
     """按当前实验协议构造训练和测试增强。"""
-    if dataset_name in {"cifar10", "cifar100"}:
+    if dataset_name in {"c10", "c100"}:
         mean = (0.4914, 0.4822, 0.4465)
         std = (0.2023, 0.1994, 0.2010)
         train_transform = transforms.Compose(
@@ -147,7 +144,7 @@ def build_transforms(dataset_name: str):
         )
         return train_transform, test_transform
 
-    if dataset_name == "stl10":
+    if dataset_name == "s10":
         mean = (0.485, 0.456, 0.406)
         std = (0.229, 0.224, 0.225)
         train_transform = transforms.Compose(
@@ -169,7 +166,7 @@ def build_transforms(dataset_name: str):
         )
         return train_transform, test_transform
 
-    if dataset_name == "tiny-imagenet-200":
+    if dataset_name == "t200":
         mean = (0.485, 0.456, 0.406)
         std = (0.229, 0.224, 0.225)
         train_transform = transforms.Compose(
@@ -194,39 +191,120 @@ def build_transforms(dataset_name: str):
     raise ValueError(f"未知的数据集：{dataset_name}")
 
 
-def build_datasets(dataset_name: str, dataset_root: Path):
-    """构造训练集和测试集，并返回类别数。"""
-    train_transform, test_transform = build_transforms(dataset_name)
+def _official_cifar10_available(root: Path) -> bool:
+    expected = root / "cifar-10-batches-py"
+    return all((expected / name).is_file() for name in ["data_batch_1", "data_batch_2", "data_batch_3", "data_batch_4", "data_batch_5", "test_batch"])
 
-    if dataset_name == "cifar10":
-        root = dataset_root / "cifar10"
-        trainset = tv_datasets.CIFAR10(root=str(root), train=True, download=False, transform=train_transform)
-        testset = tv_datasets.CIFAR10(root=str(root), train=False, download=False, transform=test_transform)
-        return trainset, testset, 10
 
-    if dataset_name == "cifar100":
-        root = dataset_root / "cifar100"
-        trainset = tv_datasets.CIFAR100(root=str(root), train=True, download=False, transform=train_transform)
-        testset = tv_datasets.CIFAR100(root=str(root), train=False, download=False, transform=test_transform)
-        return trainset, testset, 100
+def _official_cifar100_available(root: Path) -> bool:
+    expected = root / "cifar-100-python"
+    return all((expected / name).is_file() for name in ["train", "test", "meta"])
 
-    if dataset_name == "stl10":
-        root = dataset_root / "stl10"
-        trainset = tv_datasets.STL10(root=str(root), split="train", download=False, transform=train_transform)
-        testset = tv_datasets.STL10(root=str(root), split="test", download=False, transform=test_transform)
-        return trainset, testset, 10
 
-    if dataset_name == "tiny-imagenet-200":
-        root = dataset_root / "tiny-imagenet-200"
-        train_root = root / "train"
-        eval_root = root / "val2"
-        if not eval_root.exists():
-            eval_root = root / "val"
-        trainset = tv_datasets.ImageFolder(root=str(train_root), transform=train_transform)
-        testset = tv_datasets.ImageFolder(root=str(eval_root), transform=test_transform)
-        return trainset, testset, len(trainset.classes)
+def build_public_split_dataset(dataset_name: str, dataset_root: Path, split_name: str, transform=None):
+    """读取 canonical public split，支持官方 CIFAR pickle 或 canonical image fallback。"""
+    if dataset_name == "c10":
+        root = dataset_root / "c10"
+        train = split_name != "test"
+        if _official_cifar10_available(root):
+            return tv_datasets.CIFAR10(root=str(root), train=train, download=False, transform=transform)
+        image_root = root / "cifar-10-batches-py" / ("train" if train else "test")
+        if image_root.is_dir():
+            return tv_datasets.ImageFolder(root=str(image_root), transform=transform)
+        raise FileNotFoundError(f"找不到 CIFAR-10 canonical split：{image_root}")
+
+    if dataset_name == "c100":
+        root = dataset_root / "c100"
+        train = split_name != "test"
+        if _official_cifar100_available(root):
+            return tv_datasets.CIFAR100(root=str(root), train=train, download=False, transform=transform)
+        image_root = root / "cifar-100-python" / ("train" if train else "test")
+        if image_root.is_dir():
+            return tv_datasets.ImageFolder(root=str(image_root), transform=transform)
+        raise FileNotFoundError(f"找不到 CIFAR-100 canonical split：{image_root}")
+
+    if dataset_name == "s10":
+        return tv_datasets.STL10(
+            root=str(dataset_root / "s10"),
+            split=split_name,
+            download=False,
+            transform=transform,
+        )
+
+    if dataset_name == "t200":
+        root = dataset_root / "t200" / split_name
+        if not root.is_dir() and split_name == "val":
+            val2 = dataset_root / "t200" / "val2"
+            if val2.is_dir():
+                root = val2
+        if not root.is_dir():
+            raise FileNotFoundError(f"找不到 Tiny-ImageNet split 目录：{root}")
+        return tv_datasets.ImageFolder(root=str(root), transform=transform)
 
     raise ValueError(f"未知的数据集：{dataset_name}")
+
+
+def read_ms_split_indices(protocol_root: Path, dataset_name: str, split_name: str, source_split: str) -> list[int]:
+    """读取 canonical MS 协议中指定 split 的公开数据索引。"""
+    split_path = protocol_root / dataset_name / "splits.tsv"
+    if not split_path.is_file():
+        raise FileNotFoundError(f"找不到 MS 划分文件：{split_path}")
+
+    with split_path.open("r", newline="", encoding="utf-8") as reader_file:
+        reader = csv.DictReader(reader_file, delimiter="	")
+        required = {"record_id", "split", "source_split", "source_index", "global_index"}
+        missing = required - set(reader.fieldnames or [])
+        if missing:
+            raise ValueError(f"{split_path} 缺少字段：{sorted(missing)}")
+        rows = [row for row in reader if row["split"] == split_name]
+
+    if not rows:
+        raise ValueError(f"{split_path} 不包含 split={split_name}")
+    bad_source = [row for row in rows if row["source_split"] != source_split]
+    if bad_source:
+        raise ValueError(
+            f"{split_name} 的 source_split 必须是 {source_split}，实际为 {bad_source[0]['source_split']}"
+        )
+    indices = [int(row["source_index"]) for row in rows]
+    if len(indices) != len(set(indices)):
+        raise ValueError(f"{split_path} 的 split={split_name} 包含重复 source_index")
+    return indices
+
+
+def build_datasets(dataset_name: str, dataset_root: Path, protocol_root: Path):
+    """按 canonical MS 协议构造 victim_train 与 eval_ms，并返回类别数。"""
+    train_transform, test_transform = build_transforms(dataset_name)
+
+    if dataset_name == "c10":
+        trainset = build_public_split_dataset(dataset_name, dataset_root, "train", train_transform)
+        testset = build_public_split_dataset(dataset_name, dataset_root, "test", test_transform)
+        num_classes = 10
+
+    elif dataset_name == "c100":
+        trainset = build_public_split_dataset(dataset_name, dataset_root, "train", train_transform)
+        testset = build_public_split_dataset(dataset_name, dataset_root, "test", test_transform)
+        num_classes = 100
+
+    elif dataset_name == "s10":
+        trainset = build_public_split_dataset(dataset_name, dataset_root, "train", train_transform)
+        testset = build_public_split_dataset(dataset_name, dataset_root, "test", test_transform)
+        num_classes = 10
+
+    elif dataset_name == "t200":
+        trainset = build_public_split_dataset(dataset_name, dataset_root, "train", train_transform)
+        testset = build_public_split_dataset(dataset_name, dataset_root, "val", test_transform)
+        num_classes = len(trainset.classes)
+
+    else:
+        raise ValueError(f"未知的数据集：{dataset_name}")
+
+    train_indices = read_ms_split_indices(protocol_root, dataset_name, "victim_train", "official_train")
+    eval_indices = read_ms_split_indices(protocol_root, dataset_name, "eval_ms", MS_EVAL_SOURCES[dataset_name])
+    for label, indices, dataset in (("victim_train", train_indices, trainset), ("eval_ms", eval_indices, testset)):
+        invalid = [index for index in indices if index < 0 or index >= len(dataset)]
+        if invalid:
+            raise ValueError(f"{label} 包含越界索引：{invalid[0]}")
+    return Subset(trainset, train_indices), Subset(testset, eval_indices), num_classes
 
 
 def subset_dataset(dataset, limit: int | None, seed: int | None):
@@ -357,7 +435,7 @@ def save_checkpoint(
         "scheduler": scheduler.state_dict(),
         "created_on": str(datetime.now()),
     }
-    torch.save(checkpoint, out_dir / "checkpoint.pth.tar")
+    torch.save(checkpoint, out_dir / "best.pth")
 
 
 def parse_args(spec: ModelSpec) -> argparse.Namespace:
@@ -366,6 +444,7 @@ def parse_args(spec: ModelSpec) -> argparse.Namespace:
     parser.add_argument("dataset", nargs="?", default=None, help="数据集名称")
     parser.add_argument("--dataset", dest="dataset_flag", default=None, help="数据集名称")
     parser.add_argument("--dataset-root", default=str(REPO_ROOT / "dataset" / "public"), help="公开数据集根目录")
+    parser.add_argument("--protocol-root", default=str(REPO_ROOT / "dataset" / "MS"), help="MS 协议根目录")
     parser.add_argument("--weight-path", default=None, help="官方 ImageNet 预训练权重")
     parser.add_argument("--out-dir", default=None, help="输出目录")
     parser.add_argument("--device", default="auto", help="运行设备：auto / cpu / cuda / cuda:0")
@@ -422,12 +501,13 @@ def train_main(spec: ModelSpec) -> None:
     args = parse_args(spec)
     apply_quick_mode(args)
 
-    dataset_name = resolve_dataset_name(args.dataset_flag or args.dataset or "cifar10")
+    dataset_name = resolve_dataset_name(args.dataset_flag or args.dataset or "c10")
     dataset_root = Path(args.dataset_root).expanduser().resolve()
+    protocol_root = Path(args.protocol_root).expanduser().resolve()
     out_dir = (
         Path(args.out_dir).expanduser().resolve()
         if args.out_dir
-        else REPO_ROOT / "weights" / "victim" / spec.name / dataset_name
+        else REPO_ROOT / "weights" / "MS" / "victim" / spec.name / dataset_name
     )
     out_dir.mkdir(parents=True, exist_ok=True)
 
@@ -436,13 +516,15 @@ def train_main(spec: ModelSpec) -> None:
     pin_memory = device.type == "cuda"
     weight_path = Path(args.weight_path).expanduser().resolve() if args.weight_path else default_weight_path(spec)
 
-    trainset, testset, num_classes = build_datasets(dataset_name, dataset_root)
+    trainset, testset, num_classes = build_datasets(dataset_name, dataset_root, protocol_root)
     trainset = subset_dataset(trainset, args.train_subset, args.seed)
     testset = subset_dataset(testset, args.test_subset, args.seed)
     model = build_model(spec, num_classes, weight_path, use_pretrained=not args.no_pretrained).to(device)
 
     print(f"[INFO] 模型: {spec.display_name}")
     print(f"[INFO] 数据集: {dataset_name}")
+    print("[INFO] 训练 split: victim_train")
+    print("[INFO] 评估 split: eval_ms")
     print(f"[INFO] 训练样本数: {len(trainset)}")
     print(f"[INFO] 测试样本数: {len(testset)}")
     print(f"[INFO] 类别数: {num_classes}")
@@ -544,11 +626,14 @@ def train_main(spec: ModelSpec) -> None:
             writer.write(f"{run_id}\t{epoch}\ttrain\t{train_loss:.6f}\t{train_acc:.4f}\t{best_acc:.4f}\n")
             writer.write(f"{run_id}\t{epoch}\ttest\t{test_loss:.6f}\t{test_acc:.4f}\t{best_acc:.4f}\n")
 
-    torch.save(model.state_dict(), out_dir / "target.pth")
+    torch.save(model.state_dict(), out_dir / "end.pth")
 
     params = vars(args).copy()
     params["dataset"] = dataset_name
     params["dataset_root"] = str(dataset_root)
+    params["protocol_root"] = str(protocol_root)
+    params["train_split"] = "victim_train"
+    params["eval_split"] = "eval_ms"
     params["out_dir"] = str(out_dir)
     params["device"] = str(device)
     params["num_classes"] = num_classes

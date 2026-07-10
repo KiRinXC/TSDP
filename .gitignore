@@ -9,7 +9,15 @@ __pycache__/
 /weights/pre_train/*.pth
 /weights/pre_train/*.part
 /weights/victim/**
+/weights/MS/**
+
+# 本地 MS 派生产物，可由正式脚本重新生成
+/dataset/MS/*/
 
 # Common local/editor files
 .ipynb_checkpoints/
 .DS_Store
+.codex/
+
+# Skills
+/openspec/**

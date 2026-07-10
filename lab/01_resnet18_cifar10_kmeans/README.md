@@ -32,7 +32,6 @@ python3 lab/01_resnet18_cifar10_kmeans/run.py
 权重: weights/pre_train/resnet18-5c106cde.pth
 输出目录: results/lab/01_resnet18_cifar10_kmeans
 KMeans 聚类数: 10
-随机种子: 42
 ```
 
 快速检查：

@@ -2,18 +2,18 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "${SCRIPT_DIR}/../../.." && pwd)"
+REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
 
-DATASET="${1:-${DATASET:-cifar10}}"
+DATASET="${1:-${DATASET:-c10}}"
 if [[ $# -gt 0 && "${1}" != --* ]]; then
   shift
 fi
 
 MODEL_SCRIPT="${SCRIPT_DIR}/train.py"
-MODEL_NAME="resnet18"
+MODEL_NAME="mobilenetv2"
 DATASET_ROOT="${DATASET_ROOT:-${REPO_ROOT}/dataset/public}"
-OUT_DIR="${OUT_DIR:-${REPO_ROOT}/weights/victim/${MODEL_NAME}/${DATASET}}"
-WEIGHT_PATH="${WEIGHT_PATH:-${REPO_ROOT}/weights/pre_train/resnet18-5c106cde.pth}"
+OUT_DIR="${OUT_DIR:-${REPO_ROOT}/weights/MS/victim/${MODEL_NAME}/${DATASET}}"
+WEIGHT_PATH="${WEIGHT_PATH:-${REPO_ROOT}/weights/pre_train/mobilenet_v2-b0353104.pth}"
 
 CMD=(
   python3 "${MODEL_SCRIPT}"

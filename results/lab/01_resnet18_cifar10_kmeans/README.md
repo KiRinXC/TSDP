@@ -9,7 +9,6 @@
 样本数: 10000
 特征维度: 512
 聚类数: 10
-随机种子: 42
 KMeans 重启次数: 10
 KMeans inertia: 4239421.5
 ```
@@ -50,7 +49,7 @@ cluster 8 -> label 1  automobile
 cluster 9 -> label 2  bird
 ```
 
-因此，两张混淆矩阵的整体结构和准确率基本一致。这说明在当前随机种子下，每个 cluster 的多数类别没有与其他 cluster 重复抢占同一个 CIFAR-10 类别。
+因此，两张混淆矩阵的整体结构和准确率基本一致。这说明每个 cluster 的多数类别没有与其他 cluster 重复抢占同一个 CIFAR-10 类别。
 
 ## 结果判断
 
