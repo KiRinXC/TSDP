@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""用 ImageNet 预训练 ResNet18 特征对 CIFAR-10 做无监督 KMeans 探测。"""
+"""用 ImageNet 预训练 ResNet18 特征对 CIFAR-100 做无监督 KMeans 探测。"""
 
 from __future__ import annotations
 
@@ -27,32 +27,20 @@ from models import imagenet as imagenet_models  # noqa: E402
 from models.imagenet import load_official_imagenet_weights  # noqa: E402
 
 
-CIFAR10_CLASSES = [
-    "airplane",
-    "automobile",
-    "bird",
-    "cat",
-    "deer",
-    "dog",
-    "frog",
-    "horse",
-    "ship",
-    "truck",
-]
-
 IMAGENET_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_STD = (0.229, 0.224, 0.225)
+NUM_CLASSES = 100
 
 
 def parse_args() -> argparse.Namespace:
     """解析命令行参数。"""
     parser = argparse.ArgumentParser(
-        description="提取 ImageNet 预训练 ResNet18 特征，不用 CIFAR-10 标签训练，使用 KMeans 检查 10 类样本是否自然可分。"
+        description="提取 ImageNet 预训练 ResNet18 特征，不用 CIFAR-100 标签训练，使用 KMeans 检查 100 类样本是否自然可分。"
     )
     parser.add_argument(
         "--dataset-root",
-        default=str(REPO_ROOT / "dataset" / "public" / "cifar10"),
-        help="torchvision CIFAR10 数据根目录",
+        default=str(REPO_ROOT / "dataset" / "public" / "c100"),
+        help="torchvision CIFAR100 数据根目录",
     )
     parser.add_argument(
         "--weight-path",
@@ -61,7 +49,7 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--out-dir",
-        default=str(REPO_ROOT / "results" / "lab" / "01_resnet18_cifar10_kmeans"),
+        default=str(REPO_ROOT / "results" / "lab" / "01_kmeans"),
         help="输出目录",
     )
     parser.add_argument("--device", default="auto", help="运行设备：auto / cpu / cuda / cuda:0")
@@ -107,16 +95,18 @@ def build_transform() -> transforms.Compose:
 
 
 def build_dataset(dataset_root: Path, limit: int | None):
-    """读取 CIFAR-10 测试集。"""
-    dataset = tv_datasets.CIFAR10(
+    """读取 CIFAR-100 测试集。"""
+    dataset = tv_datasets.CIFAR100(
         root=str(dataset_root),
         train=False,
         download=False,
         transform=build_transform(),
     )
+    class_names = list(dataset.classes)
+    selected_dataset = dataset
     if limit is not None and limit > 0 and limit < len(dataset):
-        dataset = Subset(dataset, list(range(limit)))
-    return dataset
+        selected_dataset = Subset(dataset, list(range(limit)))
+    return selected_dataset, class_names
 
 
 def build_model(weight_path: Path, device: torch.device) -> torch.nn.Module:
@@ -162,57 +152,57 @@ def kmeans(
     max_iters: int,
     restarts: int,
     tol: float,
+    device: torch.device,
 ) -> tuple[np.ndarray, np.ndarray, float]:
-    """使用 NumPy 实现 KMeans，避免引入额外依赖。"""
+    """使用 Torch 实现 KMeans，在 GPU 上处理 CIFAR-100 的 100 个聚类。"""
     rng = np.random.default_rng(seed)
     best_labels: np.ndarray | None = None
     best_centers: np.ndarray | None = None
     best_inertia = float("inf")
-    n_samples = features.shape[0]
+    feature_tensor = torch.from_numpy(features).to(device)
+    n_samples, feature_dim = feature_tensor.shape
 
     for restart in range(restarts):
         init_indices = rng.choice(n_samples, size=n_clusters, replace=False)
-        centers = features[init_indices].copy()
-        labels = np.zeros(n_samples, dtype=np.int64)
+        centers = feature_tensor[torch.from_numpy(init_indices).to(device)].clone()
 
         for _ in range(max_iters):
-            distances = squared_euclidean(features, centers)
-            labels = distances.argmin(axis=1)
+            distances = squared_euclidean(feature_tensor, centers)
+            labels = distances.argmin(dim=1)
+            counts = torch.bincount(labels, minlength=n_clusters)
+            sums = torch.zeros((n_clusters, feature_dim), device=device, dtype=feature_tensor.dtype)
+            sums.index_add_(0, labels, feature_tensor)
+            new_centers = sums / counts.clamp_min(1).unsqueeze(1)
+            empty = counts == 0
+            if empty.any():
+                farthest = distances.min(dim=1).values.topk(int(empty.sum().item())).indices
+                new_centers[empty] = feature_tensor[farthest]
 
-            new_centers = centers.copy()
-            for cluster_index in range(n_clusters):
-                members = features[labels == cluster_index]
-                if len(members) == 0:
-                    farthest_index = distances.min(axis=1).argmax()
-                    new_centers[cluster_index] = features[farthest_index]
-                else:
-                    new_centers[cluster_index] = members.mean(axis=0)
-
-            center_shift = float(np.linalg.norm(new_centers - centers))
+            center_shift = float(torch.linalg.vector_norm(new_centers - centers).item())
             centers = new_centers
             if center_shift < tol:
                 break
 
-        final_distances = squared_euclidean(features, centers)
-        labels = final_distances.argmin(axis=1)
-        inertia = float(final_distances[np.arange(n_samples), labels].sum())
+        final_distances = squared_euclidean(feature_tensor, centers)
+        labels = final_distances.argmin(dim=1)
+        inertia = float(final_distances.gather(1, labels.unsqueeze(1)).sum().item())
         print(f"[KMEANS] restart={restart + 1}/{restarts} inertia={inertia:.2f}")
         if inertia < best_inertia:
             best_inertia = inertia
-            best_labels = labels.copy()
-            best_centers = centers.copy()
+            best_labels = labels.cpu().numpy()
+            best_centers = centers.cpu().numpy()
 
     if best_labels is None or best_centers is None:
         raise RuntimeError("KMeans 没有产生有效结果。")
     return best_labels, best_centers, best_inertia
 
 
-def squared_euclidean(features: np.ndarray, centers: np.ndarray) -> np.ndarray:
+def squared_euclidean(features: torch.Tensor, centers: torch.Tensor) -> torch.Tensor:
     """计算样本到中心的平方欧氏距离。"""
-    feature_norm = np.sum(features * features, axis=1, keepdims=True)
-    center_norm = np.sum(centers * centers, axis=1, keepdims=True).T
+    feature_norm = torch.sum(features * features, dim=1, keepdim=True)
+    center_norm = torch.sum(centers * centers, dim=1).unsqueeze(0)
     distances = feature_norm + center_norm - 2.0 * features @ centers.T
-    return np.maximum(distances, 0.0)
+    return distances.clamp_min_(0.0)
 
 
 def build_cluster_label_matrix(cluster_ids: np.ndarray, labels: np.ndarray, n_classes: int) -> np.ndarray:
@@ -224,36 +214,54 @@ def build_cluster_label_matrix(cluster_ids: np.ndarray, labels: np.ndarray, n_cl
 
 
 def best_cluster_to_label_mapping(cluster_label_matrix: np.ndarray) -> tuple[dict[int, int], int]:
-    """用 bitmask 动态规划求 cluster 到 label 的一对一最佳匹配。"""
+    """使用 O(n^3) Hungarian 算法求 cluster 到 label 的一对一最佳匹配。"""
     n_clusters, n_labels = cluster_label_matrix.shape
     if n_clusters != n_labels:
         raise ValueError("当前匹配实现要求 cluster 数和 label 数相同。")
+    cost = cluster_label_matrix.max() - cluster_label_matrix
+    u = np.zeros(n_clusters + 1, dtype=np.float64)
+    v = np.zeros(n_labels + 1, dtype=np.float64)
+    matched_row = np.zeros(n_labels + 1, dtype=np.int64)
+    previous_col = np.zeros(n_labels + 1, dtype=np.int64)
+    for row in range(1, n_clusters + 1):
+        matched_row[0] = row
+        col0 = 0
+        min_value = np.full(n_labels + 1, np.inf)
+        used = np.zeros(n_labels + 1, dtype=bool)
+        while True:
+            used[col0] = True
+            row0 = matched_row[col0]
+            delta = np.inf
+            col1 = 0
+            for col in range(1, n_labels + 1):
+                if used[col]:
+                    continue
+                current = float(cost[row0 - 1, col - 1]) - u[row0] - v[col]
+                if current < min_value[col]:
+                    min_value[col] = current
+                    previous_col[col] = col0
+                if min_value[col] < delta:
+                    delta = min_value[col]
+                    col1 = col
+            for col in range(n_labels + 1):
+                if used[col]:
+                    u[matched_row[col]] += delta
+                    v[col] -= delta
+                else:
+                    min_value[col] -= delta
+            col0 = col1
+            if matched_row[col0] == 0:
+                break
+        while True:
+            col1 = previous_col[col0]
+            matched_row[col0] = matched_row[col1]
+            col0 = col1
+            if col0 == 0:
+                break
 
-    memo: dict[tuple[int, int], tuple[int, list[int]]] = {}
-
-    def solve(cluster_index: int, used_labels_mask: int) -> tuple[int, list[int]]:
-        key = (cluster_index, used_labels_mask)
-        if key in memo:
-            return memo[key]
-        if cluster_index == n_clusters:
-            return 0, []
-
-        best_score = -1
-        best_path: list[int] = []
-        for label_index in range(n_labels):
-            if used_labels_mask & (1 << label_index):
-                continue
-            rest_score, rest_path = solve(cluster_index + 1, used_labels_mask | (1 << label_index))
-            score = int(cluster_label_matrix[cluster_index, label_index]) + rest_score
-            if score > best_score:
-                best_score = score
-                best_path = [label_index] + rest_path
-
-        memo[key] = (best_score, best_path)
-        return memo[key]
-
-    score, path = solve(0, 0)
-    return {cluster_index: label_index for cluster_index, label_index in enumerate(path)}, score
+    mapping = {int(matched_row[col] - 1): col - 1 for col in range(1, n_labels + 1)}
+    score = sum(int(cluster_label_matrix[row, col]) for row, col in mapping.items())
+    return mapping, score
 
 
 def greedy_cluster_to_label_mapping(cluster_label_matrix: np.ndarray) -> tuple[dict[int, int], int]:
@@ -305,24 +313,18 @@ def normalized_mutual_information(cluster_ids: np.ndarray, labels: np.ndarray, n
 
 def plot_confusion_matrix(path: Path, matrix: np.ndarray, title: str, accuracy: float, nmi: float) -> None:
     """绘制并保存混淆矩阵图片。"""
-    fig, ax = plt.subplots(figsize=(9, 7))
+    fig, ax = plt.subplots(figsize=(14, 12))
     image = ax.imshow(matrix, cmap="Blues")
     fig.colorbar(image, ax=ax, fraction=0.046, pad=0.04)
 
     ax.set_title(f"{title}\nACC={accuracy * 100:.2f}%  NMI={nmi:.3f}")
     ax.set_xlabel("matched cluster label")
-    ax.set_ylabel("true CIFAR-10 label")
-    ax.set_xticks(np.arange(10))
-    ax.set_yticks(np.arange(10))
-    ax.set_xticklabels([str(index) for index in range(10)])
-    ax.set_yticklabels([f"{index}:{name}" for index, name in enumerate(CIFAR10_CLASSES)])
-
-    threshold = matrix.max() * 0.6 if matrix.size else 0
-    for row in range(matrix.shape[0]):
-        for col in range(matrix.shape[1]):
-            value = int(matrix[row, col])
-            color = "white" if value > threshold else "black"
-            ax.text(col, row, str(value), ha="center", va="center", color=color, fontsize=8)
+    ax.set_ylabel("true CIFAR-100 label")
+    ticks = np.arange(0, matrix.shape[0], 10)
+    ax.set_xticks(ticks)
+    ax.set_yticks(ticks)
+    ax.set_xticklabels([str(index) for index in ticks])
+    ax.set_yticklabels([str(index) for index in ticks])
 
     fig.tight_layout()
     fig.savefig(path, dpi=200)
@@ -342,7 +344,7 @@ def main() -> None:
     device = resolve_device(args.device)
     pin_memory = device.type == "cuda"
 
-    dataset = build_dataset(dataset_root, args.limit)
+    dataset, class_names = build_dataset(dataset_root, args.limit)
     loader = DataLoader(
         dataset,
         batch_size=args.batch_size,
@@ -355,7 +357,7 @@ def main() -> None:
     print(f"[INFO] 数据集: {dataset_root}")
     print(f"[INFO] 样本数: {len(dataset)}")
     print(f"[INFO] 权重: {weight_path}")
-    print("[INFO] 方法: 提取 512 维特征，KMeans(k=10)，评估阶段再用标签做最佳匹配")
+    print("[INFO] 方法: 提取 512 维特征，KMeans(k=100)，评估阶段再用标签做最佳匹配")
     print(f"[INFO] 随机种子: {args.seed}")
     print(f"[INFO] 输出目录: {out_dir}")
     print(f"[INFO] 设备: {device}")
@@ -364,21 +366,22 @@ def main() -> None:
     features = standardize_features(raw_features)
     cluster_ids, _centers, inertia = kmeans(
         features=features,
-        n_clusters=10,
+        n_clusters=NUM_CLASSES,
         seed=args.seed,
         max_iters=args.kmeans_iters,
         restarts=args.kmeans_restarts,
         tol=args.tol,
+        device=device,
     )
 
-    cluster_label_matrix = build_cluster_label_matrix(cluster_ids, labels, n_classes=10)
+    cluster_label_matrix = build_cluster_label_matrix(cluster_ids, labels, n_classes=NUM_CLASSES)
     optimal_cluster_to_label, optimal_correct = best_cluster_to_label_mapping(cluster_label_matrix)
     greedy_cluster_to_label, greedy_correct = greedy_cluster_to_label_mapping(cluster_label_matrix)
-    optimal_confusion_matrix = aligned_confusion_matrix(cluster_ids, labels, optimal_cluster_to_label, n_classes=10)
-    greedy_confusion_matrix = aligned_confusion_matrix(cluster_ids, labels, greedy_cluster_to_label, n_classes=10)
+    optimal_confusion_matrix = aligned_confusion_matrix(cluster_ids, labels, optimal_cluster_to_label, n_classes=NUM_CLASSES)
+    greedy_confusion_matrix = aligned_confusion_matrix(cluster_ids, labels, greedy_cluster_to_label, n_classes=NUM_CLASSES)
     optimal_accuracy = optimal_correct / max(len(labels), 1)
     greedy_accuracy = greedy_correct / max(len(labels), 1)
-    nmi = normalized_mutual_information(cluster_ids, labels, n_classes=10)
+    nmi = normalized_mutual_information(cluster_ids, labels, n_classes=NUM_CLASSES)
 
     optimal_figure_path = out_dir / "confusion_matrix_optimal.png"
     greedy_figure_path = out_dir / "confusion_matrix_greedy.png"
@@ -399,18 +402,19 @@ def main() -> None:
 
     metrics = {
         "created_at": datetime.now().isoformat(timespec="seconds"),
-        "experiment": "01_resnet18_cifar10_kmeans",
+        "experiment": "01_kmeans",
         "model": "resnet18",
         "pretraining": "imagenet-1k",
         "method": "feature_kmeans",
-        "uses_cifar10_labels_for_training": False,
-        "uses_cifar10_labels_for_cluster_matching": True,
-        "cifar10_split": "test",
+        "dataset": "c100",
+        "uses_labels_for_training": False,
+        "uses_labels_for_cluster_matching": True,
+        "public_split": "test",
         "dataset_root": str(dataset_root),
         "weight_path": str(weight_path),
         "num_samples": int(len(labels)),
         "feature_dim": int(features.shape[1]),
-        "num_clusters": 10,
+        "num_clusters": NUM_CLASSES,
         "seed": args.seed,
         "kmeans_iters": args.kmeans_iters,
         "kmeans_restarts": args.kmeans_restarts,
@@ -430,8 +434,8 @@ def main() -> None:
             "matched_accuracy_percent": 100.0 * greedy_accuracy,
             "confusion_matrix_png": str(greedy_figure_path),
         },
-        "cifar10_classes": CIFAR10_CLASSES,
-        "note": "KMeans 聚类过程没有使用 CIFAR-10 标签；标签只在评估阶段用于 cluster 到类别的映射和绘制混淆矩阵。",
+        "class_names": class_names,
+        "note": "KMeans 聚类过程没有使用 CIFAR-100 标签；标签只在评估阶段用于 cluster 到类别的映射和绘制混淆矩阵。",
     }
     with (out_dir / "metrics.json").open("w", encoding="utf-8") as writer:
         json.dump(metrics, writer, ensure_ascii=False, indent=2)

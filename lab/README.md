@@ -12,6 +12,9 @@ run.py
 ## 实验列表
 
 ```text
-01_resnet18_cifar10_kmeans
-  使用 ImageNet-1k 预训练 ResNet18 提取 CIFAR-10 特征，再用 KMeans 检查十类样本在无监督条件下是否自然可分。
+01_kmeans
+  使用 ImageNet-1K 预训练 ResNet18 提取 CIFAR-100 特征，用 KMeans 检查 100 类样本的无监督可分性。
+
+02_head
+  在 ResNet18+CIFAR-100 的全保护与随机保护 MS 下，比较分类头替换/适配和可用权重冻结/微调。
 ```
