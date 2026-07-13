@@ -1,0 +1,65 @@
+{
+  "schema_version": 2,
+  "protocol": "MS",
+  "attack_protocol": "posterior_replace_finetune_v2",
+  "artifact_id": "teeslice",
+  "run_id": "02900197fa16",
+  "dataset": "c100",
+  "victim_model": "resnet18",
+  "defended_victim": "teeslice_r18",
+  "query_budget": 500,
+  "label_mode": "soft",
+  "query_transform": "test",
+  "lr_step": 60,
+  "training_mode": "finetune",
+  "protection": {
+    "strategy": "teeslice",
+    "granularity": "private_slice",
+    "source_commit": "93505cb3337ec8b89556ee29ffc598d31513aa5e",
+    "private_proxy_count": 7,
+    "private_head_count": 1,
+    "tensor_unit_count": 0,
+    "protected_param_count": 570995,
+    "protected_bn_buffer_count": 20777,
+    "paper_private_param_count": 570980,
+    "total_param_count": 11739827,
+    "protected_param_ratio": 0.048637428813899895,
+    "protected_flops": 25643108,
+    "paper_private_flops": 25591808,
+    "total_flops": 582289508,
+    "protected_flops_ratio": 0.0440384167114342,
+    "head_mode": "replace",
+    "public_backbone": "official_imagenet_cifar_resnet18",
+    "protection_mask_sha256": ""
+  },
+  "primary": {
+    "checkpoint": "end.pth",
+    "epoch": 100
+  },
+  "diagnostic_best": {
+    "metric": "surrogate_acc",
+    "epoch": 92
+  },
+  "best": {
+    "eval_count": 10000,
+    "victim_correct": 6741,
+    "surrogate_correct": 1870,
+    "agreement_count": 2082,
+    "victim_acc": 0.6741,
+    "surrogate_acc": 0.187,
+    "fidelity": 0.2082,
+    "posterior_kl_sum": 25782.39532470703,
+    "posterior_kl": 2.578239532470703
+  },
+  "end": {
+    "eval_count": 10000,
+    "victim_correct": 6741,
+    "surrogate_correct": 1859,
+    "agreement_count": 2075,
+    "victim_acc": 0.6741,
+    "surrogate_acc": 0.1859,
+    "fidelity": 0.2075,
+    "posterior_kl_sum": 25757.63352203369,
+    "posterior_kl": 2.575763352203369
+  }
+}

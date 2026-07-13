@@ -21,6 +21,7 @@ from defense import DEFENSES  # noqa: E402
 
 
 NUM_CLASSES = {"c10": 10, "c100": 100, "s10": 10, "t200": 200}
+ATTACK_PROTOCOL_VERSION = "posterior_replace_finetune_v2"
 MODEL_SPECS = {
     "resnet18": ("resnet18", "resnet18-5c106cde.pth"),
     "resnet50": ("resnet50", "resnet50-19c8e357.pth"),
@@ -34,6 +35,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("model", choices=sorted(MODEL_SPECS), help="victim/surrogate 模型。")
     parser.add_argument("dataset", help="数据集 id：c10/c100/s10/t200。")
     parser.add_argument("--defense", required=True, choices=DEFENSES, help="参数保护 baseline。")
+    parser.add_argument("--plan-id", default=None, help="baseline.json 中的固定配置 id。")
     parser.add_argument("--budget", required=True, type=int, help="使用 query_pool_ms 的前缀长度。")
     parser.add_argument(
         "--protected-units",
@@ -54,10 +56,15 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--training-mode",
         required=True,
-        choices=("frozen", "finetune"),
-        help="暴露 victim 权重保持冻结或共同微调。",
+        choices=("finetune",),
+        help="正式协议固定为全部参数共同微调。",
     )
-    parser.add_argument("--label-mode", choices=("soft", "hard"), default="soft", help="伪标签训练目标。")
+    parser.add_argument(
+        "--label-mode",
+        choices=("soft",),
+        default="soft",
+        help="正式协议固定使用 victim posterior。",
+    )
     parser.add_argument("--dataset-root", default=str(REPO_ROOT / "dataset" / "public"), help="公开数据集根目录。")
     parser.add_argument("--protocol-root", default=str(REPO_ROOT / "dataset" / "MS"), help="MS 协议根目录。")
     parser.add_argument("--victim-checkpoint", default=None, help="victim best.pth 路径。")
@@ -74,7 +81,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--lr", type=float, default=0.01, help="SGD 学习率。")
     parser.add_argument("--momentum", type=float, default=0.5, help="SGD 动量。")
     parser.add_argument("--weight-decay", type=float, default=5e-4, help="权重衰减。")
-    parser.add_argument("--lr-step", type=int, default=30, help="学习率衰减步长。")
+    parser.add_argument("--lr-step", type=int, default=60, help="学习率衰减步长。")
     parser.add_argument("--lr-gamma", type=float, default=0.1, help="学习率衰减系数。")
     parser.add_argument("--num-workers", type=int, default=4, help="DataLoader worker 数。")
     parser.add_argument("--seed", type=int, default=42, help="随机种子。")
@@ -87,13 +94,16 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--device", default="auto", help="auto / cpu / cuda / cuda:0。")
     parser.add_argument("--eval-subset", type=int, default=None, help=argparse.SUPPRESS)
     parser.add_argument("--dry-run", action="store_true", help="完成输入与保护计划检查后退出。")
-    parser.add_argument("--overwrite", action="store_true", help="覆盖相同配置 run_id 的已有产物。")
+    parser.add_argument("--overwrite", action="store_true", help="覆盖相同 artifact_id 的已有产物。")
     return parser.parse_args()
 
 
-def validate_attack_configuration(defense: str, label_mode: str) -> None:
-    if defense == "full_protection" and label_mode != "hard":
-        raise ValueError("full_protection 是仅返回类别标签的黑盒，只允许 --label-mode hard。")
+def validate_attack_configuration(defense: str, training_mode: str, label_mode: str) -> None:
+    del defense
+    if training_mode != "finetune":
+        raise ValueError("正式 MS 协议只允许 --training-mode finetune。")
+    if label_mode != "soft":
+        raise ValueError("正式 MS 协议只允许 --label-mode soft。")
 
 
 def resolve_device(value: str) -> torch.device:

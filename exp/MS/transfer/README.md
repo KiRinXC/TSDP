@@ -43,6 +43,12 @@ dataset/MS/<dataset>/
 python3 exp/MS/transfer/get_label.py resnet18 c100
 ```
 
+TEESlice defended victim 使用独立模型标识，训练完成后按相同 `query_pool_ms` 协议查询：
+
+```bash
+python3 exp/MS/transfer/get_label.py teeslice_r18 c100
+```
+
 需要显式指定权重或覆盖已有标签时：
 
 ```bash
@@ -60,4 +66,6 @@ dataset/MS/<dataset>/<model>/
   posteriors.pt
 ```
 
-`labels.tsv` 与 `query_pool_ms` 具有相同的 `query_rank`、`record_id` 和公开训练集索引。`posteriors.pt` 保存同一顺序下的 softmax posterior 与 hard pseudo label。
+`labels.tsv` 与 `query_pool_ms` 具有相同的 `query_rank`、`record_id` 和公开训练集索引。`posteriors.pt` 保存同一顺序下的 softmax posterior 与 hard pseudo label。victim 查询固定使用各数据集的确定性 test transform，并在模型级 `manifest.json` 和 `posteriors.pt` 中记录 `input_transform=test`；后续 soft posterior 训练必须使用同一变换，不得叠加随机裁剪或翻转。
+
+`teeslice_r18` 默认读取 `weights/MS/victim/teeslice_r18/c100/best.pth`，输出写入 `dataset/MS/c100/teeslice_r18/`。该入口只扩展可查询模型，不改变基础 split 或 query 顺序。

@@ -13,12 +13,14 @@ MobileNetV2 -> mobilenetv2
 ResNet18    -> resnet18
 ResNet50    -> resnet50
 VGG16_BN    -> vgg16_bn
+TEESlice    -> teeslice_r18（当前仅 ResNet18+C100）
 ```
 
 对应代码：
 
 ```text
 models/imagenet.py
+models/teeslice.py
 ```
 
 这些 wrapper 只定义模型结构，不自动下载权重。官方 ImageNet 预训练权重放在：
@@ -32,3 +34,5 @@ weights/pre_train/
 ```text
 model.last_linear
 ```
+
+`models/teeslice.py` 单独实现 TEESlice：公开部分是由官方 ImageNet 权重初始化并冻结参数的 CIFAR 版 ResNet18，私有部分是 proxy slice、路径混合系数、任务分类头和随任务数据适配的 BN 运行状态。它还提供逐 proxy 剪枝、发布拓扑核对和私有参数/FLOPs 统计接口，不复用普通模型的 122-unit `state_dict` 掩码。

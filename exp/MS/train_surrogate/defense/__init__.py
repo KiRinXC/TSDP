@@ -14,6 +14,7 @@ from .mask import (
 )
 from .registry import DEFENSES, DEFENSE_REGISTRY, build_mask_selection
 from .resnet18 import build_resnet18_layer_groups, build_resnet18_tensor_units
+from .tensorshield import build_tensorshield
 from .unit import parse_official_layer_selection, resolve_resnet18_layer_units
 
 __all__ = [
@@ -26,6 +27,7 @@ __all__ = [
     "build_resnet18_layer_groups",
     "build_resnet18_tensor_units",
     "build_unit_masks",
+    "build_tensorshield",
     "initialize_surrogate",
     "load_protection_mask",
     "parse_unit_selection",

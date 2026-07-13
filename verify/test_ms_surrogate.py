@@ -3,10 +3,12 @@
 
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import torch
 import torch.nn as nn
@@ -27,6 +29,7 @@ from defense import (  # noqa: E402
     build_resnet18_layer_groups,
     build_resnet18_tensor_units,
     build_unit_masks,
+    initialize_surrogate,
     load_protection_mask,
     parse_official_layer_selection,
     parse_unit_selection,
@@ -35,10 +38,16 @@ from defense import (  # noqa: E402
     resolve_resnet18_layer_units,
     save_protection_mask,
 )
+from defense.base import DefenseOptions  # noqa: E402
+from defense.initialize import _copy_exposed_state  # noqa: E402
+from defense.magnitude import build_large_weight  # noqa: E402
 from models import resnet18  # noqa: E402
 from core.config import validate_attack_configuration  # noqa: E402
+from core.artifacts import INDEX_FIELDS, make_artifact_id  # noqa: E402
+from core import data as surrogate_data  # noqa: E402
 from core.data import QueryDataset  # noqa: E402
 from core.engine import collect_eval_reference, distillation_loss, evaluate_surrogate  # noqa: E402
+from core.planning import resolve_plan_configuration  # noqa: E402
 
 
 class TinyNetwork(nn.Module):
@@ -62,11 +71,194 @@ class FlipLogits(nn.Module):
 
 
 class SurrogateProtectionTests(unittest.TestCase):
-    def test_full_protection_only_accepts_hard_labels(self):
-        validate_attack_configuration("full_protection", "hard")
-        validate_attack_configuration("shallow", "soft")
+    def test_semantic_artifact_ids_keep_internal_run_hash(self):
+        self.assertEqual(make_artifact_id("shallow_06", "shallow", "abc123"), "shallow_06")
+        self.assertEqual(
+            make_artifact_id(None, "no_protection", "abc123"),
+            "no_protection",
+        )
+        self.assertEqual(make_artifact_id(None, "tensorshield", "abc123"), "tensorshield")
+        self.assertEqual(make_artifact_id(None, "custom", "abc123"), "abc123")
+        self.assertEqual(
+            INDEX_FIELDS[:9],
+            [
+                "artifact_id",
+                "plan_id",
+                "run_id",
+                "attack_protocol",
+                "dataset",
+                "victim_model",
+                "defense",
+                "protected_layer_count",
+                "source_ratio",
+            ],
+        )
+        self.assertIn("query_transform", INDEX_FIELDS)
+        self.assertIn("lr_step", INDEX_FIELDS)
         with self.assertRaises(ValueError):
-            validate_attack_configuration("full_protection", "soft")
+            make_artifact_id("too_many_parts", "shallow", "abc123")
+
+    def test_resnet18_c100_baseline_plan_is_fixed(self):
+        plan_path = REPO_ROOT / "exp" / "MS" / "train_surrogate" / "baseline.json"
+        plan = json.loads(plan_path.read_text(encoding="utf-8"))
+
+        self.assertEqual(plan["attack_protocol"], "posterior_replace_finetune_v2")
+        self.assertEqual(plan["query_transform"], "test")
+        self.assertEqual(plan["training_hyperparameters"]["lr_step"], 60)
+        self.assertEqual(plan["mask_config_count"], 32)
+        self.assertEqual(plan["training_run_count"], 32)
+        layer_configs = plan["layer_sweep"]["configurations"]
+        magnitude_configs = plan["large_weight_sweep"]["configurations"]
+        self.assertEqual(len(layer_configs), 24)
+        self.assertEqual(len(magnitude_configs), 8)
+
+        expected_ranges = {
+            2: ("1-2", "9-10", "17-18"),
+            4: ("1-4", "8-11", "15-18"),
+            6: ("1-6", "7-12", "13-18"),
+            8: ("1-8", "6-13", "11-18"),
+            10: ("1-10", "5-14", "9-18"),
+            12: ("1-12", "4-15", "7-18"),
+            14: ("1-14", "3-16", "5-18"),
+            16: ("1-16", "2-17", "3-18"),
+        }
+        by_id = {config["id"]: config for config in layer_configs}
+        for count, (shallow, middle, deep) in expected_ranges.items():
+            self.assertEqual(by_id[f"shallow_{count:02d}"]["protected_layers"], shallow)
+            self.assertEqual(by_id[f"middle_{count:02d}"]["protected_layers"], middle)
+            self.assertEqual(by_id[f"deep_{count:02d}"]["protected_layers"], deep)
+
+        self.assertEqual(plan["large_weight_sweep"]["magnitude_eligible_count"], 11222912)
+        self.assertEqual(
+            [config["protected_scalars"] for config in magnitude_configs],
+            [112229, 1122291, 3366873, 5611456, 7856038, 8978329, 10100620, 10661766],
+        )
+        self.assertEqual(
+            [config["head_mode"] for config in magnitude_configs],
+            ["exposed", "mixed", "mixed", "mixed", "mixed", "mixed", "mixed", "mixed"],
+        )
+        hashes = [
+            config["protection_mask_sha256"]
+            for config in (*layer_configs, *magnitude_configs)
+        ]
+        self.assertEqual(len(hashes), len(set(hashes)))
+
+    def test_formal_protocol_only_accepts_soft_finetune(self):
+        validate_attack_configuration("full_protection", "finetune", "soft")
+        validate_attack_configuration("shallow", "finetune", "soft")
+        with self.assertRaises(ValueError):
+            validate_attack_configuration("full_protection", "finetune", "hard")
+        with self.assertRaises(ValueError):
+            validate_attack_configuration("shallow", "frozen", "soft")
+
+    def test_planned_baseline_rejects_configuration_drift(self):
+        config = resolve_plan_configuration(
+            plan_id="middle_04",
+            model_name="resnet18",
+            dataset_name="c100",
+            defense="middle",
+            protected_units=None,
+            protected_layers="8-11",
+            protected_scalars=None,
+        )
+        self.assertEqual(
+            config["protection_mask_sha256"],
+            "53e2c9bbe56390bbd0a541827b2c3d38de02e86769405533ea262a679ebb291a",
+        )
+        with self.assertRaises(ValueError):
+            resolve_plan_configuration(
+                plan_id="middle_04",
+                model_name="resnet18",
+                dataset_name="c100",
+                defense="middle",
+                protected_units=None,
+                protected_layers="7-10",
+                protected_scalars=None,
+            )
+        with self.assertRaises(ValueError):
+            resolve_plan_configuration(
+                plan_id=None,
+                model_name="resnet18",
+                dataset_name="c100",
+                defense="deep",
+                protected_units=None,
+                protected_layers="17-18",
+                protected_scalars=None,
+            )
+
+    def test_full_replaces_head_and_no_protection_copies_victim(self):
+        victim = resnet18(num_classes=100)
+        with torch.no_grad():
+            victim.last_linear.weight.fill_(0.25)
+            victim.last_linear.bias.fill_(0.5)
+        weight_path = REPO_ROOT / "weights" / "pre_train" / "resnet18-5c106cde.pth"
+
+        torch.manual_seed(42)
+        full, full_plan, full_trainable, _ = initialize_surrogate(
+            factory=resnet18,
+            factory_name="resnet18",
+            weight_path=weight_path,
+            victim_model=victim,
+            num_classes=100,
+            defense="full_protection",
+            protected_units=None,
+            protected_layers=None,
+            protected_scalars=None,
+        )
+        self.assertEqual(full_plan.head_mode, "replace")
+        self.assertIsInstance(full.last_linear, nn.Linear)
+        self.assertEqual(full.last_linear.out_features, 100)
+        self.assertFalse(torch.equal(full.last_linear.weight, victim.last_linear.weight))
+        self.assertTrue(full_trainable["last_linear.weight"].all())
+
+        exposed, exposed_plan, exposed_trainable, _ = initialize_surrogate(
+            factory=resnet18,
+            factory_name="resnet18",
+            weight_path=weight_path,
+            victim_model=victim,
+            num_classes=100,
+            defense="no_protection",
+            protected_units=None,
+            protected_layers=None,
+            protected_scalars=None,
+        )
+        self.assertEqual(exposed_plan.head_mode, "exposed")
+        for name, value in victim.state_dict().items():
+            self.assertTrue(torch.equal(exposed.state_dict()[name], value), name)
+            self.assertFalse(exposed_trainable[name].any(), name)
+
+    def test_tensorshield_uses_author_fixed_mask(self):
+        victim = resnet18(num_classes=100)
+        weight_path = REPO_ROOT / "weights" / "pre_train" / "resnet18-5c106cde.pth"
+        surrogate, plan, trainable, masks = initialize_surrogate(
+            factory=resnet18,
+            factory_name="resnet18",
+            weight_path=weight_path,
+            victim_model=victim,
+            num_classes=100,
+            defense="tensorshield",
+            protected_units=None,
+            protected_layers=None,
+            protected_scalars=None,
+        )
+        self.assertIn("tensorshield", DEFENSES)
+        self.assertEqual(plan.defense, "tensorshield")
+        self.assertEqual(plan.protected_unit_count, 11)
+        self.assertEqual(plan.protected_param_count, 1_009_764)
+        self.assertEqual(
+            plan.protection_mask_sha256,
+            "1e3aa38124f084dd39eab42a4d3f1ddf1ca86807812796c66a8318c05e7aa2cb",
+        )
+        self.assertEqual(plan.head_mode, "replace")
+        self.assertTrue(trainable["layer1.0.conv1.weight"].all())
+        self.assertFalse(trainable["conv1.weight"].any())
+        self.assertTrue(
+            torch.equal(
+                surrogate.state_dict()["conv1.weight"],
+                victim.state_dict()["conv1.weight"],
+            )
+        )
+        self.assertEqual(protection_mask_sha256(masks), plan.protection_mask_sha256)
 
     def test_hard_query_dataset_does_not_expose_posteriors(self):
         public_dataset = TensorDataset(torch.randn(3, 2), torch.zeros(3, dtype=torch.long))
@@ -76,6 +268,34 @@ class SurrogateProtectionTests(unittest.TestCase):
         self.assertEqual(tuple(image.shape), (2,))
         self.assertEqual(label.item(), 7)
         self.assertEqual(len(dataset[0]), 2)
+
+    def test_soft_query_uses_test_transform_and_hard_uses_train_transform(self):
+        public_dataset = TensorDataset(torch.randn(1, 2), torch.zeros(1, dtype=torch.long))
+        with (
+            patch.object(surrogate_data, "build_transforms", return_value=("train", "test")),
+            patch.object(
+                surrogate_data,
+                "build_public_split_dataset",
+                return_value=public_dataset,
+            ) as build_dataset,
+        ):
+            surrogate_data.build_query_dataset(
+                "c100",
+                Path("unused"),
+                [0],
+                torch.tensor([[0.4, 0.6]]),
+                torch.tensor([1]),
+            )
+            self.assertEqual(build_dataset.call_args.args[-1], "test")
+
+            surrogate_data.build_query_dataset(
+                "c100",
+                Path("unused"),
+                [0],
+                None,
+                torch.tensor([1]),
+            )
+            self.assertEqual(build_dataset.call_args.args[-1], "train")
 
     def test_hard_loss_does_not_require_posteriors(self):
         logits = torch.tensor([[2.0, 0.0]], requires_grad=True)
@@ -97,6 +317,7 @@ class SurrogateProtectionTests(unittest.TestCase):
                 "deep",
                 "custom",
                 "large_weight",
+                "tensorshield",
             },
         )
         self.assertTrue(all(callable(builder) for builder in DEFENSE_REGISTRY.values()))
@@ -222,6 +443,56 @@ class SurrogateProtectionTests(unittest.TestCase):
         self.assertEqual(selected_weights, protected_count)
         self.assertTrue(torch.equal(masks["bn1.weight"], masks["bn1.bias"]))
         self.assertTrue(torch.equal(masks["bn2.weight"], masks["bn2.running_var"]))
+
+    def test_large_weight_partially_exposed_head_uses_masked_mix(self):
+        class HeadOnly(nn.Module):
+            def __init__(self):
+                super().__init__()
+                self.last_linear = nn.Linear(2, 2)
+
+        public = HeadOnly()
+        victim = HeadOnly()
+        with torch.no_grad():
+            public.last_linear.weight.copy_(torch.tensor([[1.0, 4.0], [3.0, 2.0]]))
+            public.last_linear.bias.copy_(torch.tensor([-1.0, -2.0]))
+            victim.last_linear.weight.copy_(torch.tensor([[10.0, 20.0], [30.0, 40.0]]))
+            victim.last_linear.bias.copy_(torch.tensor([50.0, 60.0]))
+
+        selection = build_large_weight(
+            "large_weight",
+            public,
+            DefenseOptions(
+                architecture="tiny",
+                protected_units=None,
+                protected_layers=None,
+                protected_scalars=2,
+            ),
+        )
+        initial = {name: value.detach().clone() for name, value in public.state_dict().items()}
+        trainable_masks = _copy_exposed_state(public, victim.state_dict(), selection.masks)
+
+        self.assertTrue(selection.classifier_protected)
+        self.assertEqual(selection.head_mode, "mixed")
+        self.assertTrue(
+            torch.equal(
+                public.last_linear.weight,
+                torch.where(
+                    selection.masks["last_linear.weight"],
+                    initial["last_linear.weight"],
+                    victim.last_linear.weight,
+                ),
+            )
+        )
+        self.assertTrue(torch.equal(public.last_linear.bias, victim.last_linear.bias))
+        self.assertEqual(int(selection.masks["last_linear.weight"].sum().item()), 2)
+        self.assertEqual(
+            int((public.last_linear.weight != victim.last_linear.weight).sum().item()),
+            2,
+        )
+        self.assertTrue(
+            torch.equal(trainable_masks["last_linear.weight"], selection.masks["last_linear.weight"])
+        )
+        self.assertFalse(trainable_masks["last_linear.bias"].any())
 
     def test_freezer_restores_exposed_scalars_after_weight_decay(self):
         model = nn.Sequential(nn.Linear(2, 1, bias=False))

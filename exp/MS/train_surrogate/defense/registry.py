@@ -9,6 +9,7 @@ import torch.nn as nn
 
 from .base import DefenseOptions, MaskSelection
 from .magnitude import build_large_weight
+from .tensorshield import build_tensorshield
 from .unit import build_unit_selection
 
 
@@ -35,6 +36,16 @@ def _magnitude_builder(
     return build_large_weight(defense, public_model, options)
 
 
+def _tensorshield_builder(
+    defense: str,
+    victim_model: nn.Module,
+    public_model: nn.Module,
+    options: DefenseOptions,
+) -> MaskSelection:
+    del public_model
+    return build_tensorshield(defense, victim_model, options)
+
+
 DEFENSE_REGISTRY: dict[str, Builder] = {
     "no_protection": _unit_builder,
     "full_protection": _unit_builder,
@@ -43,6 +54,7 @@ DEFENSE_REGISTRY: dict[str, Builder] = {
     "deep": _unit_builder,
     "custom": _unit_builder,
     "large_weight": _magnitude_builder,
+    "tensorshield": _tensorshield_builder,
 }
 DEFENSES = tuple(DEFENSE_REGISTRY)
 

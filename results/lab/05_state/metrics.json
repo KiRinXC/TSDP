@@ -1,0 +1,1225 @@
+{
+  "schema_version": 1,
+  "experiment": "05_state",
+  "protocol": "MS",
+  "attack_protocol": "posterior_replace_finetune_v2",
+  "dataset": "c100",
+  "victim_model": "resnet18",
+  "query_budget": 500,
+  "label_mode": "soft",
+  "query_transform": "test",
+  "seed": 42,
+  "victim_checkpoint": "weights/MS/victim/resnet18/c100/best.pth",
+  "victim_checkpoint_sha256": "f6233c9361ed958846cdbccc8f96c9b3425c139d961cb25410409fb47179f8d4",
+  "victim_checkpoint_epoch": 63,
+  "official_weight": "weights/pre_train/resnet18-5c106cde.pth",
+  "official_weight_sha256": "5c106cde386e87d4033832f2996f5493238eda96ccf559d1d62760c4de0613f8",
+  "posterior_path": "dataset/MS/c100/resnet18/posteriors.pt",
+  "posterior_sha256": "cd2e4ec87b210262a34d4a20895cf1dcf8052c002a26d36cdfce0566accfe0c6",
+  "training": {
+    "mode": "finetune",
+    "epochs": 100,
+    "batch_size": 64,
+    "eval_batch_size": 128,
+    "optimizer": "SGD",
+    "learning_rate": 0.01,
+    "momentum": 0.5,
+    "weight_decay": 0.0005,
+    "lr_scheduler": "StepLR",
+    "lr_step": 60,
+    "lr_gamma": 0.1
+  },
+  "x_axis": "protected_state_byte_ratio",
+  "results": [
+    {
+      "state_type": "weight",
+      "protection": {
+        "state_type": "weight",
+        "tensor_unit_count": 122,
+        "protected_unit_count": 41,
+        "protected_unit_ratio": 0.3360655737704918,
+        "total_param_count": 11227812,
+        "protected_param_count": 11222912,
+        "protected_param_ratio": 0.9995635837151531,
+        "total_state_element_count": 11237432,
+        "protected_state_element_count": 11222912,
+        "protected_state_element_ratio": 0.9987078898452956,
+        "total_state_byte_count": 44949808,
+        "protected_state_byte_count": 44891648,
+        "protected_state_byte_ratio": 0.9987061123820595,
+        "classifier_weight_protected": true,
+        "classifier_bias_protected": false,
+        "head_mode": "mixed",
+        "protection_mask_sha256": "5f40612e22a06eb563cc0afbcbb98656560443b3f215c609c417b532488c4f5e",
+        "mask_path": "results/lab/05_state/weight_mask.pt",
+        "selected_units": [
+          {
+            "index": 0,
+            "state_name": "conv1.weight",
+            "state_kind": "parameter",
+            "numel": 9408,
+            "bytes": 37632
+          },
+          {
+            "index": 1,
+            "state_name": "bn1.weight",
+            "state_kind": "parameter",
+            "numel": 64,
+            "bytes": 256
+          },
+          {
+            "index": 6,
+            "state_name": "layer1.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 36864,
+            "bytes": 147456
+          },
+          {
+            "index": 7,
+            "state_name": "layer1.0.bn1.weight",
+            "state_kind": "parameter",
+            "numel": 64,
+            "bytes": 256
+          },
+          {
+            "index": 12,
+            "state_name": "layer1.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 36864,
+            "bytes": 147456
+          },
+          {
+            "index": 13,
+            "state_name": "layer1.0.bn2.weight",
+            "state_kind": "parameter",
+            "numel": 64,
+            "bytes": 256
+          },
+          {
+            "index": 18,
+            "state_name": "layer1.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 36864,
+            "bytes": 147456
+          },
+          {
+            "index": 19,
+            "state_name": "layer1.1.bn1.weight",
+            "state_kind": "parameter",
+            "numel": 64,
+            "bytes": 256
+          },
+          {
+            "index": 24,
+            "state_name": "layer1.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 36864,
+            "bytes": 147456
+          },
+          {
+            "index": 25,
+            "state_name": "layer1.1.bn2.weight",
+            "state_kind": "parameter",
+            "numel": 64,
+            "bytes": 256
+          },
+          {
+            "index": 30,
+            "state_name": "layer2.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 73728,
+            "bytes": 294912
+          },
+          {
+            "index": 31,
+            "state_name": "layer2.0.bn1.weight",
+            "state_kind": "parameter",
+            "numel": 128,
+            "bytes": 512
+          },
+          {
+            "index": 36,
+            "state_name": "layer2.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 147456,
+            "bytes": 589824
+          },
+          {
+            "index": 37,
+            "state_name": "layer2.0.bn2.weight",
+            "state_kind": "parameter",
+            "numel": 128,
+            "bytes": 512
+          },
+          {
+            "index": 42,
+            "state_name": "layer2.0.downsample.0.weight",
+            "state_kind": "parameter",
+            "numel": 8192,
+            "bytes": 32768
+          },
+          {
+            "index": 43,
+            "state_name": "layer2.0.downsample.1.weight",
+            "state_kind": "parameter",
+            "numel": 128,
+            "bytes": 512
+          },
+          {
+            "index": 48,
+            "state_name": "layer2.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 147456,
+            "bytes": 589824
+          },
+          {
+            "index": 49,
+            "state_name": "layer2.1.bn1.weight",
+            "state_kind": "parameter",
+            "numel": 128,
+            "bytes": 512
+          },
+          {
+            "index": 54,
+            "state_name": "layer2.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 147456,
+            "bytes": 589824
+          },
+          {
+            "index": 55,
+            "state_name": "layer2.1.bn2.weight",
+            "state_kind": "parameter",
+            "numel": 128,
+            "bytes": 512
+          },
+          {
+            "index": 60,
+            "state_name": "layer3.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 294912,
+            "bytes": 1179648
+          },
+          {
+            "index": 61,
+            "state_name": "layer3.0.bn1.weight",
+            "state_kind": "parameter",
+            "numel": 256,
+            "bytes": 1024
+          },
+          {
+            "index": 66,
+            "state_name": "layer3.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 589824,
+            "bytes": 2359296
+          },
+          {
+            "index": 67,
+            "state_name": "layer3.0.bn2.weight",
+            "state_kind": "parameter",
+            "numel": 256,
+            "bytes": 1024
+          },
+          {
+            "index": 72,
+            "state_name": "layer3.0.downsample.0.weight",
+            "state_kind": "parameter",
+            "numel": 32768,
+            "bytes": 131072
+          },
+          {
+            "index": 73,
+            "state_name": "layer3.0.downsample.1.weight",
+            "state_kind": "parameter",
+            "numel": 256,
+            "bytes": 1024
+          },
+          {
+            "index": 78,
+            "state_name": "layer3.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 589824,
+            "bytes": 2359296
+          },
+          {
+            "index": 79,
+            "state_name": "layer3.1.bn1.weight",
+            "state_kind": "parameter",
+            "numel": 256,
+            "bytes": 1024
+          },
+          {
+            "index": 84,
+            "state_name": "layer3.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 589824,
+            "bytes": 2359296
+          },
+          {
+            "index": 85,
+            "state_name": "layer3.1.bn2.weight",
+            "state_kind": "parameter",
+            "numel": 256,
+            "bytes": 1024
+          },
+          {
+            "index": 90,
+            "state_name": "layer4.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 1179648,
+            "bytes": 4718592
+          },
+          {
+            "index": 91,
+            "state_name": "layer4.0.bn1.weight",
+            "state_kind": "parameter",
+            "numel": 512,
+            "bytes": 2048
+          },
+          {
+            "index": 96,
+            "state_name": "layer4.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 2359296,
+            "bytes": 9437184
+          },
+          {
+            "index": 97,
+            "state_name": "layer4.0.bn2.weight",
+            "state_kind": "parameter",
+            "numel": 512,
+            "bytes": 2048
+          },
+          {
+            "index": 102,
+            "state_name": "layer4.0.downsample.0.weight",
+            "state_kind": "parameter",
+            "numel": 131072,
+            "bytes": 524288
+          },
+          {
+            "index": 103,
+            "state_name": "layer4.0.downsample.1.weight",
+            "state_kind": "parameter",
+            "numel": 512,
+            "bytes": 2048
+          },
+          {
+            "index": 108,
+            "state_name": "layer4.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 2359296,
+            "bytes": 9437184
+          },
+          {
+            "index": 109,
+            "state_name": "layer4.1.bn1.weight",
+            "state_kind": "parameter",
+            "numel": 512,
+            "bytes": 2048
+          },
+          {
+            "index": 114,
+            "state_name": "layer4.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 2359296,
+            "bytes": 9437184
+          },
+          {
+            "index": 115,
+            "state_name": "layer4.1.bn2.weight",
+            "state_kind": "parameter",
+            "numel": 512,
+            "bytes": 2048
+          },
+          {
+            "index": 120,
+            "state_name": "last_linear.weight",
+            "state_kind": "parameter",
+            "numel": 51200,
+            "bytes": 204800
+          }
+        ]
+      },
+      "primary": {
+        "evaluation": "end",
+        "epoch": 100
+      },
+      "diagnostic_best": {
+        "metric": "surrogate_acc",
+        "epoch": 66,
+        "metrics": {
+          "eval_count": 10000,
+          "victim_correct": 6182,
+          "surrogate_correct": 1587,
+          "agreement_count": 1664,
+          "victim_acc": 0.6182,
+          "surrogate_acc": 0.1587,
+          "fidelity": 0.1664,
+          "posterior_kl_sum": 27936.15430831909,
+          "posterior_kl": 2.793615430831909
+        }
+      },
+      "end": {
+        "eval_count": 10000,
+        "victim_correct": 6182,
+        "surrogate_correct": 1582,
+        "agreement_count": 1670,
+        "victim_acc": 0.6182,
+        "surrogate_acc": 0.1582,
+        "fidelity": 0.167,
+        "posterior_kl_sum": 27853.35219192505,
+        "posterior_kl": 2.785335219192505
+      }
+    },
+    {
+      "state_type": "bias",
+      "protection": {
+        "state_type": "bias",
+        "tensor_unit_count": 122,
+        "protected_unit_count": 21,
+        "protected_unit_ratio": 0.1721311475409836,
+        "total_param_count": 11227812,
+        "protected_param_count": 4900,
+        "protected_param_ratio": 0.0004364162848469497,
+        "total_state_element_count": 11237432,
+        "protected_state_element_count": 4900,
+        "protected_state_element_ratio": 0.0004360426830613969,
+        "total_state_byte_count": 44949808,
+        "protected_state_byte_count": 19600,
+        "protected_state_byte_ratio": 0.000436041907008813,
+        "classifier_weight_protected": false,
+        "classifier_bias_protected": true,
+        "head_mode": "mixed",
+        "protection_mask_sha256": "fab3688a15b14a81f58c680552969fed59e0d617b0d858f13912260d88c9a5e3",
+        "mask_path": "results/lab/05_state/bias_mask.pt",
+        "selected_units": [
+          {
+            "index": 2,
+            "state_name": "bn1.bias",
+            "state_kind": "parameter",
+            "numel": 64,
+            "bytes": 256
+          },
+          {
+            "index": 8,
+            "state_name": "layer1.0.bn1.bias",
+            "state_kind": "parameter",
+            "numel": 64,
+            "bytes": 256
+          },
+          {
+            "index": 14,
+            "state_name": "layer1.0.bn2.bias",
+            "state_kind": "parameter",
+            "numel": 64,
+            "bytes": 256
+          },
+          {
+            "index": 20,
+            "state_name": "layer1.1.bn1.bias",
+            "state_kind": "parameter",
+            "numel": 64,
+            "bytes": 256
+          },
+          {
+            "index": 26,
+            "state_name": "layer1.1.bn2.bias",
+            "state_kind": "parameter",
+            "numel": 64,
+            "bytes": 256
+          },
+          {
+            "index": 32,
+            "state_name": "layer2.0.bn1.bias",
+            "state_kind": "parameter",
+            "numel": 128,
+            "bytes": 512
+          },
+          {
+            "index": 38,
+            "state_name": "layer2.0.bn2.bias",
+            "state_kind": "parameter",
+            "numel": 128,
+            "bytes": 512
+          },
+          {
+            "index": 44,
+            "state_name": "layer2.0.downsample.1.bias",
+            "state_kind": "parameter",
+            "numel": 128,
+            "bytes": 512
+          },
+          {
+            "index": 50,
+            "state_name": "layer2.1.bn1.bias",
+            "state_kind": "parameter",
+            "numel": 128,
+            "bytes": 512
+          },
+          {
+            "index": 56,
+            "state_name": "layer2.1.bn2.bias",
+            "state_kind": "parameter",
+            "numel": 128,
+            "bytes": 512
+          },
+          {
+            "index": 62,
+            "state_name": "layer3.0.bn1.bias",
+            "state_kind": "parameter",
+            "numel": 256,
+            "bytes": 1024
+          },
+          {
+            "index": 68,
+            "state_name": "layer3.0.bn2.bias",
+            "state_kind": "parameter",
+            "numel": 256,
+            "bytes": 1024
+          },
+          {
+            "index": 74,
+            "state_name": "layer3.0.downsample.1.bias",
+            "state_kind": "parameter",
+            "numel": 256,
+            "bytes": 1024
+          },
+          {
+            "index": 80,
+            "state_name": "layer3.1.bn1.bias",
+            "state_kind": "parameter",
+            "numel": 256,
+            "bytes": 1024
+          },
+          {
+            "index": 86,
+            "state_name": "layer3.1.bn2.bias",
+            "state_kind": "parameter",
+            "numel": 256,
+            "bytes": 1024
+          },
+          {
+            "index": 92,
+            "state_name": "layer4.0.bn1.bias",
+            "state_kind": "parameter",
+            "numel": 512,
+            "bytes": 2048
+          },
+          {
+            "index": 98,
+            "state_name": "layer4.0.bn2.bias",
+            "state_kind": "parameter",
+            "numel": 512,
+            "bytes": 2048
+          },
+          {
+            "index": 104,
+            "state_name": "layer4.0.downsample.1.bias",
+            "state_kind": "parameter",
+            "numel": 512,
+            "bytes": 2048
+          },
+          {
+            "index": 110,
+            "state_name": "layer4.1.bn1.bias",
+            "state_kind": "parameter",
+            "numel": 512,
+            "bytes": 2048
+          },
+          {
+            "index": 116,
+            "state_name": "layer4.1.bn2.bias",
+            "state_kind": "parameter",
+            "numel": 512,
+            "bytes": 2048
+          },
+          {
+            "index": 121,
+            "state_name": "last_linear.bias",
+            "state_kind": "parameter",
+            "numel": 100,
+            "bytes": 400
+          }
+        ]
+      },
+      "primary": {
+        "evaluation": "end",
+        "epoch": 100
+      },
+      "diagnostic_best": {
+        "metric": "surrogate_acc",
+        "epoch": 72,
+        "metrics": {
+          "eval_count": 10000,
+          "victim_correct": 6182,
+          "surrogate_correct": 5798,
+          "agreement_count": 7640,
+          "victim_acc": 0.6182,
+          "surrogate_acc": 0.5798,
+          "fidelity": 0.764,
+          "posterior_kl_sum": 2867.4255533218384,
+          "posterior_kl": 0.28674255533218385
+        }
+      },
+      "end": {
+        "eval_count": 10000,
+        "victim_correct": 6182,
+        "surrogate_correct": 5771,
+        "agreement_count": 7636,
+        "victim_acc": 0.6182,
+        "surrogate_acc": 0.5771,
+        "fidelity": 0.7636,
+        "posterior_kl_sum": 2881.2915630340576,
+        "posterior_kl": 0.28812915630340574
+      }
+    },
+    {
+      "state_type": "running_mean",
+      "protection": {
+        "state_type": "running_mean",
+        "tensor_unit_count": 122,
+        "protected_unit_count": 20,
+        "protected_unit_ratio": 0.16393442622950818,
+        "total_param_count": 11227812,
+        "protected_param_count": 0,
+        "protected_param_ratio": 0.0,
+        "total_state_element_count": 11237432,
+        "protected_state_element_count": 4800,
+        "protected_state_element_ratio": 0.00042714385279483784,
+        "total_state_byte_count": 44949808,
+        "protected_state_byte_count": 19200,
+        "protected_state_byte_ratio": 0.0004271430925800617,
+        "classifier_weight_protected": false,
+        "classifier_bias_protected": false,
+        "head_mode": "exposed",
+        "protection_mask_sha256": "92f0117ee73f5eddf14b828519a2d2de253b4f1e544b4952460dc04a758984a6",
+        "mask_path": "results/lab/05_state/running_mean_mask.pt",
+        "selected_units": [
+          {
+            "index": 3,
+            "state_name": "bn1.running_mean",
+            "state_kind": "buffer",
+            "numel": 64,
+            "bytes": 256
+          },
+          {
+            "index": 9,
+            "state_name": "layer1.0.bn1.running_mean",
+            "state_kind": "buffer",
+            "numel": 64,
+            "bytes": 256
+          },
+          {
+            "index": 15,
+            "state_name": "layer1.0.bn2.running_mean",
+            "state_kind": "buffer",
+            "numel": 64,
+            "bytes": 256
+          },
+          {
+            "index": 21,
+            "state_name": "layer1.1.bn1.running_mean",
+            "state_kind": "buffer",
+            "numel": 64,
+            "bytes": 256
+          },
+          {
+            "index": 27,
+            "state_name": "layer1.1.bn2.running_mean",
+            "state_kind": "buffer",
+            "numel": 64,
+            "bytes": 256
+          },
+          {
+            "index": 33,
+            "state_name": "layer2.0.bn1.running_mean",
+            "state_kind": "buffer",
+            "numel": 128,
+            "bytes": 512
+          },
+          {
+            "index": 39,
+            "state_name": "layer2.0.bn2.running_mean",
+            "state_kind": "buffer",
+            "numel": 128,
+            "bytes": 512
+          },
+          {
+            "index": 45,
+            "state_name": "layer2.0.downsample.1.running_mean",
+            "state_kind": "buffer",
+            "numel": 128,
+            "bytes": 512
+          },
+          {
+            "index": 51,
+            "state_name": "layer2.1.bn1.running_mean",
+            "state_kind": "buffer",
+            "numel": 128,
+            "bytes": 512
+          },
+          {
+            "index": 57,
+            "state_name": "layer2.1.bn2.running_mean",
+            "state_kind": "buffer",
+            "numel": 128,
+            "bytes": 512
+          },
+          {
+            "index": 63,
+            "state_name": "layer3.0.bn1.running_mean",
+            "state_kind": "buffer",
+            "numel": 256,
+            "bytes": 1024
+          },
+          {
+            "index": 69,
+            "state_name": "layer3.0.bn2.running_mean",
+            "state_kind": "buffer",
+            "numel": 256,
+            "bytes": 1024
+          },
+          {
+            "index": 75,
+            "state_name": "layer3.0.downsample.1.running_mean",
+            "state_kind": "buffer",
+            "numel": 256,
+            "bytes": 1024
+          },
+          {
+            "index": 81,
+            "state_name": "layer3.1.bn1.running_mean",
+            "state_kind": "buffer",
+            "numel": 256,
+            "bytes": 1024
+          },
+          {
+            "index": 87,
+            "state_name": "layer3.1.bn2.running_mean",
+            "state_kind": "buffer",
+            "numel": 256,
+            "bytes": 1024
+          },
+          {
+            "index": 93,
+            "state_name": "layer4.0.bn1.running_mean",
+            "state_kind": "buffer",
+            "numel": 512,
+            "bytes": 2048
+          },
+          {
+            "index": 99,
+            "state_name": "layer4.0.bn2.running_mean",
+            "state_kind": "buffer",
+            "numel": 512,
+            "bytes": 2048
+          },
+          {
+            "index": 105,
+            "state_name": "layer4.0.downsample.1.running_mean",
+            "state_kind": "buffer",
+            "numel": 512,
+            "bytes": 2048
+          },
+          {
+            "index": 111,
+            "state_name": "layer4.1.bn1.running_mean",
+            "state_kind": "buffer",
+            "numel": 512,
+            "bytes": 2048
+          },
+          {
+            "index": 117,
+            "state_name": "layer4.1.bn2.running_mean",
+            "state_kind": "buffer",
+            "numel": 512,
+            "bytes": 2048
+          }
+        ]
+      },
+      "primary": {
+        "evaluation": "end",
+        "epoch": 100
+      },
+      "diagnostic_best": {
+        "metric": "surrogate_acc",
+        "epoch": 85,
+        "metrics": {
+          "eval_count": 10000,
+          "victim_correct": 6182,
+          "surrogate_correct": 6117,
+          "agreement_count": 8800,
+          "victim_acc": 0.6182,
+          "surrogate_acc": 0.6117,
+          "fidelity": 0.88,
+          "posterior_kl_sum": 755.0395444631577,
+          "posterior_kl": 0.07550395444631576
+        }
+      },
+      "end": {
+        "eval_count": 10000,
+        "victim_correct": 6182,
+        "surrogate_correct": 6107,
+        "agreement_count": 8802,
+        "victim_acc": 0.6182,
+        "surrogate_acc": 0.6107,
+        "fidelity": 0.8802,
+        "posterior_kl_sum": 766.4883337020874,
+        "posterior_kl": 0.07664883337020874
+      }
+    },
+    {
+      "state_type": "running_var",
+      "protection": {
+        "state_type": "running_var",
+        "tensor_unit_count": 122,
+        "protected_unit_count": 20,
+        "protected_unit_ratio": 0.16393442622950818,
+        "total_param_count": 11227812,
+        "protected_param_count": 0,
+        "protected_param_ratio": 0.0,
+        "total_state_element_count": 11237432,
+        "protected_state_element_count": 4800,
+        "protected_state_element_ratio": 0.00042714385279483784,
+        "total_state_byte_count": 44949808,
+        "protected_state_byte_count": 19200,
+        "protected_state_byte_ratio": 0.0004271430925800617,
+        "classifier_weight_protected": false,
+        "classifier_bias_protected": false,
+        "head_mode": "exposed",
+        "protection_mask_sha256": "c8144129519bf9accb0c7cfce165a835ed2855e59e99a9fb00194e1ece9423a9",
+        "mask_path": "results/lab/05_state/running_var_mask.pt",
+        "selected_units": [
+          {
+            "index": 4,
+            "state_name": "bn1.running_var",
+            "state_kind": "buffer",
+            "numel": 64,
+            "bytes": 256
+          },
+          {
+            "index": 10,
+            "state_name": "layer1.0.bn1.running_var",
+            "state_kind": "buffer",
+            "numel": 64,
+            "bytes": 256
+          },
+          {
+            "index": 16,
+            "state_name": "layer1.0.bn2.running_var",
+            "state_kind": "buffer",
+            "numel": 64,
+            "bytes": 256
+          },
+          {
+            "index": 22,
+            "state_name": "layer1.1.bn1.running_var",
+            "state_kind": "buffer",
+            "numel": 64,
+            "bytes": 256
+          },
+          {
+            "index": 28,
+            "state_name": "layer1.1.bn2.running_var",
+            "state_kind": "buffer",
+            "numel": 64,
+            "bytes": 256
+          },
+          {
+            "index": 34,
+            "state_name": "layer2.0.bn1.running_var",
+            "state_kind": "buffer",
+            "numel": 128,
+            "bytes": 512
+          },
+          {
+            "index": 40,
+            "state_name": "layer2.0.bn2.running_var",
+            "state_kind": "buffer",
+            "numel": 128,
+            "bytes": 512
+          },
+          {
+            "index": 46,
+            "state_name": "layer2.0.downsample.1.running_var",
+            "state_kind": "buffer",
+            "numel": 128,
+            "bytes": 512
+          },
+          {
+            "index": 52,
+            "state_name": "layer2.1.bn1.running_var",
+            "state_kind": "buffer",
+            "numel": 128,
+            "bytes": 512
+          },
+          {
+            "index": 58,
+            "state_name": "layer2.1.bn2.running_var",
+            "state_kind": "buffer",
+            "numel": 128,
+            "bytes": 512
+          },
+          {
+            "index": 64,
+            "state_name": "layer3.0.bn1.running_var",
+            "state_kind": "buffer",
+            "numel": 256,
+            "bytes": 1024
+          },
+          {
+            "index": 70,
+            "state_name": "layer3.0.bn2.running_var",
+            "state_kind": "buffer",
+            "numel": 256,
+            "bytes": 1024
+          },
+          {
+            "index": 76,
+            "state_name": "layer3.0.downsample.1.running_var",
+            "state_kind": "buffer",
+            "numel": 256,
+            "bytes": 1024
+          },
+          {
+            "index": 82,
+            "state_name": "layer3.1.bn1.running_var",
+            "state_kind": "buffer",
+            "numel": 256,
+            "bytes": 1024
+          },
+          {
+            "index": 88,
+            "state_name": "layer3.1.bn2.running_var",
+            "state_kind": "buffer",
+            "numel": 256,
+            "bytes": 1024
+          },
+          {
+            "index": 94,
+            "state_name": "layer4.0.bn1.running_var",
+            "state_kind": "buffer",
+            "numel": 512,
+            "bytes": 2048
+          },
+          {
+            "index": 100,
+            "state_name": "layer4.0.bn2.running_var",
+            "state_kind": "buffer",
+            "numel": 512,
+            "bytes": 2048
+          },
+          {
+            "index": 106,
+            "state_name": "layer4.0.downsample.1.running_var",
+            "state_kind": "buffer",
+            "numel": 512,
+            "bytes": 2048
+          },
+          {
+            "index": 112,
+            "state_name": "layer4.1.bn1.running_var",
+            "state_kind": "buffer",
+            "numel": 512,
+            "bytes": 2048
+          },
+          {
+            "index": 118,
+            "state_name": "layer4.1.bn2.running_var",
+            "state_kind": "buffer",
+            "numel": 512,
+            "bytes": 2048
+          }
+        ]
+      },
+      "primary": {
+        "evaluation": "end",
+        "epoch": 100
+      },
+      "diagnostic_best": {
+        "metric": "surrogate_acc",
+        "epoch": 85,
+        "metrics": {
+          "eval_count": 10000,
+          "victim_correct": 6182,
+          "surrogate_correct": 6117,
+          "agreement_count": 8800,
+          "victim_acc": 0.6182,
+          "surrogate_acc": 0.6117,
+          "fidelity": 0.88,
+          "posterior_kl_sum": 755.0395444631577,
+          "posterior_kl": 0.07550395444631576
+        }
+      },
+      "end": {
+        "eval_count": 10000,
+        "victim_correct": 6182,
+        "surrogate_correct": 6107,
+        "agreement_count": 8802,
+        "victim_acc": 0.6182,
+        "surrogate_acc": 0.6107,
+        "fidelity": 0.8802,
+        "posterior_kl_sum": 766.4883337020874,
+        "posterior_kl": 0.07664883337020874
+      }
+    },
+    {
+      "state_type": "num_batches_tracked",
+      "protection": {
+        "state_type": "num_batches_tracked",
+        "tensor_unit_count": 122,
+        "protected_unit_count": 20,
+        "protected_unit_ratio": 0.16393442622950818,
+        "total_param_count": 11227812,
+        "protected_param_count": 0,
+        "protected_param_ratio": 0.0,
+        "total_state_element_count": 11237432,
+        "protected_state_element_count": 20,
+        "protected_state_element_ratio": 1.7797660533118243e-06,
+        "total_state_byte_count": 44949808,
+        "protected_state_byte_count": 160,
+        "protected_state_byte_ratio": 3.5595257715005147e-06,
+        "classifier_weight_protected": false,
+        "classifier_bias_protected": false,
+        "head_mode": "exposed",
+        "protection_mask_sha256": "e54a451f41a715f4bdcfc24a36d6639fcff16a13ae4a99b303a996ec38c184c0",
+        "mask_path": "results/lab/05_state/num_batches_tracked_mask.pt",
+        "selected_units": [
+          {
+            "index": 5,
+            "state_name": "bn1.num_batches_tracked",
+            "state_kind": "buffer",
+            "numel": 1,
+            "bytes": 8
+          },
+          {
+            "index": 11,
+            "state_name": "layer1.0.bn1.num_batches_tracked",
+            "state_kind": "buffer",
+            "numel": 1,
+            "bytes": 8
+          },
+          {
+            "index": 17,
+            "state_name": "layer1.0.bn2.num_batches_tracked",
+            "state_kind": "buffer",
+            "numel": 1,
+            "bytes": 8
+          },
+          {
+            "index": 23,
+            "state_name": "layer1.1.bn1.num_batches_tracked",
+            "state_kind": "buffer",
+            "numel": 1,
+            "bytes": 8
+          },
+          {
+            "index": 29,
+            "state_name": "layer1.1.bn2.num_batches_tracked",
+            "state_kind": "buffer",
+            "numel": 1,
+            "bytes": 8
+          },
+          {
+            "index": 35,
+            "state_name": "layer2.0.bn1.num_batches_tracked",
+            "state_kind": "buffer",
+            "numel": 1,
+            "bytes": 8
+          },
+          {
+            "index": 41,
+            "state_name": "layer2.0.bn2.num_batches_tracked",
+            "state_kind": "buffer",
+            "numel": 1,
+            "bytes": 8
+          },
+          {
+            "index": 47,
+            "state_name": "layer2.0.downsample.1.num_batches_tracked",
+            "state_kind": "buffer",
+            "numel": 1,
+            "bytes": 8
+          },
+          {
+            "index": 53,
+            "state_name": "layer2.1.bn1.num_batches_tracked",
+            "state_kind": "buffer",
+            "numel": 1,
+            "bytes": 8
+          },
+          {
+            "index": 59,
+            "state_name": "layer2.1.bn2.num_batches_tracked",
+            "state_kind": "buffer",
+            "numel": 1,
+            "bytes": 8
+          },
+          {
+            "index": 65,
+            "state_name": "layer3.0.bn1.num_batches_tracked",
+            "state_kind": "buffer",
+            "numel": 1,
+            "bytes": 8
+          },
+          {
+            "index": 71,
+            "state_name": "layer3.0.bn2.num_batches_tracked",
+            "state_kind": "buffer",
+            "numel": 1,
+            "bytes": 8
+          },
+          {
+            "index": 77,
+            "state_name": "layer3.0.downsample.1.num_batches_tracked",
+            "state_kind": "buffer",
+            "numel": 1,
+            "bytes": 8
+          },
+          {
+            "index": 83,
+            "state_name": "layer3.1.bn1.num_batches_tracked",
+            "state_kind": "buffer",
+            "numel": 1,
+            "bytes": 8
+          },
+          {
+            "index": 89,
+            "state_name": "layer3.1.bn2.num_batches_tracked",
+            "state_kind": "buffer",
+            "numel": 1,
+            "bytes": 8
+          },
+          {
+            "index": 95,
+            "state_name": "layer4.0.bn1.num_batches_tracked",
+            "state_kind": "buffer",
+            "numel": 1,
+            "bytes": 8
+          },
+          {
+            "index": 101,
+            "state_name": "layer4.0.bn2.num_batches_tracked",
+            "state_kind": "buffer",
+            "numel": 1,
+            "bytes": 8
+          },
+          {
+            "index": 107,
+            "state_name": "layer4.0.downsample.1.num_batches_tracked",
+            "state_kind": "buffer",
+            "numel": 1,
+            "bytes": 8
+          },
+          {
+            "index": 113,
+            "state_name": "layer4.1.bn1.num_batches_tracked",
+            "state_kind": "buffer",
+            "numel": 1,
+            "bytes": 8
+          },
+          {
+            "index": 119,
+            "state_name": "layer4.1.bn2.num_batches_tracked",
+            "state_kind": "buffer",
+            "numel": 1,
+            "bytes": 8
+          }
+        ]
+      },
+      "primary": {
+        "evaluation": "end",
+        "epoch": 100
+      },
+      "diagnostic_best": {
+        "metric": "surrogate_acc",
+        "epoch": 1,
+        "metrics": {
+          "eval_count": 10000,
+          "victim_correct": 6182,
+          "surrogate_correct": 6127,
+          "agreement_count": 9178,
+          "victim_acc": 0.6182,
+          "surrogate_acc": 0.6127,
+          "fidelity": 0.9178,
+          "posterior_kl_sum": 339.72557681798935,
+          "posterior_kl": 0.03397255768179894
+        }
+      },
+      "end": {
+        "eval_count": 10000,
+        "victim_correct": 6182,
+        "surrogate_correct": 6107,
+        "agreement_count": 8802,
+        "victim_acc": 0.6182,
+        "surrogate_acc": 0.6107,
+        "fidelity": 0.8802,
+        "posterior_kl_sum": 766.4883337020874,
+        "posterior_kl": 0.07664883337020874
+      }
+    }
+  ],
+  "references": {
+    "no_protection": {
+      "artifact_id": "no_protection",
+      "run_id": "3a23bf66e57f",
+      "protection": {
+        "defense": "no_protection",
+        "tensor_unit_count": 122,
+        "protected_unit_count": 0,
+        "protection_mask_sha256": "2be6fb541842fb402b60fc79bac066bd42d0c013d13c3eb27c4681f4b7a3c9a1",
+        "classifier_protected": false,
+        "head_mode": "exposed",
+        "total_param_count": 11227812,
+        "protected_param_count": 0,
+        "protected_param_ratio": 0.0,
+        "magnitude_eligible_count": null,
+        "magnitude_protected_count": null,
+        "mask_path": "weights/MS/surrogate/resnet18/c100/no_protection/protection_mask.pt"
+      },
+      "end": {
+        "eval_count": 10000,
+        "victim_correct": 6182,
+        "surrogate_correct": 6182,
+        "agreement_count": 10000,
+        "victim_acc": 0.6182,
+        "surrogate_acc": 0.6182,
+        "fidelity": 1.0,
+        "posterior_kl_sum": 1.1305409412187828e-05,
+        "posterior_kl": 1.1305409412187828e-09
+      }
+    },
+    "full_protection": {
+      "artifact_id": "full_protection",
+      "run_id": "b05bdd3dc9a3",
+      "protection": {
+        "defense": "full_protection",
+        "tensor_unit_count": 122,
+        "protected_unit_count": 122,
+        "protection_mask_sha256": "7e96847f0f89f6d4552091505464c9f18f4dd5ab49b3fb6a1a51195e275c1fa7",
+        "classifier_protected": true,
+        "head_mode": "replace",
+        "total_param_count": 11227812,
+        "protected_param_count": 11227812,
+        "protected_param_ratio": 1.0,
+        "magnitude_eligible_count": null,
+        "magnitude_protected_count": null,
+        "mask_path": "weights/MS/surrogate/resnet18/c100/full_protection/protection_mask.pt"
+      },
+      "end": {
+        "eval_count": 10000,
+        "victim_correct": 6182,
+        "surrogate_correct": 1545,
+        "agreement_count": 1610,
+        "victim_acc": 0.6182,
+        "surrogate_acc": 0.1545,
+        "fidelity": 0.161,
+        "posterior_kl_sum": 28352.90375518799,
+        "posterior_kl": 2.835290375518799
+      }
+    }
+  },
+  "created_at": "2026-07-12T15:54:02.247588+00:00"
+}

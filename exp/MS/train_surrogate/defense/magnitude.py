@@ -64,10 +64,20 @@ def build_large_weight(
     if options.protected_scalars is None:
         raise ValueError("large_weight 必须指定 --protected-scalars。")
     masks, eligible_count, protected_count = build_magnitude_masks(public_model, options.protected_scalars)
+    head_weight_mask = masks["last_linear.weight"]
+    head_bias_mask = masks["last_linear.bias"]
+    classifier_protected = bool(head_weight_mask.any() or head_bias_mask.any())
+    classifier_fully_protected = bool(head_weight_mask.all() and head_bias_mask.all())
+    if classifier_fully_protected:
+        head_mode = "replace"
+    elif classifier_protected:
+        head_mode = "mixed"
+    else:
+        head_mode = "exposed"
     return MaskSelection(
         masks=masks,
-        classifier_protected=bool(masks["last_linear.weight"].any()),
-        head_mode="scalar_mix",
+        classifier_protected=classifier_protected,
+        head_mode=head_mode,
         magnitude_eligible_count=eligible_count,
         magnitude_protected_count=protected_count,
     )

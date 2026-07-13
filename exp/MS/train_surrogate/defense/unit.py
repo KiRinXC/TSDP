@@ -125,5 +125,5 @@ def build_unit_selection(
     return MaskSelection(
         masks=masks,
         classifier_protected=head_weight_protected,
-        head_mode="adapter" if head_weight_protected else "exposed",
+        head_mode="replace" if head_weight_protected else "exposed",
     )

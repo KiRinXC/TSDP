@@ -25,6 +25,7 @@ if str(TRAIN_VICTIM_ROOT) not in sys.path:
 
 from common.trainer import build_public_split_dataset, build_transforms, resolve_dataset_name  # noqa: E402
 from models import imagenet as imagenet_models  # noqa: E402
+from models.teeslice import teeslice_r18  # noqa: E402
 
 
 MODEL_FACTORIES = {
@@ -32,8 +33,10 @@ MODEL_FACTORIES = {
     "resnet50": "resnet50",
     "vgg16_bn": "vgg16_bn",
     "mobilenetv2": "mobilenetv2",
+    "teeslice_r18": "teeslice_r18",
 }
 NUM_CLASSES = {"c10": 10, "c100": 100, "s10": 10, "t200": 200}
+POSTERIOR_INPUT_TRANSFORM = "test"
 LABEL_FIELDS = [
     "query_rank",
     "record_id",
@@ -57,6 +60,11 @@ def parse_args() -> argparse.Namespace:
         help="victim 权重根目录。",
     )
     parser.add_argument("--checkpoint", default=None, help="可选的 best.pth 显式路径。")
+    parser.add_argument(
+        "--weight-path",
+        default=str(REPO_ROOT / "weights" / "pre_train" / "resnet18-5c106cde.pth"),
+        help="TEESlice public backbone 使用的官方 ResNet18 权重。",
+    )
     parser.add_argument("--batch-size", type=int, default=128, help="推理 batch size。")
     parser.add_argument("--num-workers", type=int, default=4, help="DataLoader worker 数。")
     parser.add_argument("--device", default="auto", help="auto / cpu / cuda / cuda:0。")
@@ -113,9 +121,18 @@ def checkpoint_path(args: argparse.Namespace, dataset: str) -> Path:
     return path
 
 
-def load_model(model_name: str, num_classes: int, path: Path, device: torch.device):
-    factory = getattr(imagenet_models, MODEL_FACTORIES[model_name])
-    model = factory(num_classes=num_classes)
+def load_model(
+    model_name: str,
+    num_classes: int,
+    path: Path,
+    device: torch.device,
+    weight_path: Path,
+):
+    if model_name == "teeslice_r18":
+        model = teeslice_r18(num_classes=num_classes, weight_path=weight_path)
+    else:
+        factory = getattr(imagenet_models, MODEL_FACTORIES[model_name])
+        model = factory(num_classes=num_classes)
     checkpoint = torch.load(path, map_location="cpu")
     state_dict = checkpoint.get("state_dict") if isinstance(checkpoint, dict) else checkpoint
     if not isinstance(state_dict, dict):
@@ -124,6 +141,11 @@ def load_model(model_name: str, num_classes: int, path: Path, device: torch.devi
         (key.removeprefix("module.") if key.startswith("module.") else key): value for key, value in state_dict.items()
     }
     model.load_state_dict(normalized, strict=True)
+    if model_name == "teeslice_r18":
+        keep_flags = checkpoint.get("keep_flags") if isinstance(checkpoint, dict) else None
+        if keep_flags is None:
+            raise ValueError(f"{path} 缺少 TEESlice keep_flags。")
+        model.set_keep_flags(keep_flags)
     return model.to(device).eval()
 
 
@@ -172,18 +194,19 @@ def write_outputs(
     posteriors_path = output_dir / "posteriors.pt"
     torch.save(
         {
-            "schema_version": 1,
+            "schema_version": 2,
             "protocol": "MS",
             "dataset": dataset,
             "model": model_name,
             "query_split": "query_pool_ms",
+            "input_transform": POSTERIOR_INPUT_TRANSFORM,
             "posteriors": posteriors,
             "pseudo_labels": torch.tensor(pseudo_labels, dtype=torch.long),
         },
         posteriors_path,
     )
     manifest = {
-        "schema_version": 1,
+        "schema_version": 2,
         "protocol": "MS",
         "dataset": dataset,
         "model": model_name,
@@ -191,6 +214,7 @@ def write_outputs(
             "split": "query_pool_ms",
             "count": len(rows),
             "splits_path": relative_to_repo(splits_path),
+            "input_transform": POSTERIOR_INPUT_TRANSFORM,
         },
         "victim": {
             "checkpoint": relative_to_repo(checkpoint),
@@ -199,6 +223,9 @@ def write_outputs(
         "outputs": {"labels": "labels.tsv", "posteriors": "posteriors.pt"},
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
+    if model_name == "teeslice_r18":
+        manifest["defense"] = "teeslice"
+        manifest["base_model"] = "resnet18"
     (output_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
@@ -208,6 +235,8 @@ def main() -> int:
     if args.batch_size <= 0 or args.num_workers < 0:
         raise ValueError("batch-size 必须为正数，num-workers 不能为负数。")
     dataset = resolve_dataset_name(args.dataset)
+    if args.model == "teeslice_r18" and dataset != "c100":
+        raise ValueError("teeslice_r18 当前只固化 ResNet18+C100 查询协议。")
     protocol_root = Path(args.protocol_root).expanduser().resolve()
     dataset_root = Path(args.dataset_root).expanduser().resolve()
     splits_path = protocol_root / dataset / "splits.tsv"
@@ -236,7 +265,8 @@ def main() -> int:
         pin_memory=resolve_device(args.device).type == "cuda",
     )
     device = resolve_device(args.device)
-    model = load_model(args.model, NUM_CLASSES[dataset], checkpoint, device)
+    weight_path = Path(args.weight_path).expanduser().resolve()
+    model = load_model(args.model, NUM_CLASSES[dataset], checkpoint, device, weight_path)
     posterior_batches: list[torch.Tensor] = []
     pseudo_labels: list[int] = []
     confidences: list[float] = []

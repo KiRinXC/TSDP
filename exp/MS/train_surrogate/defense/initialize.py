@@ -52,17 +52,13 @@ def _copy_exposed_state(
     return trainable_masks
 
 
-def _build_public_model(factory, factory_name: str, weight_path: Path, num_classes: int, adapter: bool):
+def _build_public_model(factory, factory_name: str, weight_path: Path, num_classes: int):
     from models.imagenet import load_official_imagenet_weights
 
     model = factory(num_classes=1000)
     load_official_imagenet_weights(factory_name, model, str(weight_path), strict=True)
-    if adapter:
-        public_head = model.last_linear
-        model.last_linear = nn.Sequential(public_head, nn.Linear(1000, num_classes))
-    else:
-        in_features = model.last_linear.in_features
-        model.last_linear = nn.Linear(in_features, num_classes)
+    in_features = model.last_linear.in_features
+    model.last_linear = nn.Linear(in_features, num_classes)
     return model
 
 
@@ -82,8 +78,7 @@ def initialize_surrogate(
         build_resnet18_tensor_units(victim_model)
     victim_state = {name: value.detach().cpu() for name, value in victim_model.state_dict().items()}
 
-    rng_state = torch.get_rng_state()
-    public_model = _build_public_model(factory, factory_name, weight_path, num_classes, adapter=False)
+    public_model = _build_public_model(factory, factory_name, weight_path, num_classes)
     selection = build_mask_selection(
         defense,
         victim_model,
@@ -95,13 +90,12 @@ def initialize_surrogate(
             protected_scalars=protected_scalars,
         ),
     )
-    if selection.head_mode == "adapter":
-        # 临时同形状 public 模型只用于统一策略接口，不应改变 adapter 的随机初始化。
-        torch.set_rng_state(rng_state)
-        surrogate = _build_public_model(factory, factory_name, weight_path, num_classes, adapter=True)
-    else:
-        surrogate = public_model
-    trainable_masks = _copy_exposed_state(surrogate, victim_state, selection.masks)
+    surrogate = public_model
+    trainable_masks = _copy_exposed_state(
+        surrogate,
+        victim_state,
+        selection.masks,
+    )
     total_params, protected_params = _count_protected_parameters(victim_model, selection.masks)
     plan = ProtectionPlan(
         defense=defense,

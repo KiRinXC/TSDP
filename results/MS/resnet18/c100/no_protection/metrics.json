@@ -1,12 +1,16 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "protocol": "MS",
-  "run_id": "0c9cba1e527c",
+  "attack_protocol": "posterior_replace_finetune_v2",
+  "artifact_id": "no_protection",
+  "run_id": "3a23bf66e57f",
   "dataset": "c100",
   "victim_model": "resnet18",
   "query_budget": 500,
   "label_mode": "soft",
-  "training_mode": "frozen",
+  "query_transform": "test",
+  "lr_step": 60,
+  "training_mode": "identity",
   "protection": {
     "defense": "no_protection",
     "tensor_unit_count": 122,
@@ -19,11 +23,15 @@
     "protected_param_ratio": 0.0,
     "magnitude_eligible_count": null,
     "magnitude_protected_count": null,
-    "mask_path": "weights/MS/surrogate/resnet18/c100/0c9cba1e527c/protection_mask.pt"
+    "mask_path": "weights/MS/surrogate/resnet18/c100/no_protection/protection_mask.pt"
   },
-  "selection": {
+  "primary": {
+    "checkpoint": "end.pth",
+    "epoch": 0
+  },
+  "diagnostic_best": {
     "metric": "surrogate_acc",
-    "best_epoch": 0
+    "epoch": 0
   },
   "best": {
     "eval_count": 10000,

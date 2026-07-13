@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "experiment": "03_baseline",
+  "protocol": "MS",
+  "attack_protocol": "posterior_replace_finetune_v2",
+  "model": "resnet18",
+  "dataset": "c100",
+  "query_budget": 500,
+  "query_transform": "test",
+  "lr_step": 60,
+  "primary_checkpoint": "end.pth",
+  "x_axis": "protected_param_ratio",
+  "strategy_artifacts": {
+    "shallow": [
+      "shallow_02",
+      "shallow_04",
+      "shallow_06",
+      "shallow_08",
+      "shallow_10",
+      "shallow_12",
+      "shallow_14",
+      "shallow_16"
+    ],
+    "middle": [
+      "middle_02",
+      "middle_04",
+      "middle_06",
+      "middle_08",
+      "middle_10",
+      "middle_12",
+      "middle_14",
+      "middle_16"
+    ],
+    "deep": [
+      "deep_02",
+      "deep_04",
+      "deep_06",
+      "deep_08",
+      "deep_10",
+      "deep_12",
+      "deep_14",
+      "deep_16"
+    ],
+    "large_weight": [
+      "large_01",
+      "large_02",
+      "large_03",
+      "large_04",
+      "large_05",
+      "large_06",
+      "large_07",
+      "large_08"
+    ]
+  },
+  "reference_artifacts": [
+    "no_protection",
+    "full_protection"
+  ],
+  "outputs": [
+    "accuracy.png",
+    "fidelity.png",
+    "posterior_kl.png",
+    "data.tsv"
+  ]
+}

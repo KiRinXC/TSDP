@@ -1,0 +1,61 @@
+{
+  "schema_version": 2,
+  "protocol": "MS",
+  "attack_protocol": "posterior_replace_finetune_v2",
+  "artifact_id": "shallow_16",
+  "run_id": "0f4feab02570",
+  "dataset": "c100",
+  "victim_model": "resnet18",
+  "query_budget": 500,
+  "label_mode": "soft",
+  "query_transform": "test",
+  "lr_step": 60,
+  "training_mode": "finetune",
+  "plan_id": "shallow_16",
+  "protected_layer_count": 16,
+  "source_ratio": null,
+  "protection": {
+    "defense": "shallow",
+    "tensor_unit_count": 122,
+    "protected_unit_count": 114,
+    "protection_mask_sha256": "7050de8a72a0ef79bc73e1164a4a1abc41b7000397047f2c4909e336076c9a3e",
+    "classifier_protected": false,
+    "head_mode": "exposed",
+    "total_param_count": 11227812,
+    "protected_param_count": 8816192,
+    "protected_param_ratio": 0.7852101549259999,
+    "magnitude_eligible_count": null,
+    "magnitude_protected_count": null,
+    "mask_path": "weights/MS/surrogate/resnet18/c100/shallow_16/protection_mask.pt"
+  },
+  "primary": {
+    "checkpoint": "end.pth",
+    "epoch": 100
+  },
+  "diagnostic_best": {
+    "metric": "surrogate_acc",
+    "epoch": 90
+  },
+  "best": {
+    "eval_count": 10000,
+    "victim_correct": 6182,
+    "surrogate_correct": 2209,
+    "agreement_count": 2299,
+    "victim_acc": 0.6182,
+    "surrogate_acc": 0.2209,
+    "fidelity": 0.2299,
+    "posterior_kl_sum": 22740.925827026367,
+    "posterior_kl": 2.274092582702637
+  },
+  "end": {
+    "eval_count": 10000,
+    "victim_correct": 6182,
+    "surrogate_correct": 2205,
+    "agreement_count": 2297,
+    "victim_acc": 0.6182,
+    "surrogate_acc": 0.2205,
+    "fidelity": 0.2297,
+    "posterior_kl_sum": 22716.711448669434,
+    "posterior_kl": 2.2716711448669433
+  }
+}

@@ -142,6 +142,8 @@ def load_query_targets(
         return query_indices[:budget], None, pseudo_labels[:budget], labels_path, query_manifest
 
     posterior_path = model_root / query_manifest.get("outputs", {}).get("posteriors", "posteriors.pt")
+    if query_manifest.get("query", {}).get("input_transform") != "test":
+        raise ValueError("soft posterior 必须声明使用确定性的 test transform 生成。")
     if not posterior_path.is_file():
         raise FileNotFoundError(f"找不到 victim posterior：{posterior_path}")
     package = torch.load(posterior_path, map_location="cpu", weights_only=False)
@@ -149,6 +151,8 @@ def load_query_targets(
         raise ValueError(f"无法识别 posterior 文件格式：{posterior_path}")
     if package.get("protocol") != "MS" or package.get("dataset") != dataset_name or package.get("model") != model_name:
         raise ValueError(f"posterior 元数据与 {model_name}+{dataset_name} 不一致。")
+    if package.get("input_transform") != "test":
+        raise ValueError("posteriors.pt 的 input_transform 必须是 test。")
     posteriors = package.get("posteriors")
     pseudo_labels = package.get("pseudo_labels")
     if not torch.is_tensor(posteriors) or not torch.is_tensor(pseudo_labels):
@@ -178,8 +182,9 @@ def build_query_dataset(
     posteriors: torch.Tensor | None,
     pseudo_labels: torch.Tensor,
 ) -> QueryDataset:
-    train_transform, _ = build_transforms(dataset_name)
-    public_dataset = build_public_split_dataset(dataset_name, dataset_root, "train", train_transform)
+    train_transform, test_transform = build_transforms(dataset_name)
+    query_transform = test_transform if posteriors is not None else train_transform
+    public_dataset = build_public_split_dataset(dataset_name, dataset_root, "train", query_transform)
     invalid = [index for index in source_indices if index < 0 or index >= len(public_dataset)]
     if invalid:
         raise ValueError(f"query_pool_ms 包含越界索引：{invalid[0]}")

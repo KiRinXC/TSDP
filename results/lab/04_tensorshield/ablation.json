@@ -1,0 +1,588 @@
+{
+  "schema_version": 1,
+  "experiment": "04_tensorshield",
+  "study": "rank_5_rank_10_redundancy",
+  "protocol": "MS",
+  "attack_protocol": "posterior_replace_finetune_v2",
+  "dataset": "c100",
+  "victim_model": "resnet18",
+  "query_budget": 500,
+  "label_mode": "soft",
+  "query_transform": "test",
+  "seed": 42,
+  "randomization": {
+    "reset_before_each_surrogate_initialization": true,
+    "query_sampler_seed": 42,
+    "purpose": "controlled_prefix_comparison"
+  },
+  "source": {
+    "prefix_metrics": "results/lab/04_tensorshield/metrics.json",
+    "prefix_metrics_sha256": "f4afb5549e8f3ae395db3a75e3f4aefe2ed4dd8686ab539405c8d150f88b98ab",
+    "author_rank_sha256": "86304f95210a12ed118cefcaca7b10775716780cd7f1836ca3c3f4b8b3f37b1a",
+    "full_top10": [
+      "layer1.1.conv1.weight",
+      "layer2.0.conv1.weight",
+      "last_linear.weight",
+      "layer1.0.conv1.weight",
+      "layer1.1.conv2.weight",
+      "layer2.0.conv2.weight",
+      "layer2.1.conv1.weight",
+      "layer1.0.conv2.weight",
+      "layer3.0.conv1.weight",
+      "layer2.1.conv2.weight"
+    ],
+    "rank_5": "layer1.1.conv2.weight",
+    "rank_10": "layer2.1.conv2.weight"
+  },
+  "victim_checkpoint": "weights/MS/victim/resnet18/c100/best.pth",
+  "victim_checkpoint_sha256": "f6233c9361ed958846cdbccc8f96c9b3425c139d961cb25410409fb47179f8d4",
+  "victim_checkpoint_epoch": 63,
+  "official_weight": "weights/pre_train/resnet18-5c106cde.pth",
+  "official_weight_sha256": "5c106cde386e87d4033832f2996f5493238eda96ccf559d1d62760c4de0613f8",
+  "posterior_path": "dataset/MS/c100/resnet18/posteriors.pt",
+  "posterior_sha256": "cd2e4ec87b210262a34d4a20895cf1dcf8052c002a26d36cdfce0566accfe0c6",
+  "training": {
+    "mode": "finetune",
+    "epochs": 100,
+    "batch_size": 64,
+    "eval_batch_size": 128,
+    "optimizer": "SGD",
+    "learning_rate": 0.01,
+    "momentum": 0.5,
+    "weight_decay": 0.0005,
+    "lr_scheduler": "StepLR",
+    "lr_step": 60,
+    "lr_gamma": 0.1,
+    "evaluation_schedule": "end_only",
+    "trained_cases": [
+      "drop_05",
+      "drop_05_10"
+    ],
+    "reused_cases": [
+      "full_top10",
+      "drop_10"
+    ]
+  },
+  "primary": {
+    "evaluation": "end",
+    "epoch": 100
+  },
+  "results": [
+    {
+      "case": "full_top10",
+      "origin": "reused_prefix_curve",
+      "dropped_ranks": [],
+      "dropped_weights": [],
+      "selected_weight_names": [
+        "layer1.1.conv1.weight",
+        "layer2.0.conv1.weight",
+        "last_linear.weight",
+        "layer1.0.conv1.weight",
+        "layer1.1.conv2.weight",
+        "layer2.0.conv2.weight",
+        "layer2.1.conv1.weight",
+        "layer1.0.conv2.weight",
+        "layer3.0.conv1.weight",
+        "layer2.1.conv2.weight"
+      ],
+      "protection": {
+        "implementation_defense": "custom",
+        "defense": "custom",
+        "tensor_unit_count": 122,
+        "protected_unit_count": 11,
+        "protection_mask_sha256": "1e3aa38124f084dd39eab42a4d3f1ddf1ca86807812796c66a8318c05e7aa2cb",
+        "classifier_protected": true,
+        "head_mode": "replace",
+        "total_param_count": 11227812,
+        "protected_param_count": 1009764,
+        "protected_param_ratio": 0.08993417417391741,
+        "magnitude_eligible_count": null,
+        "magnitude_protected_count": null,
+        "selected_units": [
+          {
+            "rank": 1,
+            "index": 18,
+            "state_name": "layer1.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 2,
+            "index": 30,
+            "state_name": "layer2.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 73728
+          },
+          {
+            "rank": 3,
+            "index": 120,
+            "state_name": "last_linear.weight",
+            "state_kind": "parameter",
+            "numel": 51200
+          },
+          {
+            "rank": 4,
+            "index": 6,
+            "state_name": "layer1.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 5,
+            "index": 24,
+            "state_name": "layer1.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 6,
+            "index": 36,
+            "state_name": "layer2.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 7,
+            "index": 48,
+            "state_name": "layer2.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 8,
+            "index": 12,
+            "state_name": "layer1.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 9,
+            "index": 60,
+            "state_name": "layer3.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 294912
+          },
+          {
+            "rank": 10,
+            "index": 54,
+            "state_name": "layer2.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": null,
+            "index": 121,
+            "state_name": "last_linear.bias",
+            "state_kind": "parameter",
+            "numel": 100
+          }
+        ],
+        "mask_path": "results/lab/04_tensorshield/top_10_mask.pt"
+      },
+      "primary": {
+        "evaluation": "end",
+        "epoch": 100
+      },
+      "end": {
+        "eval_count": 10000,
+        "victim_correct": 6182,
+        "surrogate_correct": 2569,
+        "agreement_count": 2785,
+        "victim_acc": 0.6182,
+        "surrogate_acc": 0.2569,
+        "fidelity": 0.2785,
+        "posterior_kl_sum": 21679.61302947998,
+        "posterior_kl": 2.167961302947998
+      },
+      "attack_gain_from_deletion": {
+        "accuracy_increase": 0.0,
+        "fidelity_increase": 0.0,
+        "posterior_kl_decrease": 0.0
+      }
+    },
+    {
+      "case": "drop_05",
+      "origin": "trained_ablation",
+      "dropped_ranks": [
+        5
+      ],
+      "dropped_weights": [
+        "layer1.1.conv2.weight"
+      ],
+      "selected_weight_names": [
+        "layer1.1.conv1.weight",
+        "layer2.0.conv1.weight",
+        "last_linear.weight",
+        "layer1.0.conv1.weight",
+        "layer2.0.conv2.weight",
+        "layer2.1.conv1.weight",
+        "layer1.0.conv2.weight",
+        "layer3.0.conv1.weight",
+        "layer2.1.conv2.weight"
+      ],
+      "protection": {
+        "implementation_defense": "custom",
+        "defense": "custom",
+        "tensor_unit_count": 122,
+        "protected_unit_count": 10,
+        "protection_mask_sha256": "976f0f00bf07b1febcf7888a2d4a643fbe04751ea78216c0918d20df986d883b",
+        "classifier_protected": true,
+        "head_mode": "replace",
+        "total_param_count": 11227812,
+        "protected_param_count": 972900,
+        "protected_param_ratio": 0.0866508986791015,
+        "magnitude_eligible_count": null,
+        "magnitude_protected_count": null,
+        "selected_units": [
+          {
+            "rank": 1,
+            "index": 18,
+            "state_name": "layer1.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 2,
+            "index": 30,
+            "state_name": "layer2.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 73728
+          },
+          {
+            "rank": 3,
+            "index": 120,
+            "state_name": "last_linear.weight",
+            "state_kind": "parameter",
+            "numel": 51200
+          },
+          {
+            "rank": 4,
+            "index": 6,
+            "state_name": "layer1.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 6,
+            "index": 36,
+            "state_name": "layer2.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 7,
+            "index": 48,
+            "state_name": "layer2.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 8,
+            "index": 12,
+            "state_name": "layer1.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 9,
+            "index": 60,
+            "state_name": "layer3.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 294912
+          },
+          {
+            "rank": 10,
+            "index": 54,
+            "state_name": "layer2.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": null,
+            "index": 121,
+            "state_name": "last_linear.bias",
+            "state_kind": "parameter",
+            "numel": 100
+          }
+        ],
+        "mask_path": "results/lab/04_tensorshield/drop_05_mask.pt"
+      },
+      "primary": {
+        "evaluation": "end",
+        "epoch": 100
+      },
+      "end": {
+        "eval_count": 10000,
+        "victim_correct": 6182,
+        "surrogate_correct": 2536,
+        "agreement_count": 2791,
+        "victim_acc": 0.6182,
+        "surrogate_acc": 0.2536,
+        "fidelity": 0.2791,
+        "posterior_kl_sum": 21662.137825012207,
+        "posterior_kl": 2.1662137825012207
+      },
+      "attack_gain_from_deletion": {
+        "accuracy_increase": -0.003300000000000025,
+        "fidelity_increase": 0.0005999999999999894,
+        "posterior_kl_decrease": 0.0017475204467771732
+      }
+    },
+    {
+      "case": "drop_10",
+      "origin": "reused_prefix_curve",
+      "dropped_ranks": [
+        10
+      ],
+      "dropped_weights": [
+        "layer2.1.conv2.weight"
+      ],
+      "selected_weight_names": [
+        "layer1.1.conv1.weight",
+        "layer2.0.conv1.weight",
+        "last_linear.weight",
+        "layer1.0.conv1.weight",
+        "layer1.1.conv2.weight",
+        "layer2.0.conv2.weight",
+        "layer2.1.conv1.weight",
+        "layer1.0.conv2.weight",
+        "layer3.0.conv1.weight"
+      ],
+      "protection": {
+        "implementation_defense": "custom",
+        "defense": "custom",
+        "tensor_unit_count": 122,
+        "protected_unit_count": 10,
+        "protection_mask_sha256": "e15f1e5bca0b7e5437bf8d17c3a74b2fbbe53d20a1d7dd019dedb9cb280250cd",
+        "classifier_protected": true,
+        "head_mode": "replace",
+        "total_param_count": 11227812,
+        "protected_param_count": 862308,
+        "protected_param_ratio": 0.07680107219465378,
+        "magnitude_eligible_count": null,
+        "magnitude_protected_count": null,
+        "selected_units": [
+          {
+            "rank": 1,
+            "index": 18,
+            "state_name": "layer1.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 2,
+            "index": 30,
+            "state_name": "layer2.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 73728
+          },
+          {
+            "rank": 3,
+            "index": 120,
+            "state_name": "last_linear.weight",
+            "state_kind": "parameter",
+            "numel": 51200
+          },
+          {
+            "rank": 4,
+            "index": 6,
+            "state_name": "layer1.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 5,
+            "index": 24,
+            "state_name": "layer1.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 6,
+            "index": 36,
+            "state_name": "layer2.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 7,
+            "index": 48,
+            "state_name": "layer2.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 8,
+            "index": 12,
+            "state_name": "layer1.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 9,
+            "index": 60,
+            "state_name": "layer3.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 294912
+          },
+          {
+            "rank": null,
+            "index": 121,
+            "state_name": "last_linear.bias",
+            "state_kind": "parameter",
+            "numel": 100
+          }
+        ],
+        "mask_path": "results/lab/04_tensorshield/top_09_mask.pt"
+      },
+      "primary": {
+        "evaluation": "end",
+        "epoch": 100
+      },
+      "end": {
+        "eval_count": 10000,
+        "victim_correct": 6182,
+        "surrogate_correct": 2596,
+        "agreement_count": 2821,
+        "victim_acc": 0.6182,
+        "surrogate_acc": 0.2596,
+        "fidelity": 0.2821,
+        "posterior_kl_sum": 21379.937690734863,
+        "posterior_kl": 2.1379937690734865
+      },
+      "attack_gain_from_deletion": {
+        "accuracy_increase": 0.00269999999999998,
+        "fidelity_increase": 0.003599999999999992,
+        "posterior_kl_decrease": 0.029967533874511343
+      }
+    },
+    {
+      "case": "drop_05_10",
+      "origin": "trained_ablation",
+      "dropped_ranks": [
+        5,
+        10
+      ],
+      "dropped_weights": [
+        "layer1.1.conv2.weight",
+        "layer2.1.conv2.weight"
+      ],
+      "selected_weight_names": [
+        "layer1.1.conv1.weight",
+        "layer2.0.conv1.weight",
+        "last_linear.weight",
+        "layer1.0.conv1.weight",
+        "layer2.0.conv2.weight",
+        "layer2.1.conv1.weight",
+        "layer1.0.conv2.weight",
+        "layer3.0.conv1.weight"
+      ],
+      "protection": {
+        "implementation_defense": "custom",
+        "defense": "custom",
+        "tensor_unit_count": 122,
+        "protected_unit_count": 9,
+        "protection_mask_sha256": "c00458ac4f922574a36213a4fcb65d1903ba4ab01296b11c4950c83977109e1c",
+        "classifier_protected": true,
+        "head_mode": "replace",
+        "total_param_count": 11227812,
+        "protected_param_count": 825444,
+        "protected_param_ratio": 0.07351779669983786,
+        "magnitude_eligible_count": null,
+        "magnitude_protected_count": null,
+        "selected_units": [
+          {
+            "rank": 1,
+            "index": 18,
+            "state_name": "layer1.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 2,
+            "index": 30,
+            "state_name": "layer2.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 73728
+          },
+          {
+            "rank": 3,
+            "index": 120,
+            "state_name": "last_linear.weight",
+            "state_kind": "parameter",
+            "numel": 51200
+          },
+          {
+            "rank": 4,
+            "index": 6,
+            "state_name": "layer1.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 6,
+            "index": 36,
+            "state_name": "layer2.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 7,
+            "index": 48,
+            "state_name": "layer2.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 8,
+            "index": 12,
+            "state_name": "layer1.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 9,
+            "index": 60,
+            "state_name": "layer3.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 294912
+          },
+          {
+            "rank": null,
+            "index": 121,
+            "state_name": "last_linear.bias",
+            "state_kind": "parameter",
+            "numel": 100
+          }
+        ],
+        "mask_path": "results/lab/04_tensorshield/drop_05_10_mask.pt"
+      },
+      "primary": {
+        "evaluation": "end",
+        "epoch": 100
+      },
+      "end": {
+        "eval_count": 10000,
+        "victim_correct": 6182,
+        "surrogate_correct": 2593,
+        "agreement_count": 2831,
+        "victim_acc": 0.6182,
+        "surrogate_acc": 0.2593,
+        "fidelity": 0.2831,
+        "posterior_kl_sum": 21456.377334594727,
+        "posterior_kl": 2.1456377334594725
+      },
+      "attack_gain_from_deletion": {
+        "accuracy_increase": 0.0023999999999999577,
+        "fidelity_increase": 0.004599999999999993,
+        "posterior_kl_decrease": 0.02232356948852532
+      }
+    }
+  ],
+  "outputs": {
+    "data": "results/lab/04_tensorshield/ablation.tsv",
+    "history": "results/lab/04_tensorshield/ablation_history.tsv",
+    "plot": "results/lab/04_tensorshield/ablation.png"
+  },
+  "created_at": "2026-07-13T13:10:13.643391+00:00"
+}

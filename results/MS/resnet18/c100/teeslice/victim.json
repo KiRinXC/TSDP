@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "protocol": "MS",
+  "defense": "teeslice",
+  "model": "resnet18",
+  "defended_model": "teeslice_r18",
+  "dataset": "c100",
+  "run_id": "219e1a302bbd",
+  "primary_checkpoint": "best.pth",
+  "selection": {
+    "split": "victim_train_internal_validation",
+    "best_prune_epoch": 20,
+    "tolerance_accuracy": 0.691812,
+    "internal_metrics": {
+      "count": 5000,
+      "loss": 1.0293119180679322,
+      "accuracy": 0.6964,
+      "fidelity": 0.8252
+    }
+  },
+  "cost": {
+    "active_proxy_count": 7,
+    "active_alpha_count": 15,
+    "public_param_count": 11168832,
+    "paper_private_param_count": 570980,
+    "private_param_count": 570995,
+    "private_bn_buffer_count": 20777,
+    "total_param_count": 11739827,
+    "private_param_ratio": 0.048637428813899895,
+    "paper_private_flops": 25591808,
+    "private_flops": 25643108,
+    "public_flops": 556646400,
+    "total_flops": 582289508,
+    "private_flops_ratio": 0.0440384167114342
+  },
+  "published_reference": {
+    "task_param_count": 711524,
+    "task_flops": 29868032,
+    "topology_jaccard": 0.3333333333333333,
+    "exact_topology_match": false
+  },
+  "eval_ms": {
+    "count": 10000,
+    "loss": 1.167285468673706,
+    "accuracy": 0.6741,
+    "fidelity": 0.6771
+  },
+  "public_state_sha256": "aadd48ae5e5ce2a19c4bded1e4a19535d1f6364812d3235bd865b423d4852e47",
+  "victim_checkpoint_sha256": "f6233c9361ed958846cdbccc8f96c9b3425c139d961cb25410409fb47179f8d4",
+  "official_weight_sha256": "5c106cde386e87d4033832f2996f5493238eda96ccf559d1d62760c4de0613f8",
+  "created_at": "2026-07-13T07:55:14.510992+00:00"
+}

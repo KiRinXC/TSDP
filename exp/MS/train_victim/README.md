@@ -1,15 +1,16 @@
 # victim 训练入口
 
-本目录保存受害者模型训练入口，按四个模型拆分：
+本目录保存普通 victim 与独立 defended victim 的训练入口：
 
 ```text
 mobilenetv2/
 resnet18/
 resnet50/
 vgg16_bn/
+teeslice/
 ```
 
-公共训练逻辑位于 `common/trainer.py`。四个入口只负责指定模型结构和默认 ImageNet 预训练权重。
+普通四模型共用 `common/trainer.py`，各入口只指定模型结构和默认 ImageNet 预训练权重。`teeslice/` 是独立的三阶段 defended victim 训练与剪枝流程，读取普通 ResNet18 victim，但不复用普通 victim 的单阶段训练器。
 
 ## 支持的数据集 id
 
@@ -81,6 +82,12 @@ bash exp/MS/train_victim/vgg16_bn/run.sh c100
 bash exp/MS/train_victim/mobilenetv2/run.sh s10
 ```
 
+训练 `ResNet18+C100` 的 TEESlice defended victim：
+
+```bash
+python3 exp/MS/train_victim/teeslice/train.py resnet18 c100
+```
+
 `run.sh` 的第一个参数就是数据集 id。也可以用环境变量覆盖：
 
 ```bash
@@ -115,3 +122,5 @@ end.pth
 train.log.tsv
 params.json
 ```
+
+TEESlice 使用稳定模型标识 `teeslice_r18`，输出写入 `weights/MS/victim/teeslice_r18/c100/`；其阶段 checkpoint 和成本字段见 `teeslice/README.md`。

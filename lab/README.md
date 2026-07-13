@@ -17,4 +17,13 @@ run.py
 
 02_head
   在 ResNet18+CIFAR-100 的全保护与随机保护 MS 下，比较分类头替换/适配和可用权重冻结/微调。
+
+03_baseline
+  汇总四种正式 MS baseline，绘制保护参数比例与 accuracy、fidelity、posterior KL 的关系。
+
+04_tensorshield
+  在 ResNet18+CIFAR-100 上绘制作者确认 rank 的 Top-1 至 Top-12 前缀曲线，消融 rank-5/rank-10 的冗余，并比较原始 rank 11-20 与末尾 10 项。
+
+05_state
+  分别保护 ResNet18 state_dict 的五种条目类型，比较保护存储比例与 MS 原始指标。
 ```
