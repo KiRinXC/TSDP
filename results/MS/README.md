@@ -22,27 +22,20 @@ full_protection  finetune  replace  full_protection  100        0.1545    0.1610
 
 ## ResNet18+CIFAR-100 TEESlice 结果
 
-本次有效结果由 `results/MS/resnet18/c100/teeslice/victim.json` 和 `metrics.json` 组成。defended victim 及其源模型的原始效用如下：
+TEESlice 改变了 victim 结构与训练过程，因此按 `standalone_reproduction` 独立保存，不写入固定普通 victim 的主 `metrics.tsv`。本次剪枝模型在 `eval_ms` 上的 accuracy 为 `0.7578`；已知最终剪枝拓扑的黑盒攻击使用 500 条 soft posterior query，在固定第 100 轮得到 accuracy `0.1619`、fidelity `0.1784`、posterior KL `3.251131`。完整状态白盒的实际评估为 accuracy `0.7578`、fidelity `1.0000`、posterior KL `4.814928395546758e-10`。四阶段效用、剪枝成本和详细指标见 `results/MS/resnet18/c100/teeslice/README.md`。
 
-| 模型 | eval_ms accuracy | 相对普通 victim fidelity |
-|---|---:|---:|
-| 普通 ResNet18 victim | 0.6182 | 1.0000 |
-| TEESlice defended victim | 0.6741 | 0.6771 |
+后续总图可以同时展示 TensorShield、TEESlice、浅层/中间层/深层/大权重四类策略，以及普通预训练模型的黑盒与白盒界。TEESlice 点必须保留 `standalone_reproduction` 标记，只用于呈现其自身攻击区间，不参与固定普通 victim 下的同条件策略排序。
 
-最终内部验证选择的结构保留 7 条 private proxy。保护成本不使用 122-unit 数量表示：
+## ResNet18+CIFAR-100 TensorShield 结果
 
-| paper private params | private params（含 alpha） | private BN buffer | 参数比例 | private FLOPs | FLOPs 比例 |
-|---:|---:|---:|---:|---:|---:|
-| 570,980 | 570,995 | 20,777 | 4.8637% | 25,643,108 | 4.4038% |
-
-500 条 soft posterior query 的 surrogate 原始结果：
+TensorShield 使用作者确认 rank 对应的 Figure 12(d) 固定保护集合，不重新计算 importance。最终 mask 保护 `11/122` 个 unit、`1,009,764/11,227,812` 个参数，参数比例为 `8.9934%`。
 
 | checkpoint | epoch | accuracy | fidelity | posterior KL |
 |---|---:|---:|---:|---:|
-| `end.pth`（主结果） | 100 | 0.1859 | 0.2075 | 2.575763 |
-| `best.pth`（训练诊断） | 92 | 0.1870 | 0.2082 | 2.578240 |
+| `end.pth`（主结果） | 100 | 0.1913 | 0.2099 | 2.505831 |
+| `best.pth`（训练诊断） | 90 | 0.1916 | 0.2101 | 2.510781 |
 
-作者 artifact 发布的同名配置使用 9 条 proxy，对应 task parameter 711,524、task FLOPs 29,868,032 和 defended victim accuracy 0.7679；当前内部验证产生的 7-proxy 拓扑与该发布拓扑的 Jaccard 为 0.3333。两者的源 victim accuracy、数据选择和攻击输出协议均不同：作者源 victim 为 0.7906，当前源 victim 为 0.6182；作者表中的 500-query 攻击结果不能替代本项目 soft posterior 协议下的结果。
+主结果固定使用 `end.pth`；`best.pth` 不参与正式策略比较。
 
 ## ResNet18+CIFAR-100 完整层 baseline
 

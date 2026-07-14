@@ -1,5 +1,7 @@
 # TSDP
 
+新会话接手项目前先阅读 `HANDOFF.md`，其中记录当前有效协议、已完成结果、扩展边界和禁止重复的错误。
+
 TSDP 当前实现 Model Stealing（MS）实验。受害者模型使用官方训练集全量训练，query pool 从同一训练集随机无放回抽取 1%，并使用最佳验证模型生成 posterior 和 hard pseudo label。正式 MS baseline 统一使用 posterior-visible 查询接口和 soft posterior；posterior 生成与 surrogate query 均使用确定性 test transform，攻击训练固定 `lr_step=60`。hard label 仅用于 Lab 输出能力消融。
 
 MS 的基本流程：

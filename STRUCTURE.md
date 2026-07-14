@@ -17,13 +17,13 @@ TSDP/
 │       │   ├── resnet18/            ResNet18 victim 入口
 │       │   ├── resnet50/            ResNet50 victim 入口
 │       │   ├── vgg16_bn/            VGG16-BN victim 入口
-│       │   └── teeslice/            TEESlice 三阶段训练与剪枝
+│       │   └── teeslice/            TEESlice 四阶段独立训练与动态剪枝
 │       ├── transfer/                构造 MS 划分与查询 victim
 │       └── train_surrogate/         初始化权重隐藏 baseline 并训练 surrogate
 │           ├── core/                公共数据、训练、评估与产物管理
 │           ├── defense/             策略插件、保护掩码与 unit 映射
 │           ├── selector/            TensorShield 作者确认的固定 rank 列表
-│           └── teeslice/            TEESlice defended victim 的 surrogate 攻击
+│           └── teeslice/            TEESlice 已知剪枝拓扑的黑盒攻击与完整状态白盒评估
 ├── weights/                         可复用模型权重
 │   ├── pre_train/                   ImageNet 预训练权重
 │   └── MS/                          MS victim/surrogate 权重与 unit 保护掩码

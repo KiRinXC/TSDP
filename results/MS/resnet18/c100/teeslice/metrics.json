@@ -2,11 +2,69 @@
   "schema_version": 2,
   "protocol": "MS",
   "attack_protocol": "posterior_replace_finetune_v2",
+  "comparison_scope": "standalone_reproduction",
+  "visibility": "blackbox_known_pruned_topology",
+  "whitebox_visibility": "whitebox_full_state",
   "artifact_id": "teeslice",
-  "run_id": "02900197fa16",
+  "run_id": "3660f3292c52",
   "dataset": "c100",
   "victim_model": "resnet18",
   "defended_victim": "teeslice_r18",
+  "surrogate_model": "teeslice_r18",
+  "surrogate_initialization": "official_backbone_fresh_private_state",
+  "topology": {
+    "schema_version": 1,
+    "keep_flags": [
+      [
+        true,
+        true
+      ],
+      [
+        true,
+        true,
+        false
+      ],
+      [
+        true,
+        false,
+        false,
+        false
+      ],
+      [
+        true,
+        true,
+        false,
+        false
+      ],
+      [
+        true,
+        true,
+        false,
+        false
+      ],
+      [
+        true,
+        true,
+        false,
+        false
+      ],
+      [
+        true,
+        true,
+        true,
+        false
+      ],
+      [
+        true,
+        true,
+        false,
+        false
+      ]
+    ],
+    "block_count": 8,
+    "active_proxy_count": 8,
+    "topology_sha256": "79facd2a883c3720c3d40f14bd0589fe52b35c6d0d06adc25c1e17a6b113cafc"
+  },
   "query_budget": 500,
   "label_mode": "soft",
   "query_transform": "test",
@@ -16,21 +74,21 @@
     "strategy": "teeslice",
     "granularity": "private_slice",
     "source_commit": "93505cb3337ec8b89556ee29ffc598d31513aa5e",
-    "private_proxy_count": 7,
+    "private_proxy_count": 8,
     "private_head_count": 1,
     "tensor_unit_count": 0,
-    "protected_param_count": 570995,
+    "protected_param_count": 703092,
     "protected_bn_buffer_count": 20777,
-    "paper_private_param_count": 570980,
-    "total_param_count": 11739827,
-    "protected_param_ratio": 0.048637428813899895,
-    "protected_flops": 25643108,
-    "paper_private_flops": 25591808,
-    "total_flops": 582289508,
-    "protected_flops_ratio": 0.0440384167114342,
+    "paper_private_param_count": 703076,
+    "total_param_count": 11871924,
+    "protected_param_ratio": 0.059223088018420605,
+    "protected_flops": 27756644,
+    "paper_private_flops": 27705344,
+    "total_flops": 584403044,
+    "protected_flops_ratio": 0.047495721120850286,
     "head_mode": "replace",
     "public_backbone": "official_imagenet_cifar_resnet18",
-    "protection_mask_sha256": ""
+    "topology_sha256": "79facd2a883c3720c3d40f14bd0589fe52b35c6d0d06adc25c1e17a6b113cafc"
   },
   "primary": {
     "checkpoint": "end.pth",
@@ -38,28 +96,39 @@
   },
   "diagnostic_best": {
     "metric": "surrogate_acc",
-    "epoch": 92
+    "epoch": 69
   },
   "best": {
     "eval_count": 10000,
-    "victim_correct": 6741,
-    "surrogate_correct": 1870,
-    "agreement_count": 2082,
-    "victim_acc": 0.6741,
-    "surrogate_acc": 0.187,
-    "fidelity": 0.2082,
-    "posterior_kl_sum": 25782.39532470703,
-    "posterior_kl": 2.578239532470703
+    "victim_correct": 7578,
+    "surrogate_correct": 1638,
+    "agreement_count": 1797,
+    "victim_acc": 0.7578,
+    "surrogate_acc": 0.1638,
+    "fidelity": 0.1797,
+    "posterior_kl_sum": 32584.121421813965,
+    "posterior_kl": 3.2584121421813963
   },
   "end": {
     "eval_count": 10000,
-    "victim_correct": 6741,
-    "surrogate_correct": 1859,
-    "agreement_count": 2075,
-    "victim_acc": 0.6741,
-    "surrogate_acc": 0.1859,
-    "fidelity": 0.2075,
-    "posterior_kl_sum": 25757.63352203369,
-    "posterior_kl": 2.575763352203369
+    "victim_correct": 7578,
+    "surrogate_correct": 1619,
+    "agreement_count": 1784,
+    "victim_acc": 0.7578,
+    "surrogate_acc": 0.1619,
+    "fidelity": 0.1784,
+    "posterior_kl_sum": 32511.31031036377,
+    "posterior_kl": 3.251131031036377
+  },
+  "whitebox": {
+    "eval_count": 10000,
+    "victim_correct": 7578,
+    "surrogate_correct": 7578,
+    "agreement_count": 10000,
+    "victim_acc": 0.7578,
+    "surrogate_acc": 0.7578,
+    "fidelity": 1.0,
+    "posterior_kl_sum": 4.814928395546758e-06,
+    "posterior_kl": 4.814928395546758e-10
   }
 }

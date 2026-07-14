@@ -4,6 +4,9 @@
 from __future__ import annotations
 
 import argparse
+import csv
+import hashlib
+import json
 import shutil
 import sys
 from datetime import datetime, timezone
@@ -27,23 +30,24 @@ from common.trainer import (  # noqa: E402
     seed_worker,
 )
 from core.artifacts import (  # noqa: E402
-    display_path,
+    INDEX_FIELDS,
     make_run_id,
     save_checkpoint,
     sha256_file,
-    update_index,
     write_history_row,
     write_json,
 )
 from core.config import ATTACK_PROTOCOL_VERSION  # noqa: E402
 from core.data import build_eval_dataset, build_query_dataset, load_query_targets  # noqa: E402
 from core.engine import collect_eval_reference, evaluate_surrogate, train_one_epoch  # noqa: E402
-from models.teeslice import cifar_resnet18, teeslice_r18  # noqa: E402
+from models.teeslice import TEESliceResNet18, teeslice_r18  # noqa: E402
 
 
 QUERY_MODEL_ID = "teeslice_r18"
 ARTIFACT_ID = "teeslice"
 SOURCE_COMMIT = "93505cb3337ec8b89556ee29ffc598d31513aa5e"
+BLACKBOX_VISIBILITY = "blackbox_known_pruned_topology"
+WHITEBOX_VISIBILITY = "whitebox_full_state"
 
 
 def parse_args() -> argparse.Namespace:
@@ -110,6 +114,63 @@ def load_victim(path: Path, weight_path: Path):
     return model, checkpoint
 
 
+def describe_topology(keep_flags) -> dict[str, object]:
+    normalized = [[bool(value) for value in block] for block in keep_flags]
+    if not normalized or any(not block or not block[0] for block in normalized):
+        raise ValueError("TEESlice topology 必须包含且保留每个 block 的 main path。")
+    canonical = json.dumps(normalized, ensure_ascii=True, separators=(",", ":"))
+    return {
+        "schema_version": 1,
+        "keep_flags": normalized,
+        "block_count": len(normalized),
+        "active_proxy_count": sum(sum(block[1:]) for block in normalized),
+        "topology_sha256": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+    }
+
+
+def build_known_topology_surrogate(
+    weight_path: Path,
+    keep_flags,
+    seed: int,
+    deterministic: bool,
+) -> TEESliceResNet18:
+    """只复用公开拓扑和 backbone，重新初始化所有私有状态。"""
+    configure_reproducibility(seed, deterministic)
+    surrogate = teeslice_r18(num_classes=100, weight_path=weight_path)
+    surrogate.set_keep_flags(keep_flags)
+    for parameter in surrogate.parameters():
+        parameter.requires_grad_(True)
+    return surrogate
+
+
+def validate_public_backbone(victim: TEESliceResNet18, surrogate: TEESliceResNet18) -> None:
+    victim_public = victim.public_state_dict()
+    surrogate_public = surrogate.public_state_dict()
+    if victim_public.keys() != surrogate_public.keys():
+        raise ValueError("victim 与 surrogate 的公开 backbone 字段不一致。")
+    mismatched = [
+        name
+        for name in victim_public
+        if not torch.equal(victim_public[name], surrogate_public[name])
+    ]
+    if mismatched:
+        raise ValueError(f"victim 公开 backbone 已偏离官方初始化：{mismatched[0]}")
+
+
+def remove_legacy_index_row(path: Path) -> None:
+    if not path.is_file():
+        return
+    with path.open("r", newline="", encoding="utf-8") as reader_file:
+        reader = csv.DictReader(reader_file, delimiter="\t")
+        if reader.fieldnames != INDEX_FIELDS:
+            raise ValueError(f"结果索引字段不兼容：{path}")
+        rows = [row for row in reader if row["artifact_id"] != ARTIFACT_ID]
+    with path.open("w", newline="", encoding="utf-8") as writer_file:
+        writer = csv.DictWriter(writer_file, fieldnames=INDEX_FIELDS, delimiter="\t", lineterminator="\n")
+        writer.writeheader()
+        writer.writerows(rows)
+
+
 def main() -> int:
     args = parse_args()
     if args.epochs <= 0 or args.batch_size <= 0 or args.eval_batch_size <= 0:
@@ -134,35 +195,51 @@ def main() -> int:
     expected_sha256 = query_manifest.get("victim", {}).get("checkpoint_sha256")
     if expected_sha256 != victim_sha256:
         raise ValueError("TEESlice query posterior 与当前 victim best.pth 不一致。")
-    surrogate = cifar_resnet18(num_classes=100, weight_path=weight_path)
+    topology = describe_topology(victim_checkpoint["keep_flags"])
+    surrogate = build_known_topology_surrogate(
+        weight_path,
+        victim_checkpoint["keep_flags"],
+        args.seed,
+        args.deterministic,
+    )
+    validate_public_backbone(victim, surrogate)
+    if surrogate.active_proxy_count() != topology["active_proxy_count"]:
+        raise ValueError("surrogate 活跃 proxy 数与公开剪枝拓扑不一致。")
     query_dataset = build_query_dataset(dataset, dataset_root, query_indices, query_posteriors, query_labels)
     eval_dataset = build_eval_dataset(dataset, dataset_root, protocol_root, args.eval_subset)
+    victim_cost = victim.cost_summary()
     protection = {
         "strategy": "teeslice",
         "granularity": "private_slice",
         "source_commit": SOURCE_COMMIT,
-        "private_proxy_count": int(victim.cost_summary()["active_proxy_count"]),
+        "private_proxy_count": int(victim_cost["active_proxy_count"]),
         "private_head_count": 1,
         "tensor_unit_count": 0,
-        "protected_param_count": int(victim.cost_summary()["private_param_count"]),
-        "protected_bn_buffer_count": int(victim.cost_summary()["private_bn_buffer_count"]),
-        "paper_private_param_count": int(victim.cost_summary()["paper_private_param_count"]),
-        "total_param_count": int(victim.cost_summary()["total_param_count"]),
-        "protected_param_ratio": float(victim.cost_summary()["private_param_ratio"]),
-        "protected_flops": int(victim.cost_summary()["private_flops"]),
-        "paper_private_flops": int(victim.cost_summary()["paper_private_flops"]),
-        "total_flops": int(victim.cost_summary()["total_flops"]),
-        "protected_flops_ratio": float(victim.cost_summary()["private_flops_ratio"]),
+        "protected_param_count": int(victim_cost["private_param_count"]),
+        "protected_bn_buffer_count": int(victim_cost["private_bn_buffer_count"]),
+        "paper_private_param_count": int(victim_cost["paper_private_param_count"]),
+        "total_param_count": int(victim_cost["total_param_count"]),
+        "protected_param_ratio": float(victim_cost["private_param_ratio"]),
+        "protected_flops": int(victim_cost["private_flops"]),
+        "paper_private_flops": int(victim_cost["paper_private_flops"]),
+        "total_flops": int(victim_cost["total_flops"]),
+        "protected_flops_ratio": float(victim_cost["private_flops_ratio"]),
         "head_mode": "replace",
         "public_backbone": "official_imagenet_cifar_resnet18",
-        "protection_mask_sha256": "",
+        "topology_sha256": topology["topology_sha256"],
     }
     run_config = {
         "schema_version": 2,
         "attack_protocol": ATTACK_PROTOCOL_VERSION,
+        "comparison_scope": "standalone_reproduction",
+        "visibility": BLACKBOX_VISIBILITY,
+        "whitebox_visibility": WHITEBOX_VISIBILITY,
         "dataset": dataset,
         "model": args.model,
         "victim_model": QUERY_MODEL_ID,
+        "surrogate_model": QUERY_MODEL_ID,
+        "surrogate_initialization": "official_backbone_fresh_private_state",
+        "topology_sha256": topology["topology_sha256"],
         "victim_checkpoint_sha256": victim_sha256,
         "official_weight_sha256": sha256_file(weight_path),
         "posterior_sha256": sha256_file(posterior_path),
@@ -189,6 +266,10 @@ def main() -> int:
     run_id = make_run_id(run_config)
     print(f"[INFO] run_id={run_id} artifact_id={ARTIFACT_ID}")
     print(f"[INFO] TEESlice cost={protection}")
+    print(
+        f"[INFO] topology={topology['topology_sha256']} "
+        f"active_proxy={topology['active_proxy_count']}"
+    )
     print(f"[INFO] query={len(query_dataset)} eval_ms={len(eval_dataset)} device={device}")
     if args.dry_run:
         print("[INFO] dry-run 完成，未写入训练产物。")
@@ -205,6 +286,7 @@ def main() -> int:
     if args.overwrite:
         shutil.rmtree(weights_run, ignore_errors=True)
         metrics_path.unlink(missing_ok=True)
+    remove_legacy_index_row(results_base / "metrics.tsv")
     weights_run.mkdir(parents=True, exist_ok=True)
     results_run.mkdir(parents=True, exist_ok=True)
 
@@ -240,6 +322,12 @@ def main() -> int:
         generator=build_generator(args.seed, offset=1),
     )
     reference = collect_eval_reference(victim, eval_loader, device)
+    whitebox, _ = load_victim(victim_path, weight_path)
+    whitebox = whitebox.to(device)
+    whitebox_metrics = evaluate_surrogate(whitebox, eval_loader, reference, device)
+    if whitebox_metrics["agreement_count"] != whitebox_metrics["eval_count"]:
+        raise RuntimeError("完整状态白盒模型未能逐样本复现 victim 输出类别。")
+    del whitebox
     params = {
         **run_config,
         "artifact_id": ARTIFACT_ID,
@@ -254,10 +342,20 @@ def main() -> int:
         "posterior_path": str(posterior_path),
         "weights_dir": str(weights_run),
         "results_dir": str(results_run),
+        "topology": topology,
         "protection": protection,
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     write_json(weights_run / "params.json", params)
+    write_json(
+        weights_run / "topology.json",
+        {
+            **topology,
+            "source": "victim_checkpoint_keep_flags",
+            "source_checkpoint_sha256": victim_sha256,
+            "contains_private_values": False,
+        },
+    )
     history_path = weights_run / "train.log.tsv"
     write_history_row(history_path, {}, initialize=True)
 
@@ -295,7 +393,7 @@ def main() -> int:
                 optimizer,
                 scheduler,
                 epoch,
-                "cifar_resnet18",
+                QUERY_MODEL_ID,
                 dataset,
                 run_id,
                 ATTACK_PROTOCOL_VERSION,
@@ -308,7 +406,7 @@ def main() -> int:
         optimizer,
         scheduler,
         args.epochs,
-        "cifar_resnet18",
+        QUERY_MODEL_ID,
         dataset,
         run_id,
         ATTACK_PROTOCOL_VERSION,
@@ -318,11 +416,17 @@ def main() -> int:
         "schema_version": 2,
         "protocol": "MS",
         "attack_protocol": ATTACK_PROTOCOL_VERSION,
+        "comparison_scope": "standalone_reproduction",
+        "visibility": BLACKBOX_VISIBILITY,
+        "whitebox_visibility": WHITEBOX_VISIBILITY,
         "artifact_id": ARTIFACT_ID,
         "run_id": run_id,
         "dataset": dataset,
         "victim_model": args.model,
         "defended_victim": QUERY_MODEL_ID,
+        "surrogate_model": QUERY_MODEL_ID,
+        "surrogate_initialization": "official_backbone_fresh_private_state",
+        "topology": topology,
         "query_budget": args.budget,
         "label_mode": args.label_mode,
         "query_transform": "test",
@@ -333,39 +437,9 @@ def main() -> int:
         "diagnostic_best": {"metric": "surrogate_acc", "epoch": best_epoch},
         "best": best_metrics,
         "end": end_metrics,
+        "whitebox": whitebox_metrics,
     }
     write_json(metrics_path, metrics_payload)
-    update_index(
-        results_base / "metrics.tsv",
-        {
-            "artifact_id": ARTIFACT_ID,
-            "plan_id": "",
-            "run_id": run_id,
-            "attack_protocol": ATTACK_PROTOCOL_VERSION,
-            "dataset": dataset,
-            "victim_model": args.model,
-            "defense": "teeslice",
-            "protected_layer_count": "",
-            "source_ratio": "",
-            "training_mode": args.training_mode,
-            "label_mode": args.label_mode,
-            "query_transform": "test",
-            "query_budget": args.budget,
-            "lr_step": args.lr_step,
-            "protected_unit_count": "",
-            "protection_mask_sha256": "",
-            "protected_scalar_count": "",
-            "protected_param_count": protection["protected_param_count"],
-            "total_param_count": protection["total_param_count"],
-            "protected_param_ratio": protection["protected_param_ratio"],
-            "head_mode": "replace",
-            "primary_checkpoint": "end.pth",
-            "primary_epoch": args.epochs,
-            "best_epoch": best_epoch,
-            **end_metrics,
-            "metrics_path": display_path(metrics_path),
-        },
-    )
     print(f"[INFO] best checkpoint: {weights_run / 'best.pth'}")
     print(f"[INFO] end checkpoint: {weights_run / 'end.pth'}")
     print(f"[INFO] 原始指标: {metrics_path}")

@@ -10,7 +10,7 @@ vgg16_bn/
 teeslice/
 ```
 
-普通四模型共用 `common/trainer.py`，各入口只指定模型结构和默认 ImageNet 预训练权重。`teeslice/` 是独立的三阶段 defended victim 训练与剪枝流程，读取普通 ResNet18 victim，但不复用普通 victim 的单阶段训练器。
+普通四模型共用 `common/trainer.py`，各入口只指定模型结构和默认 ImageNet 预训练权重。`teeslice/` 是独立的四阶段 defended victim 训练与剪枝流程：先监督训练 CIFAR-stem source，再依次完成 teacher 蒸馏、slice 训练和动态剪枝；它不读取普通 ResNet18 victim，也不复用普通 victim 的单阶段训练器。
 
 ## 支持的数据集 id
 
@@ -123,4 +123,4 @@ train.log.tsv
 params.json
 ```
 
-TEESlice 使用稳定模型标识 `teeslice_r18`，输出写入 `weights/MS/victim/teeslice_r18/c100/`；其阶段 checkpoint 和成本字段见 `teeslice/README.md`。
+TEESlice 使用稳定模型标识 `teeslice_r18`，输出写入 `weights/MS/victim/teeslice_r18/c100/`，其中包含 `source/`、`teacher/`、`full/` 和最终剪枝 checkpoint；其完整协议和成本字段见 `teeslice/README.md`。

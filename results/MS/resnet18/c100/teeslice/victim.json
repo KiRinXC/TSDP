@@ -1,52 +1,156 @@
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "protocol": "MS",
   "defense": "teeslice",
+  "comparison_scope": "standalone_reproduction",
   "model": "resnet18",
   "defended_model": "teeslice_r18",
   "dataset": "c100",
-  "run_id": "219e1a302bbd",
+  "run_id": "30ae12395497",
   "primary_checkpoint": "best.pth",
   "selection": {
     "split": "victim_train_internal_validation",
-    "best_prune_epoch": 20,
-    "tolerance_accuracy": 0.691812,
+    "best_prune_epoch": 10,
+    "selected_state": "last_tolerable",
+    "tolerance_accuracy": 0.755568,
+    "within_tolerance": true,
     "internal_metrics": {
       "count": 5000,
-      "loss": 1.0293119180679322,
-      "accuracy": 0.6964,
-      "fidelity": 0.8252
+      "loss": 0.9805108716964722,
+      "accuracy": 0.7568,
+      "fidelity": 0.8228
     }
   },
+  "stages": {
+    "source": {
+      "checkpoint": "source/best.pth",
+      "internal_metrics": {
+        "count": 5000,
+        "loss": 0.7684211124420166,
+        "accuracy": 0.7902
+      },
+      "eval_ms": {
+        "count": 10000,
+        "loss": 0.7655492300987243,
+        "accuracy": 0.7938
+      }
+    },
+    "teacher": {
+      "checkpoint": "teacher/end.pth",
+      "internal_metrics": {
+        "count": 5000,
+        "loss": 0.7730082588195801,
+        "accuracy": 0.7908,
+        "fidelity": 0.8486
+      },
+      "eval_ms": {
+        "count": 10000,
+        "loss": 0.7712673025131226,
+        "accuracy": 0.7955,
+        "fidelity": 0.8517
+      }
+    },
+    "full": {
+      "checkpoint": "full/best.pth",
+      "internal_metrics": {
+        "count": 5000,
+        "loss": 0.9330780246734619,
+        "accuracy": 0.7632,
+        "fidelity": 0.834
+      },
+      "eval_ms": {
+        "count": 10000,
+        "loss": 0.9078175342559814,
+        "accuracy": 0.762,
+        "fidelity": 0.7926
+      },
+      "cost": {
+        "active_proxy_count": 21,
+        "active_alpha_count": 29,
+        "public_param_count": 11168832,
+        "paper_private_param_count": 1197028,
+        "private_param_count": 1197057,
+        "private_bn_buffer_count": 20777,
+        "total_param_count": 12365889,
+        "private_param_ratio": 0.09680314937324765,
+        "paper_private_flops": 55607296,
+        "private_flops": 55658596,
+        "public_flops": 556646400,
+        "total_flops": 612304996,
+        "private_flops_ratio": 0.0909001173656927
+      }
+    },
+    "pruned": {
+      "checkpoint": "best.pth",
+      "internal_metrics": {
+        "count": 5000,
+        "loss": 0.9805108716964722,
+        "accuracy": 0.7568,
+        "fidelity": 0.8228
+      },
+      "eval_ms": {
+        "count": 10000,
+        "loss": 0.9645240479469299,
+        "accuracy": 0.7578,
+        "fidelity": 0.7874
+      },
+      "cost": {
+        "active_proxy_count": 8,
+        "active_alpha_count": 16,
+        "public_param_count": 11168832,
+        "paper_private_param_count": 703076,
+        "private_param_count": 703092,
+        "private_bn_buffer_count": 20777,
+        "total_param_count": 11871924,
+        "private_param_ratio": 0.059223088018420605,
+        "paper_private_flops": 27705344,
+        "private_flops": 27756644,
+        "public_flops": 556646400,
+        "total_flops": 584403044,
+        "private_flops_ratio": 0.047495721120850286
+      }
+    }
+  },
+  "pruning": {
+    "initial_removed_proxy_count": 10,
+    "full_active_proxy_count": 21,
+    "pruned_active_proxy_count": 8,
+    "internal_accuracy_drop": 0.006399999999999961,
+    "internal_relative_accuracy_drop": 0.008385744234800789,
+    "tolerance_accuracy": 0.755568,
+    "within_tolerance": true
+  },
   "cost": {
-    "active_proxy_count": 7,
-    "active_alpha_count": 15,
+    "active_proxy_count": 8,
+    "active_alpha_count": 16,
     "public_param_count": 11168832,
-    "paper_private_param_count": 570980,
-    "private_param_count": 570995,
+    "paper_private_param_count": 703076,
+    "private_param_count": 703092,
     "private_bn_buffer_count": 20777,
-    "total_param_count": 11739827,
-    "private_param_ratio": 0.048637428813899895,
-    "paper_private_flops": 25591808,
-    "private_flops": 25643108,
+    "total_param_count": 11871924,
+    "private_param_ratio": 0.059223088018420605,
+    "paper_private_flops": 27705344,
+    "private_flops": 27756644,
     "public_flops": 556646400,
-    "total_flops": 582289508,
-    "private_flops_ratio": 0.0440384167114342
+    "total_flops": 584403044,
+    "private_flops_ratio": 0.047495721120850286
   },
   "published_reference": {
     "task_param_count": 711524,
     "task_flops": 29868032,
-    "topology_jaccard": 0.3333333333333333,
+    "topology_jaccard": 0.3076923076923077,
     "exact_topology_match": false
   },
   "eval_ms": {
     "count": 10000,
-    "loss": 1.167285468673706,
-    "accuracy": 0.6741,
-    "fidelity": 0.6771
+    "loss": 0.9645240479469299,
+    "accuracy": 0.7578,
+    "fidelity": 0.7874
   },
   "public_state_sha256": "aadd48ae5e5ce2a19c4bded1e4a19535d1f6364812d3235bd865b423d4852e47",
-  "victim_checkpoint_sha256": "f6233c9361ed958846cdbccc8f96c9b3425c139d961cb25410409fb47179f8d4",
+  "source_checkpoint_sha256": "0c554e0488d277ae571460bd5a24d4f3a28e815235f6bb38c51f642a7a7d8e1e",
+  "teacher_checkpoint_sha256": "efccab16af89ed03c732fdc556ab8ece75601ad14d5b94050813acd5a7b5cd03",
+  "full_checkpoint_sha256": "72d50a5788fbd9927e6355ec68afaf89a653c5fc00a8eb50ad587a5b461a8e36",
   "official_weight_sha256": "5c106cde386e87d4033832f2996f5493238eda96ccf559d1d62760c4de0613f8",
-  "created_at": "2026-07-13T07:55:14.510992+00:00"
+  "created_at": "2026-07-14T06:34:58.622030+00:00"
 }

@@ -42,33 +42,41 @@ MS 随机重叠协议/
         └── <artifact_id>/metrics.json
                                              best 与 end 的 MS 原始指标
 
-TEESlice 基线/
+TEESlice 独立复现/
 ├── exp/MS/train_victim/teeslice/train.py
-│   ├── 读取普通 ResNet18 victim best.pth、victim_train 与官方 ImageNet 权重
+│   ├── 读取 victim_train、eval_ms 与官方 ImageNet 权重
 │   ├── 在 victim_train 内临时划分 90% 训练部分与 10% 内部验证部分
-│   ├── teacher 阶段                 将普通 victim 蒸馏到 CIFAR ResNet18 teacher
+│   ├── source 阶段                  监督训练 CIFAR-stem ResNet18 source victim
+│   ├── teacher 阶段                 将 source posterior 蒸馏到同结构 teacher
 │   ├── full 阶段                    冻结公开参数，训练 private slice、alpha、分类头并适配 BN 状态
 │   ├── prune 阶段                   只用内部验证集迭代删除低 alpha proxy
 │   ├── weights/MS/victim/teeslice_r18/c100/
+│   │   ├── source/{best,end}.pth    source 阶段 checkpoint
 │   │   ├── teacher/{best,end}.pth   teacher 阶段 checkpoint
 │   │   ├── full/{best,end}.pth      未剪枝 TEESlice checkpoint
 │   │   ├── best.pth                 最终 defended victim，供 query 使用
 │   │   ├── end.pth                  prune 阶段固定训练终点
 │   │   ├── params.json              训练、剪枝与输入追踪信息
-│   │   └── train.log.tsv            三阶段逐 epoch 记录
+│   │   └── train.log.tsv            四阶段逐 epoch 记录
 │   └── results/MS/resnet18/c100/teeslice/victim.json
-│                                       defended victim 的效用与保护成本
+│                                       四阶段效用、剪枝容忍判断与保护成本
 ├── exp/MS/transfer/get_label.py teeslice_r18 c100
 │   ├── 读取通用 query_pool_ms 与 TEESlice best.pth
 │   └── dataset/MS/c100/teeslice_r18/
 │       ├── labels.tsv               defended victim hard label 与 confidence
 │       └── posteriors.pt            确定性 test transform 下的 soft posterior
 └── exp/MS/train_surrogate/teeslice/attack.py
-    ├── 以官方 ImageNet CIFAR ResNet18 和随机 C100 头初始化攻击者
+    ├── blackbox_known_pruned_topology
+    │   ├── 复制最终 keep_flags 连接关系与官方 ImageNet backbone
+    │   └── fresh 初始化 proxy、alpha、分类头及任务 BN 状态
+    ├── 不读取 source、teacher 或训练后的私有状态
     ├── 使用 500 条 soft posterior query 全模型微调 100 epoch
-    ├── weights/MS/surrogate/resnet18/c100/teeslice/{best,end}.pth
+    ├── whitebox_full_state           重新加载最终状态并实际执行 eval_ms
+    ├── weights/MS/surrogate/resnet18/c100/teeslice/
+    │   ├── {best,end}.pth            黑盒 surrogate checkpoint
+    │   └── topology.json             公开 keep_flags 与拓扑摘要
     └── results/MS/resnet18/c100/teeslice/metrics.json
-                                            相对 defended victim 的原始 MS 指标
+                                            黑盒/白盒原始指标，不写入主 metrics.tsv
 
 TensorShield 固定 rank baseline/
 ├── exp/MS/train_surrogate/selector/tensorshield.py

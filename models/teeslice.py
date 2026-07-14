@@ -341,8 +341,13 @@ class TEESliceResNet18(nn.Module):
         if len(active) <= 1:
             return []
         remove_count = max(1, int(all_count * fraction_of_all))
-        remove_count = min(remove_count, len(active) - 1)
-        removed = [(block_index, proxy_index) for _, block_index, proxy_index in active[:remove_count]]
+        threshold_index = min(remove_count, len(active) - 1)
+        threshold = active[threshold_index][0]
+        removed = [
+            (block_index, proxy_index)
+            for score, block_index, proxy_index in active
+            if score < threshold
+        ]
         for block_index, proxy_index in removed:
             self.blocks[block_index].keep_mask[proxy_index + 1] = False
         return removed

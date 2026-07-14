@@ -226,6 +226,7 @@ def write_outputs(
     if model_name == "teeslice_r18":
         manifest["defense"] = "teeslice"
         manifest["base_model"] = "resnet18"
+        manifest["comparison_scope"] = "standalone_reproduction"
     (output_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 

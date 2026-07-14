@@ -4,7 +4,7 @@
 
 内部代码分为两部分：`core/` 保存数据读取、训练、评估和产物写入等公共流程；`defense/` 保存保护策略插件、掩码协议、模型初始化与冻结机制。`train.py` 是普通参数隐藏策略的单组正式入口，`sweep.py` 只负责这些策略的并行调度和续跑；TEESlice 使用 `teeslice/attack.py` 作为独立正式入口。
 
-根目录的统一入口处理普通 victim 参数空间中的权重隐藏策略。TEESlice 会改变 victim 的训练结构和参数边界，因此攻击入口独立放在 `teeslice/`，复用 `core/` 的查询、训练、评估和产物逻辑，但不注册为 122-unit mask 策略。
+根目录的统一入口处理普通 victim 参数空间中的权重隐藏策略。TEESlice 会改变 victim 的训练结构和参数边界，因此攻击入口独立放在 `teeslice/`，复用 `core/` 的查询、训练、评估和产物逻辑，但不注册为 122-unit mask 策略，也不写入固定普通 victim 的主 `metrics.tsv`。
 
 ```text
 train_surrogate/
@@ -268,3 +268,5 @@ posterior_kl
 ```
 
 准确率下降、fidelity 下降、相对黑盒倍数和归一化保护效果均不写入正式结果，由后续绘图脚本从这些原始值计算。
+
+TEESlice 独立复现的输出固定为 `weights/MS/surrogate/resnet18/c100/teeslice/` 与 `results/MS/resnet18/c100/teeslice/metrics.json`。其黑盒攻击者知道最终 pruned topology 和保护策略，只复制 `keep_flags` 连接关系与官方 ImageNet backbone；proxy、alpha、分类头和任务 BN 状态均从 fresh 初始化开始，随后全部可执行路径参数共同 finetune。白盒重新加载最终 victim 的完整状态并实际执行 `eval_ms`，不再手工填写解析上界。两种结果均不参与上述统一索引或固定 victim 策略排序。

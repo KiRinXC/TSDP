@@ -4,7 +4,6 @@
 from __future__ import annotations
 
 import argparse
-import copy
 import csv
 import hashlib
 import json
@@ -39,7 +38,6 @@ from common.trainer import (  # noqa: E402
     seed_worker,
 )
 from core.artifacts import INDEX_FIELDS, make_run_id, sha256_file  # noqa: E402
-from models import imagenet as imagenet_models  # noqa: E402
 from models.teeslice import (  # noqa: E402
     PUBLISHED_C100_R18_KEEP_FLAGS,
     PUBLISHED_C100_R18_TASK_FLOPS,
@@ -76,10 +74,6 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dataset-root", default=str(REPO_ROOT / "dataset" / "public"))
     parser.add_argument("--protocol-root", default=str(REPO_ROOT / "dataset" / "MS"))
     parser.add_argument(
-        "--victim-checkpoint",
-        default=str(REPO_ROOT / "weights" / "MS" / "victim" / "resnet18" / "c100" / "best.pth"),
-    )
-    parser.add_argument(
         "--weight-path",
         default=str(REPO_ROOT / "weights" / "pre_train" / "resnet18-5c106cde.pth"),
     )
@@ -92,16 +86,21 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--batch-size", type=int, default=64)
     parser.add_argument("--eval-batch-size", type=int, default=128)
     parser.add_argument("--num-workers", type=int, default=4)
+    parser.add_argument("--source-epochs", type=int, default=20)
     parser.add_argument("--teacher-epochs", type=int, default=20)
     parser.add_argument("--full-epochs", type=int, default=40)
     parser.add_argument("--prune-epochs", type=int, default=20)
+    parser.add_argument("--source-lr", type=float, default=0.1)
     parser.add_argument("--teacher-lr", type=float, default=0.01)
     parser.add_argument("--full-lr", type=float, default=0.1)
     parser.add_argument("--prune-lr", type=float, default=0.01)
     parser.add_argument("--momentum", type=float, default=0.9)
+    parser.add_argument("--source-momentum", type=float, default=0.5)
     parser.add_argument("--teacher-momentum", type=float, default=0.5)
     parser.add_argument("--weight-decay", type=float, default=4e-4)
-    parser.add_argument("--teacher-step", type=int, default=20)
+    parser.add_argument("--source-weight-decay", type=float, default=5e-4)
+    parser.add_argument("--prune-weight-decay", type=float, default=5e-4)
+    parser.add_argument("--source-step", type=int, default=10)
     parser.add_argument("--full-step", type=int, default=30)
     parser.add_argument("--lr-gamma", type=float, default=0.1)
     parser.add_argument("--max-skip", type=int, default=3)
@@ -211,24 +210,34 @@ def build_loader(
     )
 
 
-def load_original_victim(path: Path, device: torch.device) -> nn.Module:
-    if path.name != "best.pth" or not path.is_file():
-        raise FileNotFoundError(f"找不到普通 victim best.pth：{path}")
-    checkpoint = torch.load(path, map_location="cpu", weights_only=False)
-    state = checkpoint.get("state_dict") if isinstance(checkpoint, dict) else checkpoint
-    if not isinstance(state, dict):
-        raise ValueError("普通 victim checkpoint 缺少 state_dict。")
-    model = imagenet_models.resnet18(num_classes=100)
-    model.load_state_dict(state, strict=True)
-    for parameter in model.parameters():
-        parameter.requires_grad = False
-    return model.to(device).eval()
-
-
 def kd_loss(student_logits: torch.Tensor, teacher_logits: torch.Tensor, temperature: float) -> torch.Tensor:
     student_log = functional.log_softmax(student_logits / temperature, dim=1)
     teacher_probability = functional.softmax(teacher_logits / temperature, dim=1)
     return functional.kl_div(student_log, teacher_probability, reduction="batchmean") * temperature**2
+
+
+@torch.inference_mode()
+def evaluate_model(
+    model: nn.Module,
+    loader: DataLoader,
+    device: torch.device,
+) -> dict[str, float | int]:
+    model.eval()
+    loss_sum = 0.0
+    correct = 0
+    count = 0
+    for images, labels in loader:
+        images = images.to(device, non_blocking=True)
+        labels = labels.to(device, non_blocking=True)
+        logits = model(images)
+        loss_sum += float(functional.cross_entropy(logits, labels, reduction="sum").item())
+        correct += int((logits.argmax(1) == labels).sum().item())
+        count += labels.size(0)
+    return {
+        "count": count,
+        "loss": loss_sum / max(count, 1),
+        "accuracy": correct / max(count, 1),
+    }
 
 
 @torch.inference_mode()
@@ -259,6 +268,35 @@ def evaluate_against(
         "accuracy": correct / max(count, 1),
         "fidelity": agreement / max(count, 1),
     }
+
+
+def train_source_epoch(
+    model: CifarResNet18,
+    loader: DataLoader,
+    optimizer: torch.optim.Optimizer,
+    device: torch.device,
+    epoch: int,
+    total_epochs: int,
+) -> dict[str, float]:
+    model.train()
+    loss_sum = 0.0
+    correct = 0
+    count = 0
+    progress = tqdm(loader, desc=f"[SOURCE] {epoch:03d}/{total_epochs:03d}", dynamic_ncols=True)
+    for images, labels in progress:
+        images = images.to(device, non_blocking=True)
+        labels = labels.to(device, non_blocking=True)
+        optimizer.zero_grad(set_to_none=True)
+        logits = model(images)
+        loss = functional.cross_entropy(logits, labels)
+        loss.backward()
+        optimizer.step()
+        batch_size = labels.size(0)
+        count += batch_size
+        loss_sum += float(loss.item()) * batch_size
+        correct += int((logits.argmax(1) == labels).sum().item())
+        progress.set_postfix(loss=f"{loss.item():.4f}", acc=f"{correct / count:.4f}")
+    return {"loss": loss_sum / count, "accuracy": correct / count}
 
 
 def train_teacher_epoch(
@@ -359,9 +397,10 @@ def save_checkpoint(
     cost = model.cost_summary() if isinstance(model, TEESliceResNet18) else None
     torch.save(
         {
-            "schema_version": 1,
+            "schema_version": 2,
             "protocol": "MS",
             "defense": "teeslice",
+            "comparison_scope": "standalone_reproduction",
             "arch": MODEL_ID if isinstance(model, TEESliceResNet18) else "cifar_resnet18",
             "base_model": "resnet18",
             "dataset": "c100",
@@ -408,7 +447,7 @@ def stage_row(
         "train_accuracy": train_metrics.get("accuracy", ""),
         "internal_val_loss": val_metrics["loss"],
         "internal_val_accuracy": val_metrics["accuracy"],
-        "internal_val_fidelity": val_metrics["fidelity"],
+        "internal_val_fidelity": val_metrics.get("fidelity", ""),
         "active_proxy_count": proxy_count,
     }
 
@@ -460,27 +499,36 @@ def write_json(path: Path, payload: dict) -> None:
 def main() -> int:
     args = parse_args()
     if args.quick:
-        args.teacher_epochs = args.full_epochs = args.prune_epochs = 1
+        args.source_epochs = args.teacher_epochs = args.full_epochs = args.prune_epochs = 1
         args.train_subset = args.train_subset or 128
         args.val_subset = args.val_subset or 64
         args.eval_subset = args.eval_subset or 64
         args.num_workers = 0
         args.prune_interval = 1
     for value, name in (
+        (args.source_epochs, "source_epochs"),
         (args.teacher_epochs, "teacher_epochs"),
         (args.full_epochs, "full_epochs"),
         (args.prune_epochs, "prune_epochs"),
         (args.batch_size, "batch_size"),
         (args.eval_batch_size, "eval_batch_size"),
+        (args.source_step, "source_step"),
+        (args.full_step, "full_step"),
+        (args.prune_interval, "prune_interval"),
     ):
         if value <= 0:
             raise ValueError(f"{name} 必须大于 0。")
     if not 0.0 < args.internal_val_ratio < 1.0:
         raise ValueError("internal_val_ratio 必须位于 (0, 1)。")
+    if not 0.0 <= args.initial_prune_fraction < 1.0:
+        raise ValueError("initial_prune_fraction 必须位于 [0, 1)。")
+    if args.iterative_prune_fraction <= 0.0:
+        raise ValueError("iterative_prune_fraction 必须大于 0。")
+    if not 0.0 <= args.prune_tolerance < 1.0:
+        raise ValueError("prune_tolerance 必须位于 [0, 1)。")
 
     configure_reproducibility(args.seed, args.deterministic)
     device = resolve_device(args.device)
-    victim_path = Path(args.victim_checkpoint).expanduser().resolve()
     weight_path = Path(args.weight_path).expanduser().resolve()
     out_dir = Path(args.out_dir).expanduser().resolve()
     trainset, valset, evalset, train_indices, val_indices = build_datasets(args)
@@ -494,33 +542,45 @@ def main() -> int:
     if published_cost["paper_private_flops"] != PUBLISHED_C100_R18_TASK_FLOPS:
         raise RuntimeError("公开模型代码无法重建作者发布的 TEESlice task FLOPs。")
     del published_probe
+    configure_reproducibility(args.seed, args.deterministic)
 
     run_config = {
-        "schema_version": 1,
+        "schema_version": 2,
         "protocol": "MS",
         "defense": "teeslice",
+        "comparison_scope": "standalone_reproduction",
         "source_commit": SOURCE_COMMIT,
         "model": args.model,
         "defended_model": MODEL_ID,
         "dataset": args.dataset,
-        "victim_checkpoint_sha256": sha256_file(victim_path),
         "official_weight_sha256": sha256_file(weight_path),
         "train_count": len(train_indices),
         "internal_val_count": len(val_indices),
+        "source_epochs": args.source_epochs,
         "teacher_epochs": args.teacher_epochs,
         "full_epochs": args.full_epochs,
         "prune_epochs": args.prune_epochs,
         "batch_size": args.batch_size,
+        "eval_batch_size": args.eval_batch_size,
+        "num_workers": args.num_workers,
+        "source_lr": args.source_lr,
         "teacher_lr": args.teacher_lr,
         "full_lr": args.full_lr,
         "prune_lr": args.prune_lr,
         "momentum": args.momentum,
+        "source_momentum": args.source_momentum,
         "teacher_momentum": args.teacher_momentum,
         "weight_decay": args.weight_decay,
+        "source_weight_decay": args.source_weight_decay,
+        "prune_weight_decay": args.prune_weight_decay,
+        "source_step": args.source_step,
+        "full_step": args.full_step,
+        "lr_gamma": args.lr_gamma,
         "max_skip": args.max_skip,
         "complexity_coeff": args.complexity_coeff,
         "teacher_coeff": args.teacher_coeff,
         "temperature": args.temperature,
+        "internal_val_ratio": args.internal_val_ratio,
         "prune_tolerance": args.prune_tolerance,
         "prune_threshold": args.prune_threshold,
         "initial_prune_fraction": args.initial_prune_fraction,
@@ -537,8 +597,10 @@ def main() -> int:
         return 0
 
     prepare_output(args, out_dir)
+    source_dir = out_dir / "source"
     teacher_dir = out_dir / "teacher"
     full_dir = out_dir / "full"
+    source_dir.mkdir(parents=True, exist_ok=True)
     teacher_dir.mkdir(parents=True, exist_ok=True)
     full_dir.mkdir(parents=True, exist_ok=True)
     log_path = out_dir / "train.log.tsv"
@@ -548,7 +610,6 @@ def main() -> int:
         "run_id": run_id,
         "dataset_root": str(Path(args.dataset_root).expanduser().resolve()),
         "protocol_root": str(Path(args.protocol_root).expanduser().resolve()),
-        "victim_checkpoint": str(victim_path),
         "official_weight": str(weight_path),
         "out_dir": str(out_dir),
         "internal_split": {
@@ -569,7 +630,59 @@ def main() -> int:
     train_loader = build_loader(trainset, args.batch_size, True, args, 0, device)
     val_loader = build_loader(valset, args.eval_batch_size, False, args, 1, device)
     eval_loader = build_loader(evalset, args.eval_batch_size, False, args, 2, device)
-    original_victim = load_original_victim(victim_path, device)
+
+    source = cifar_resnet18(100, weight_path).to(device)
+    source_optimizer = torch.optim.SGD(
+        source.parameters(),
+        lr=args.source_lr,
+        momentum=args.source_momentum,
+        weight_decay=args.source_weight_decay,
+    )
+    source_scheduler = torch.optim.lr_scheduler.StepLR(
+        source_optimizer,
+        step_size=args.source_step,
+        gamma=args.lr_gamma,
+    )
+    best_source_acc = -1.0
+    for epoch in range(1, args.source_epochs + 1):
+        lr = source_optimizer.param_groups[0]["lr"]
+        train_metrics = train_source_epoch(
+            source,
+            train_loader,
+            source_optimizer,
+            device,
+            epoch,
+            args.source_epochs,
+        )
+        val_metrics = evaluate_model(source, val_loader, device)
+        append_log(log_path, stage_row("source", epoch, lr, train_metrics, val_metrics))
+        if float(val_metrics["accuracy"]) >= best_source_acc:
+            best_source_acc = float(val_metrics["accuracy"])
+            save_checkpoint(
+                source_dir / "best.pth",
+                source,
+                "source",
+                epoch,
+                run_id,
+                val_metrics,
+                source_optimizer,
+                source_scheduler,
+            )
+        source_scheduler.step()
+    save_checkpoint(
+        source_dir / "end.pth",
+        source,
+        "source",
+        args.source_epochs,
+        run_id,
+        evaluate_model(source, val_loader, device),
+        source_optimizer,
+        source_scheduler,
+    )
+    source_checkpoint = load_stage_model(source_dir / "best.pth", source)
+    source.eval()
+    for parameter in source.parameters():
+        parameter.requires_grad = False
 
     teacher = cifar_resnet18(100, weight_path).to(device)
     teacher_optimizer = torch.optim.SGD(
@@ -578,17 +691,12 @@ def main() -> int:
         momentum=args.teacher_momentum,
         weight_decay=args.weight_decay,
     )
-    teacher_scheduler = torch.optim.lr_scheduler.StepLR(
-        teacher_optimizer,
-        step_size=args.teacher_step,
-        gamma=args.lr_gamma,
-    )
     best_teacher_acc = -1.0
     for epoch in range(1, args.teacher_epochs + 1):
         lr = teacher_optimizer.param_groups[0]["lr"]
         train_metrics = train_teacher_epoch(
             teacher,
-            original_victim,
+            source,
             train_loader,
             teacher_optimizer,
             device,
@@ -596,7 +704,7 @@ def main() -> int:
             epoch,
             args.teacher_epochs,
         )
-        val_metrics = evaluate_against(teacher, original_victim, val_loader, device)
+        val_metrics = evaluate_against(teacher, source, val_loader, device)
         append_log(log_path, stage_row("teacher", epoch, lr, train_metrics, val_metrics))
         if float(val_metrics["accuracy"]) >= best_teacher_acc:
             best_teacher_acc = float(val_metrics["accuracy"])
@@ -608,20 +716,19 @@ def main() -> int:
                 run_id,
                 val_metrics,
                 teacher_optimizer,
-                teacher_scheduler,
+                None,
             )
-        teacher_scheduler.step()
+    teacher_end_metrics = evaluate_against(teacher, source, val_loader, device)
     save_checkpoint(
         teacher_dir / "end.pth",
         teacher,
         "teacher",
         args.teacher_epochs,
         run_id,
-        evaluate_against(teacher, original_victim, val_loader, device),
+        teacher_end_metrics,
         teacher_optimizer,
-        teacher_scheduler,
+        None,
     )
-    load_stage_model(teacher_dir / "best.pth", teacher)
     teacher.eval()
     for parameter in teacher.parameters():
         parameter.requires_grad = False
@@ -709,7 +816,7 @@ def main() -> int:
         [
             {
                 "params": [parameter for block in prune_model.blocks for parameter in block.proxies.parameters()],
-                "weight_decay": args.weight_decay,
+                "weight_decay": args.prune_weight_decay,
             },
             {
                 "params": [block.alpha for block in prune_model.blocks],
@@ -717,14 +824,13 @@ def main() -> int:
             },
             {
                 "params": list(prune_model.last_linear.parameters()),
-                "weight_decay": args.weight_decay,
+                "weight_decay": args.prune_weight_decay,
             },
         ],
         lr=args.prune_lr,
         momentum=args.momentum,
     )
-    prune_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(prune_optimizer, T_max=args.prune_epochs)
-    valid_candidates: list[dict[str, object]] = []
+    last_tolerable: dict[str, object] | None = None
     for epoch in range(1, args.prune_epochs + 1):
         lr = prune_optimizer.param_groups[0]["lr"]
         train_metrics = train_slice_epoch(
@@ -745,22 +851,20 @@ def main() -> int:
             log_path,
             stage_row("prune", epoch, lr, train_metrics, val_metrics, prune_model.active_proxy_count()),
         )
-        if epoch % args.prune_interval == 0 and float(val_metrics["accuracy"]) >= tolerance_accuracy:
-            valid_candidates.append(
-                {
-                    "epoch": epoch,
-                    "state_dict": cpu_state_dict(prune_model),
-                    "keep_flags": prune_model.get_keep_flags(),
-                    "metrics": dict(val_metrics),
-                    "cost": prune_model.cost_summary(),
-                }
-            )
+        if epoch % args.prune_interval == 0 and float(val_metrics["accuracy"]) > tolerance_accuracy:
+            last_tolerable = {
+                "selection": "last_tolerable",
+                "epoch": epoch,
+                "state_dict": cpu_state_dict(prune_model),
+                "keep_flags": prune_model.get_keep_flags(),
+                "metrics": dict(val_metrics),
+                "cost": prune_model.cost_summary(),
+            }
             removed = prune_model.iterative_prune(args.iterative_prune_fraction)
             print(
-                f"[PRUNE] epoch={epoch} valid active={valid_candidates[-1]['cost']['active_proxy_count']} "
+                f"[PRUNE] epoch={epoch} valid active={last_tolerable['cost']['active_proxy_count']} "
                 f"next_removed={removed}"
             )
-        prune_scheduler.step()
 
     end_metrics = evaluate_against(prune_model, teacher, val_loader, device)
     save_checkpoint(
@@ -771,25 +875,38 @@ def main() -> int:
         run_id,
         end_metrics,
         prune_optimizer,
-        prune_scheduler,
+        None,
     )
-    if valid_candidates:
-        best_candidate = min(
-            valid_candidates,
-            key=lambda candidate: (
-                int(candidate["cost"]["active_proxy_count"]),
-                -float(candidate["metrics"]["accuracy"]),
-            ),
-        )
+    end_candidate: dict[str, object] | None = None
+    if float(end_metrics["accuracy"]) > tolerance_accuracy:
+        end_candidate = {
+            "selection": "end",
+            "epoch": args.prune_epochs,
+            "state_dict": cpu_state_dict(prune_model),
+            "keep_flags": prune_model.get_keep_flags(),
+            "metrics": dict(end_metrics),
+            "cost": prune_model.cost_summary(),
+        }
+
+    best_candidate = end_candidate
+    if last_tolerable is not None and (
+        best_candidate is None
+        or float(last_tolerable["metrics"]["accuracy"]) > float(best_candidate["metrics"]["accuracy"])
+    ):
+        best_candidate = last_tolerable
+
+    if best_candidate is not None:
         prune_model.load_state_dict(best_candidate["state_dict"], strict=True)
         prune_model.set_keep_flags(best_candidate["keep_flags"])
         best_epoch = int(best_candidate["epoch"])
         best_internal_metrics = best_candidate["metrics"]
+        best_selection = str(best_candidate["selection"])
     else:
         print("[WARN] prune 阶段没有满足容忍阈值的候选，回退到 full/best.pth。")
         load_stage_model(full_dir / "best.pth", prune_model)
         best_epoch = 0
         best_internal_metrics = full_baseline
+        best_selection = "full_fallback"
     save_checkpoint(
         out_dir / "best.pth",
         prune_model,
@@ -805,7 +922,16 @@ def main() -> int:
     if public_hash_after != public_hash_before:
         raise RuntimeError("TEESlice 公开 backbone 在训练期间发生变化。")
     final_cost = prune_model.cost_summary()
-    eval_metrics = evaluate_against(prune_model, original_victim, eval_loader, device)
+    source_eval = evaluate_model(source, eval_loader, device)
+    teacher_eval = evaluate_against(teacher, source, eval_loader, device)
+    full_eval_model = teeslice_r18(100, weight_path, max_skip=args.max_skip).to(device)
+    load_stage_model(full_dir / "best.pth", full_eval_model)
+    full_eval = evaluate_against(full_eval_model, source, eval_loader, device)
+    pruned_eval = evaluate_against(prune_model, source, eval_loader, device)
+    full_cost = full_eval_model.cost_summary()
+    internal_accuracy_drop = float(full_baseline["accuracy"]) - float(best_internal_metrics["accuracy"])
+    internal_relative_drop = internal_accuracy_drop / max(float(full_baseline["accuracy"]), 1e-12)
+    within_tolerance = float(best_internal_metrics["accuracy"]) > tolerance_accuracy
     published_flags = PUBLISHED_C100_R18_KEEP_FLAGS
     selected = {
         (block_index, proxy_index)
@@ -821,9 +947,10 @@ def main() -> int:
     }
     topology_overlap = len(selected & published_selected) / max(len(selected | published_selected), 1)
     victim_payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "protocol": "MS",
         "defense": "teeslice",
+        "comparison_scope": "standalone_reproduction",
         "model": "resnet18",
         "defended_model": MODEL_ID,
         "dataset": "c100",
@@ -832,8 +959,43 @@ def main() -> int:
         "selection": {
             "split": "victim_train_internal_validation",
             "best_prune_epoch": best_epoch,
+            "selected_state": best_selection,
             "tolerance_accuracy": tolerance_accuracy,
+            "within_tolerance": within_tolerance,
             "internal_metrics": best_internal_metrics,
+        },
+        "stages": {
+            "source": {
+                "checkpoint": "source/best.pth",
+                "internal_metrics": source_checkpoint["metrics"],
+                "eval_ms": source_eval,
+            },
+            "teacher": {
+                "checkpoint": "teacher/end.pth",
+                "internal_metrics": teacher_end_metrics,
+                "eval_ms": teacher_eval,
+            },
+            "full": {
+                "checkpoint": "full/best.pth",
+                "internal_metrics": full_baseline,
+                "eval_ms": full_eval,
+                "cost": full_cost,
+            },
+            "pruned": {
+                "checkpoint": "best.pth",
+                "internal_metrics": best_internal_metrics,
+                "eval_ms": pruned_eval,
+                "cost": final_cost,
+            },
+        },
+        "pruning": {
+            "initial_removed_proxy_count": len(initial_removed),
+            "full_active_proxy_count": full_cost["active_proxy_count"],
+            "pruned_active_proxy_count": final_cost["active_proxy_count"],
+            "internal_accuracy_drop": internal_accuracy_drop,
+            "internal_relative_accuracy_drop": internal_relative_drop,
+            "tolerance_accuracy": tolerance_accuracy,
+            "within_tolerance": within_tolerance,
         },
         "cost": final_cost,
         "published_reference": {
@@ -842,9 +1004,11 @@ def main() -> int:
             "topology_jaccard": topology_overlap,
             "exact_topology_match": prune_model.get_keep_flags() == published_flags,
         },
-        "eval_ms": eval_metrics,
+        "eval_ms": pruned_eval,
         "public_state_sha256": public_hash_after,
-        "victim_checkpoint_sha256": sha256_file(victim_path),
+        "source_checkpoint_sha256": sha256_file(source_dir / "best.pth"),
+        "teacher_checkpoint_sha256": sha256_file(teacher_dir / "end.pth"),
+        "full_checkpoint_sha256": sha256_file(full_dir / "best.pth"),
         "official_weight_sha256": sha256_file(weight_path),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -852,7 +1016,10 @@ def main() -> int:
     results_dir.mkdir(parents=True, exist_ok=True)
     write_json(results_dir / "victim.json", victim_payload)
     print(f"[INFO] TEESlice defended victim: {out_dir / 'best.pth'}")
-    print(f"[INFO] eval_ms accuracy={eval_metrics['accuracy']:.6f} fidelity_to_original={eval_metrics['fidelity']:.6f}")
+    print(
+        f"[INFO] eval_ms accuracy={pruned_eval['accuracy']:.6f} "
+        f"fidelity_to_source={pruned_eval['fidelity']:.6f}"
+    )
     print(f"[INFO] cost={final_cost}")
     return 0
 
