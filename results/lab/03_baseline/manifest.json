@@ -10,7 +10,7 @@
   "lr_step": 60,
   "primary_checkpoint": "end.pth",
   "x_axis": "protected_param_ratio",
-  "strategy_artifacts": {
+  "curve_artifacts": {
     "shallow": [
       "shallow_02",
       "shallow_04",
@@ -52,11 +52,19 @@
       "large_08"
     ]
   },
+  "point_artifacts": {
+    "head_only": "head_only",
+    "tensorshield": "tensorshield"
+  },
+  "standalone_artifacts": [
+    "teeslice"
+  ],
   "reference_artifacts": [
     "no_protection",
     "full_protection"
   ],
   "outputs": [
+    "metrics.png",
     "accuracy.png",
     "fidelity.png",
     "posterior_kl.png",

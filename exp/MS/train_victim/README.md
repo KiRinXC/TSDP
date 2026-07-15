@@ -85,7 +85,7 @@ bash exp/MS/train_victim/mobilenetv2/run.sh s10
 训练 `ResNet18+C100` 的 TEESlice defended victim：
 
 ```bash
-python3 exp/MS/train_victim/teeslice/train.py resnet18 c100
+"$HOME/venvs/dl-py310-torch210-cu121/bin/python" exp/MS/train_victim/teeslice/train.py resnet18 c100
 ```
 
 `run.sh` 的第一个参数就是数据集 id。也可以用环境变量覆盖：
@@ -97,7 +97,7 @@ DATASET=s10 EPOCHS=50 BATCH_SIZE=32 bash exp/MS/train_victim/vgg16_bn/run.sh
 只检查路径和模型构造，不进入训练：
 
 ```bash
-python3 exp/MS/train_victim/resnet18/train.py --dataset c100 --dry-run
+"$HOME/venvs/dl-py310-torch210-cu121/bin/python" exp/MS/train_victim/resnet18/train.py --dataset c100 --dry-run
 ```
 
 恢复训练：

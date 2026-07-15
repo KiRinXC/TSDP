@@ -33,7 +33,7 @@ weights/pre_train/resnet18-5c106cde.pth
 查询产物由以下命令生成：
 
 ```bash
-python3 exp/MS/transfer/get_label.py teeslice_r18 c100
+"$HOME/venvs/dl-py310-torch210-cu121/bin/python" exp/MS/transfer/get_label.py teeslice_r18 c100
 ```
 
 ## 固定协议
@@ -61,14 +61,14 @@ fidelity 和 posterior KL 始终相对于当前 TEESlice pruned victim 计算。
 ## 运行方式
 
 ```bash
-python3 exp/MS/train_surrogate/teeslice/attack.py resnet18 c100 \
+"$HOME/venvs/dl-py310-torch210-cu121/bin/python" exp/MS/train_surrogate/teeslice/attack.py resnet18 c100 \
   --budget 500 --training-mode finetune --label-mode soft
 ```
 
 只验证输入、初始化和结果协议：
 
 ```bash
-python3 exp/MS/train_surrogate/teeslice/attack.py resnet18 c100 \
+"$HOME/venvs/dl-py310-torch210-cu121/bin/python" exp/MS/train_surrogate/teeslice/attack.py resnet18 c100 \
   --budget 500 --training-mode finetune --label-mode soft --dry-run
 ```
 

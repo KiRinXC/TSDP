@@ -2,6 +2,7 @@
 """MS surrogate 保护策略插件。"""
 
 from .initialize import ExposureFreezer, initialize_surrogate
+from .head import build_head_only
 from .magnitude import build_magnitude_masks
 from .mask import (
     build_layer_groups,
@@ -22,6 +23,7 @@ __all__ = [
     "DEFENSE_REGISTRY",
     "ExposureFreezer",
     "build_layer_groups",
+    "build_head_only",
     "build_magnitude_masks",
     "build_mask_selection",
     "build_resnet18_layer_groups",

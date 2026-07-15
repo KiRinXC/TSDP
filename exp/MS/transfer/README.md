@@ -9,8 +9,8 @@ query pool 固定为训练集大小的 1%。`splits.tsv` 的 `query_rank` 固化
 生成四个数据集的划分并验证：
 
 ```bash
-python3 exp/MS/transfer/prepare_splits.py all
-python3 verify/verify_ms_splits.py
+"$HOME/venvs/dl-py310-torch210-cu121/bin/python" exp/MS/transfer/prepare_splits.py all
+"$HOME/venvs/dl-py310-torch210-cu121/bin/python" verify/verify_ms_splits.py
 ```
 
 各数据集的固定配置如下：
@@ -40,19 +40,19 @@ dataset/MS/<dataset>/
 先完成对应 victim 训练。查询阶段只允许加载最佳验证模型 `best.pth`，不会使用最后一个 epoch 的 `end.pth`。
 
 ```bash
-python3 exp/MS/transfer/get_label.py resnet18 c100
+"$HOME/venvs/dl-py310-torch210-cu121/bin/python" exp/MS/transfer/get_label.py resnet18 c100
 ```
 
 TEESlice defended victim 使用独立模型标识，训练完成后按相同 `query_pool_ms` 协议查询：
 
 ```bash
-python3 exp/MS/transfer/get_label.py teeslice_r18 c100
+"$HOME/venvs/dl-py310-torch210-cu121/bin/python" exp/MS/transfer/get_label.py teeslice_r18 c100
 ```
 
 需要显式指定权重或覆盖已有标签时：
 
 ```bash
-python3 exp/MS/transfer/get_label.py resnet18 c100 \
+"$HOME/venvs/dl-py310-torch210-cu121/bin/python" exp/MS/transfer/get_label.py resnet18 c100 \
   --checkpoint weights/MS/victim/resnet18/c100/best.pth \
   --overwrite
 ```

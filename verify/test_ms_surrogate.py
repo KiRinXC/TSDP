@@ -25,6 +25,7 @@ from defense import (  # noqa: E402
     DEFENSE_REGISTRY,
     ExposureFreezer,
     build_layer_groups,
+    build_head_only,
     build_magnitude_masks,
     build_resnet18_layer_groups,
     build_resnet18_tensor_units,
@@ -78,6 +79,7 @@ class SurrogateProtectionTests(unittest.TestCase):
             "no_protection",
         )
         self.assertEqual(make_artifact_id(None, "tensorshield", "abc123"), "tensorshield")
+        self.assertEqual(make_artifact_id(None, "head_only", "abc123"), "head_only")
         self.assertEqual(make_artifact_id(None, "custom", "abc123"), "abc123")
         self.assertEqual(
             INDEX_FIELDS[:9],
@@ -260,6 +262,55 @@ class SurrogateProtectionTests(unittest.TestCase):
         )
         self.assertEqual(protection_mask_sha256(masks), plan.protection_mask_sha256)
 
+    def test_head_only_replaces_head_and_copies_complete_backbone(self):
+        victim = resnet18(num_classes=100)
+        with torch.no_grad():
+            for value in victim.state_dict().values():
+                if value.is_floating_point():
+                    value.fill_(0.25)
+        weight_path = REPO_ROOT / "weights" / "pre_train" / "resnet18-5c106cde.pth"
+
+        torch.manual_seed(42)
+        surrogate, plan, trainable, masks = initialize_surrogate(
+            factory=resnet18,
+            factory_name="resnet18",
+            weight_path=weight_path,
+            victim_model=victim,
+            num_classes=100,
+            defense="head_only",
+            protected_units=None,
+            protected_layers=None,
+            protected_scalars=None,
+        )
+
+        self.assertEqual(plan.defense, "head_only")
+        self.assertEqual(plan.protected_unit_count, 2)
+        self.assertEqual(plan.protected_param_count, 51_300)
+        self.assertAlmostEqual(plan.protected_param_ratio, 51_300 / 11_227_812)
+        self.assertEqual(
+            plan.protection_mask_sha256,
+            "466d73220c084463772303efcfa567e3326b91f04ee04ed15d9db8f6c3b46785",
+        )
+        self.assertEqual(plan.head_mode, "replace")
+        self.assertTrue(masks["last_linear.weight"].all())
+        self.assertTrue(masks["last_linear.bias"].all())
+        self.assertTrue(trainable["last_linear.weight"].all())
+        self.assertFalse(torch.equal(surrogate.last_linear.weight, victim.last_linear.weight))
+        for name, value in victim.state_dict().items():
+            if name.startswith("last_linear."):
+                continue
+            self.assertFalse(masks[name].any(), name)
+            self.assertTrue(torch.equal(surrogate.state_dict()[name], value), name)
+
+        options = DefenseOptions(
+            architecture="resnet18",
+            protected_units="120-121",
+            protected_layers=None,
+            protected_scalars=None,
+        )
+        with self.assertRaises(ValueError):
+            build_head_only("head_only", victim, options)
+
     def test_hard_query_dataset_does_not_expose_posteriors(self):
         public_dataset = TensorDataset(torch.randn(3, 2), torch.zeros(3, dtype=torch.long))
         dataset = QueryDataset(public_dataset, [2, 0], None, torch.tensor([7, 4]))
@@ -312,6 +363,7 @@ class SurrogateProtectionTests(unittest.TestCase):
             {
                 "no_protection",
                 "full_protection",
+                "head_only",
                 "shallow",
                 "middle",
                 "deep",

@@ -32,16 +32,19 @@ TSDP/
 │   └── lab/                         Lab 实验结果与可视化
 │       ├── 01_kmeans                ResNet18+CIFAR-100 特征聚类
 │       ├── 02_head                  全保护/随机保护的分类头与权重消融
-│       ├── 03_baseline              四种 MS baseline 的保护比例曲线
+│       ├── 03_baseline              普通 MS 策略与 TEESlice 独立点的保护比例总览
 │       ├── 04_tensorshield          TensorShield 作者 rank 的前缀、冗余及窗口消融
 │       └── 05_state                 State 类型保护的 MS 对比结果
 ├── models/                          统一模型结构及 TEESlice slice/backbone 接口
-├── verify/                          数据协议、surrogate 与固定 rank mask 验证
+├── verify/                          环境/GPU、数据协议、surrogate 与固定 rank mask 验证
 ├── lab/                             小型验证实验
 │   ├── 01_kmeans                    ResNet18+CIFAR-100 特征聚类
 │   ├── 02_head                      分类头与权重训练方式消融
-│   ├── 03_baseline                  MS baseline 原始指标绘图
+│   ├── 03_baseline                  MS 策略保护比例与三项原始指标总览
 │   ├── 04_tensorshield              TensorShield 作者 rank 前缀、冗余与窗口验证
 │   └── 05_state                     State 类型保护对比
+├── test/                            与正式流程隔离的研究可行性验证及其产物
+│   ├── 01_flow                      比例原子块残差流守恒与局部递归规则负验证
+│   └── 02_route                     完整残差路线的低预算保护与隔离 MS 验证
 └── docs/                            论文证据与研究文档
 ```

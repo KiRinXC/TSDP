@@ -45,13 +45,13 @@ pruned_accuracy > full_accuracy * (1 - 0.01)
 ## 运行方式
 
 ```bash
-python3 exp/MS/train_victim/teeslice/train.py resnet18 c100
+"$HOME/venvs/dl-py310-torch210-cu121/bin/python" exp/MS/train_victim/teeslice/train.py resnet18 c100
 ```
 
 只验证输入、模型结构和输出协议：
 
 ```bash
-python3 exp/MS/train_victim/teeslice/train.py resnet18 c100 --dry-run
+"$HOME/venvs/dl-py310-torch210-cu121/bin/python" exp/MS/train_victim/teeslice/train.py resnet18 c100 --dry-run
 ```
 
 覆盖当前同语义产物时显式增加 `--overwrite`。重新训练会清除旧的 TEESlice query、surrogate 和结果，不影响普通 ResNet18 或其他 baseline。

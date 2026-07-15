@@ -3,6 +3,12 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_ROOT="$(cd "${SCRIPT_DIR}/../../../.." && pwd)"
+PYTHON="${HOME}/venvs/dl-py310-torch210-cu121/bin/python"
+
+if [[ ! -x "${PYTHON}" ]]; then
+  printf '错误: 找不到 TSDP 唯一 Python 环境: %s\n' "${PYTHON}" >&2
+  exit 1
+fi
 
 DATASET="${1:-${DATASET:-c10}}"
 if [[ $# -gt 0 && "${1}" != --* ]]; then
@@ -16,7 +22,7 @@ OUT_DIR="${OUT_DIR:-${REPO_ROOT}/weights/MS/victim/${MODEL_NAME}/${DATASET}}"
 WEIGHT_PATH="${WEIGHT_PATH:-${REPO_ROOT}/weights/pre_train/resnet18-5c106cde.pth}"
 
 CMD=(
-  python3 "${MODEL_SCRIPT}"
+  "${PYTHON}" "${MODEL_SCRIPT}"
   --dataset "${DATASET}"
   --dataset-root "${DATASET_ROOT}"
   --out-dir "${OUT_DIR}"

@@ -79,7 +79,7 @@ def make_run_id(config: dict[str, object]) -> str:
 def make_artifact_id(plan_id: str | None, defense: str, run_id: str) -> str:
     if plan_id is not None:
         artifact_id = plan_id
-    elif defense in {"no_protection", "full_protection", "tensorshield"}:
+    elif defense in {"no_protection", "full_protection", "head_only", "tensorshield"}:
         artifact_id = defense
     else:
         artifact_id = run_id

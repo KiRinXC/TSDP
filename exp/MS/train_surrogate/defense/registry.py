@@ -8,6 +8,7 @@ from collections.abc import Callable
 import torch.nn as nn
 
 from .base import DefenseOptions, MaskSelection
+from .head import build_head_only
 from .magnitude import build_large_weight
 from .tensorshield import build_tensorshield
 from .unit import build_unit_selection
@@ -36,6 +37,16 @@ def _magnitude_builder(
     return build_large_weight(defense, public_model, options)
 
 
+def _head_builder(
+    defense: str,
+    victim_model: nn.Module,
+    public_model: nn.Module,
+    options: DefenseOptions,
+) -> MaskSelection:
+    del public_model
+    return build_head_only(defense, victim_model, options)
+
+
 def _tensorshield_builder(
     defense: str,
     victim_model: nn.Module,
@@ -49,6 +60,7 @@ def _tensorshield_builder(
 DEFENSE_REGISTRY: dict[str, Builder] = {
     "no_protection": _unit_builder,
     "full_protection": _unit_builder,
+    "head_only": _head_builder,
     "shallow": _unit_builder,
     "middle": _unit_builder,
     "deep": _unit_builder,

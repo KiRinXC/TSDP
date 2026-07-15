@@ -371,7 +371,11 @@ def main() -> int:
         "lr_step": args.lr_step,
         "protected_unit_count": protection_plan.protected_unit_count,
         "protection_mask_sha256": protection_plan.protection_mask_sha256,
-        "protected_scalar_count": protection_plan.magnitude_protected_count,
+        "protected_scalar_count": (
+            protection_plan.magnitude_protected_count
+            if protection_plan.magnitude_protected_count is not None
+            else ""
+        ),
         "protected_param_count": protection_plan.protected_param_count,
         "total_param_count": protection_plan.total_param_count,
         "protected_param_ratio": protection_plan.protected_param_ratio,

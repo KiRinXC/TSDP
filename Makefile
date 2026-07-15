@@ -1,10 +1,19 @@
-.PHONY: help prepare verify datasets dataset download-datasets weights pre-train c10 c100 s10 t200
+.PHONY: help install env gpu unit check prepare verify datasets dataset download-datasets weights pre-train c10 c100 s10 t200
 
+ENV_NAME ?= dl-py310-torch210-cu121
+VENV ?= $(HOME)/venvs/$(ENV_NAME)
+PYTHON ?= $(VENV)/bin/python
+REQUIREMENTS ?= requirements.lock.txt
 DATASETS ?= all
 VERIFY_ARGS ?= --skip-archives --skip-query
 
 help:
 	@printf '%s\n' 'Available targets:'
+	@printf '  %-18s %s\n' 'install' 'install the locked dependencies into the only TSDP virtualenv'
+	@printf '  %-18s %s\n' 'env' 'verify Python and dependency versions; GPU may be unavailable'
+	@printf '  %-18s %s\n' 'gpu' 'strictly verify WSL GPU and run CUDA forward/backward smoke tests'
+	@printf '  %-18s %s\n' 'unit' 'run the MS, TensorShield, and TEESlice unit tests'
+	@printf '  %-18s %s\n' 'check' 'run gpu, unit, and dataset/protocol verification'
 	@printf '  %-18s %s\n' 'prepare' 'download public datasets and ImageNet pretrained weights; no training'
 	@printf '  %-18s %s\n' 'verify' 'verify local public dataset layout; override with VERIFY_ARGS=""'
 	@printf '  %-18s %s\n' 'datasets' 'download TensorShield datasets; override with DATASETS="c10 c100"'
@@ -14,11 +23,29 @@ help:
 	@printf '  %-18s %s\n' 's10' 'download STL-10 only'
 	@printf '  %-18s %s\n' 't200' 'download Tiny-ImageNet only'
 
+install:
+	test -x "$(PYTHON)"
+	"$(PYTHON)" -m pip install --requirement "$(REQUIREMENTS)"
+
+env:
+	"$(PYTHON)" verify/verify_runtime.py --allow-cpu --skip-compute
+
+gpu:
+	"$(PYTHON)" verify/verify_runtime.py
+
+unit:
+	PYTHONDONTWRITEBYTECODE=1 "$(PYTHON)" -m unittest \
+		verify.test_ms_surrogate \
+		verify.test_tensorshield \
+		verify.test_teeslice
+
+check: gpu unit verify
+
 prepare: datasets weights
 
 verify:
-	python3 verify/verify_datasets.py $(VERIFY_ARGS)
-	python3 verify/verify_ms_splits.py
+	"$(PYTHON)" verify/verify_datasets.py $(VERIFY_ARGS)
+	"$(PYTHON)" verify/verify_ms_splits.py
 
 datasets download-datasets:
 	bash dataset/download_datasets.sh $(DATASETS)

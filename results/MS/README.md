@@ -20,11 +20,22 @@ no_protection    identity  exposed  no_protection    0          0.6182    1.0000
 full_protection  finetune  replace  full_protection  100        0.1545    0.1610    2.835290
 ```
 
+## ResNet18+CIFAR-100 仅分类头保护结果
+
+`head_only` 只隐藏 `last_linear.weight` 和 `last_linear.bias`，完整复制普通 victim 的其余 backbone 状态。最终 mask 保护 `2/122` 个 unit、`51,300/11,227,812` 个参数，参数比例为 `0.4569%`，分类头使用 `replace`，随后按统一协议对全部参数共同 finetune。
+
+| checkpoint | epoch | accuracy | fidelity | posterior KL |
+|---|---:|---:|---:|---:|
+| `end.pth`（主结果） | 100 | 0.4404 | 0.5135 | 1.347578 |
+| `best.pth`（训练诊断） | 77 | 0.4416 | 0.5131 | 1.369571 |
+
+该控制组在仅保护 `0.4569%` 参数时，MS 指标已明显低于参数比例相近的 `shallow_02`（`0.4144%`，accuracy/fidelity 为 `0.5651/0.7280`），说明分类头不可见本身对当前攻击有显著影响；但它仍明显未达到普通 victim 的 `full_protection` 参考结果，因此不能用“只保护分类头”替代后续关键路径保护。正式比较只读取 `end.pth`，`best.pth` 仅作诊断。
+
 ## ResNet18+CIFAR-100 TEESlice 结果
 
 TEESlice 改变了 victim 结构与训练过程，因此按 `standalone_reproduction` 独立保存，不写入固定普通 victim 的主 `metrics.tsv`。本次剪枝模型在 `eval_ms` 上的 accuracy 为 `0.7578`；已知最终剪枝拓扑的黑盒攻击使用 500 条 soft posterior query，在固定第 100 轮得到 accuracy `0.1619`、fidelity `0.1784`、posterior KL `3.251131`。完整状态白盒的实际评估为 accuracy `0.7578`、fidelity `1.0000`、posterior KL `4.814928395546758e-10`。四阶段效用、剪枝成本和详细指标见 `results/MS/resnet18/c100/teeslice/README.md`。
 
-后续总图可以同时展示 TensorShield、TEESlice、浅层/中间层/深层/大权重四类策略，以及普通预训练模型的黑盒与白盒界。TEESlice 点必须保留 `standalone_reproduction` 标记，只用于呈现其自身攻击区间，不参与固定普通 victim 下的同条件策略排序。
+当前总图同时展示 `head_only`、TensorShield、TEESlice、浅层/中间层/深层/大权重四类策略，以及普通预训练模型的 no/full 参考界。TEESlice 点必须保留 `standalone_reproduction` 标记，只用于呈现其自身攻击区间，不参与固定普通 victim 下的同条件策略排序。
 
 ## ResNet18+CIFAR-100 TensorShield 结果
 

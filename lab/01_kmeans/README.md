@@ -7,7 +7,7 @@
 ## 运行方式
 
 ```bash
-python3 lab/01_kmeans/run.py
+"$HOME/venvs/dl-py310-torch210-cu121/bin/python" lab/01_kmeans/run.py
 ```
 
 默认使用完整的 10,000 条测试样本、10 次 KMeans 重启和随机种子 42。实验输出写入 `results/lab/01_kmeans/`。

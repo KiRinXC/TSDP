@@ -30,6 +30,7 @@ MS 随机重叠协议/
     │                                           保存对应的紧凑保护 mask
     ├── sweep.py                       按 plan_id 并行训练完整层及全局标量 baseline
     ├── defense/                      注册策略、生成掩码并组合公开与 victim 权重
+    │   └── head_only                 仅保护 last_linear.weight/bias，复制全部 backbone
     ├── core/                         统一读取数据、训练、评估和写入产物
     ├── weights/MS/surrogate/<model>/<dataset>/<artifact_id>/
     │   ├── best.pth                  surrogate_acc 最高点，仅作训练诊断
@@ -91,6 +92,23 @@ TensorShield 固定 rank baseline/
     ├── weights/MS/surrogate/resnet18/c100/tensorshield/protection_mask.pt
     └── results/MS/resnet18/c100/tensorshield/metrics.json
 
+隔离研究验证/
+├── test/01_flow/
+    ├── 只读加载 ImageNet public ResNet18、普通 victim best.pth 与固定数据协议
+    ├── 按每层通道数的 1/4 取最近 2 的幂，构造互不重叠的比例原子块
+    ├── 融合 Conv+BN，显式处理 ReLU、identity/downsample shortcut 与 residual add
+    ├── 在完整 ResNet18 图上分解传播残差和权重/BN 注入残差并核对节点守恒
+    ├── 从反事实输出按每节点局部 90% 正 alpha 递归提取连通子图并逐层重放
+    └── test/01_flow/{weights,results}/
+        └── 保存数值守恒、82.60% 保护扩散和约 58% 重放覆盖的规则拒绝证据
+└── test/02_route/
+    ├── 只读消费 test/01_flow 已通过守恒的 discovery/holdout 残差边
+    ├── 从输出端采样 50,000 条完整终止路线并按频次确定性排序
+    ├── 以完整路线物理闭包为单位，在严格低于 8% 参数预算处停止
+    ├── 冻结保护 manifest 后复用 500 条 soft posterior 与 100 epoch MS 协议
+    └── test/02_route/{weights,results}/
+        └── 保存本地 mask、路线图、XAI 诊断、checkpoint 与 MS gate
+
 Lab 验证实验/
 ├── lab/01_kmeans/
 │   ├── 读取 dataset/public/c100 的 CIFAR-100 test split 与 ImageNet 预训练 ResNet18
@@ -107,12 +125,14 @@ Lab 验证实验/
 │       └── history.tsv               八组共 800 条逐 epoch 训练记录
 ├── lab/03_baseline/
 │   ├── 读取 results/MS/resnet18/c100/<artifact_id>/metrics.json
-│   ├── 按实际 protected_param_ratio 汇总四种 baseline 的 end 指标
-│   ├── no_protection 与 full_protection 仅作为水平参考线
+│   ├── 按实际 protected_param_ratio 汇总四种扫描曲线及 head_only/TensorShield 单点
+│   ├── TEESlice 只使用 standalone 黑盒 end 指标并以独立标记展示
+│   ├── 普通 victim 的 no_protection 与 full_protection 作为统一水平参考线
 │   └── results/lab/03_baseline/
 │       ├── accuracy.png              保护比例与 surrogate accuracy
 │       ├── fidelity.png              保护比例与 fidelity
 │       ├── posterior_kl.png          保护比例与 posterior KL
+│       ├── metrics.png               三项原始 MS 指标的统一三联图
 │       ├── data.tsv                  绘图使用的原始点
 │       └── manifest.json             输入协议与 artifact 清单
 ├── lab/04_tensorshield/

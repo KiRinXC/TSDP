@@ -1,0 +1,11 @@
+# TSDP 唯一运行环境的直接依赖。
+# Python 固定为 3.10，CUDA wheel 固定为 cu121；完整解析版本见 requirements.lock.txt。
+--extra-index-url https://download.pytorch.org/whl/cu121
+
+torch==2.1.0+cu121
+torchvision==0.16.0+cu121
+torchaudio==2.1.0+cu121
+numpy==1.26.4
+pillow==12.3.0
+tqdm==4.68.4
+matplotlib==3.10.9

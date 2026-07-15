@@ -43,7 +43,7 @@ protected_state_byte_ratio     受保护 tensor payload 字节数 / 全部 state
 ## 运行方式
 
 ```bash
-python3 lab/05_state/run.py
+"$HOME/venvs/dl-py310-torch210-cu121/bin/python" lab/05_state/run.py
 ```
 
 ## 输出

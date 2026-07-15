@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""绘制 ResNet18+CIFAR-100 四种 MS baseline 的保护比例曲线。"""
+"""绘制 ResNet18+CIFAR-100 MS 策略的保护比例总览。"""
 
 from __future__ import annotations
 
@@ -17,11 +17,28 @@ from matplotlib.ticker import MaxNLocator  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ATTACK_PROTOCOL = "posterior_replace_finetune_v2"
-STRATEGIES = {
+CURVE_STRATEGIES = {
     "shallow": {"label": "Shallow layers", "color": "#0072B2", "marker": "o"},
     "middle": {"label": "Middle layers", "color": "#009E73", "marker": "s"},
     "deep": {"label": "Deep layers", "color": "#D55E00", "marker": "^"},
     "large_weight": {"label": "Large-weight scalars", "color": "#CC79A7", "marker": "D"},
+}
+POINT_STRATEGIES = {
+    "head_only": {"label": "Head only", "color": "#E69F00", "marker": "P"},
+    "tensorshield": {"label": "TensorShield", "color": "#56B4E9", "marker": "X"},
+    "teeslice": {"label": "TEESlice (standalone)", "color": "#6A3D9A", "marker": "*"},
+}
+BOUNDS = {
+    "no_protection": {
+        "label": "No protection (ordinary victim)",
+        "color": "#333333",
+        "linestyle": "--",
+    },
+    "full_protection": {
+        "label": "Full protection (ordinary victim)",
+        "color": "#777777",
+        "linestyle": ":",
+    },
 }
 METRICS = {
     "surrogate_acc": {"filename": "accuracy.png", "ylabel": "Surrogate accuracy"},
@@ -31,6 +48,7 @@ METRICS = {
 DATA_FIELDS = [
     "artifact_id",
     "role",
+    "comparison_scope",
     "defense",
     "protected_layer_count",
     "source_ratio",
@@ -78,14 +96,28 @@ def load_rows(input_dir: Path) -> list[dict[str, object]]:
             raise ValueError(f"主要 checkpoint 不是 end.pth：{path}")
 
         protection = payload["protection"]
-        defense = protection["defense"]
-        if defense not in {*STRATEGIES, "no_protection", "full_protection"}:
-            continue
+        comparison_scope = payload.get("comparison_scope", "ordinary_fixed_victim")
+        if comparison_scope == "standalone_reproduction":
+            defense = protection.get("strategy")
+            if artifact_id != "teeslice" or defense != "teeslice":
+                continue
+            role = "standalone"
+        else:
+            defense = protection.get("defense")
+            if defense in CURVE_STRATEGIES:
+                role = "curve"
+            elif defense in POINT_STRATEGIES and defense != "teeslice":
+                role = "point"
+            elif defense in BOUNDS:
+                role = "bound"
+            else:
+                continue
         end = payload["end"]
         rows.append(
             {
                 "artifact_id": artifact_id,
-                "role": "strategy" if defense in STRATEGIES else "bound",
+                "role": role,
+                "comparison_scope": comparison_scope,
                 "defense": defense,
                 "protected_layer_count": payload.get("protected_layer_count"),
                 "source_ratio": payload.get("source_ratio"),
@@ -101,26 +133,34 @@ def load_rows(input_dir: Path) -> list[dict[str, object]]:
 
     by_defense = {
         defense: [row for row in rows if row["defense"] == defense]
-        for defense in (*STRATEGIES, "no_protection", "full_protection")
+        for defense in (*CURVE_STRATEGIES, *POINT_STRATEGIES, *BOUNDS)
     }
-    for defense in STRATEGIES:
+    for defense in CURVE_STRATEGIES:
         if len(by_defense[defense]) != 8:
             raise ValueError(f"{defense} 必须恰好包含 8 个点，实际为 {len(by_defense[defense])}。")
         ratios = [float(row["protected_param_ratio"]) for row in by_defense[defense]]
         if len(ratios) != len(set(ratios)):
             raise ValueError(f"{defense} 包含重复保护比例。")
-    for defense in ("no_protection", "full_protection"):
+    for defense in (*POINT_STRATEGIES, *BOUNDS):
         if len(by_defense[defense]) != 1:
             raise ValueError(f"{defense} 必须恰好包含一个参考点。")
+    teeslice = by_defense["teeslice"][0]
+    if teeslice["comparison_scope"] != "standalone_reproduction":
+        raise ValueError("TEESlice 必须保留 standalone_reproduction 标记。")
     return rows
 
 
 def write_data(path: Path, rows: list[dict[str, object]]) -> None:
+    role_order = {"curve": 0, "point": 1, "standalone": 2, "bound": 3}
+    defense_order = {
+        defense: index
+        for index, defense in enumerate((*CURVE_STRATEGIES, *POINT_STRATEGIES, *BOUNDS))
+    }
     ordered = sorted(
         rows,
         key=lambda row: (
-            0 if row["role"] == "strategy" else 1,
-            tuple(STRATEGIES).index(str(row["defense"])) if row["defense"] in STRATEGIES else str(row["defense"]),
+            role_order[str(row["role"])],
+            defense_order[str(row["defense"])],
             float(row["protected_param_ratio"]),
         ),
     )
@@ -141,26 +181,14 @@ def set_y_limits(ax: plt.Axes, values: list[float], bounded: bool) -> None:
     ax.set_ylim(lower, upper)
 
 
-def plot_metric(
-    out_path: Path,
+def draw_metric(
+    ax: plt.Axes,
     rows: list[dict[str, object]],
     metric_name: str,
     ylabel: str,
 ) -> None:
-    plt.rcParams.update(
-        {
-            "font.family": "DejaVu Sans",
-            "font.size": 10,
-            "axes.labelsize": 11,
-            "axes.titlesize": 12,
-            "legend.fontsize": 9,
-            "figure.dpi": 120,
-            "savefig.dpi": 240,
-        }
-    )
-    figure, ax = plt.subplots(figsize=(8.4, 4.8))
     plotted_values = []
-    for defense, style in STRATEGIES.items():
+    for defense, style in CURVE_STRATEGIES.items():
         points = sorted(
             (row for row in rows if row["defense"] == defense),
             key=lambda row: float(row["protected_param_ratio"]),
@@ -178,11 +206,24 @@ def plot_metric(
             markersize=5.5,
         )
 
-    bounds = {
-        "no_protection": {"label": "No protection", "color": "#333333", "linestyle": "--"},
-        "full_protection": {"label": "Full protection", "color": "#777777", "linestyle": ":"},
-    }
-    for defense, style in bounds.items():
+    for defense, style in POINT_STRATEGIES.items():
+        row = next(row for row in rows if row["defense"] == defense)
+        x_value = float(row["protected_param_ratio"]) * 100.0
+        y_value = float(row[metric_name])
+        plotted_values.append(y_value)
+        ax.scatter(
+            [x_value],
+            [y_value],
+            label=style["label"],
+            color=style["color"],
+            marker=style["marker"],
+            s=90 if defense == "teeslice" else 68,
+            edgecolors="white",
+            linewidths=0.7,
+            zorder=5,
+        )
+
+    for defense, style in BOUNDS.items():
         row = next(row for row in rows if row["defense"] == defense)
         value = float(row[metric_name])
         plotted_values.append(value)
@@ -205,8 +246,51 @@ def plot_metric(
     ax.set_axisbelow(True)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
+
+
+def configure_plot_style() -> None:
+    plt.rcParams.update(
+        {
+            "font.family": "DejaVu Sans",
+            "font.size": 10,
+            "axes.labelsize": 11,
+            "axes.titlesize": 12,
+            "legend.fontsize": 9,
+            "figure.dpi": 120,
+            "savefig.dpi": 240,
+        }
+    )
+
+
+def plot_metric(
+    out_path: Path,
+    rows: list[dict[str, object]],
+    metric_name: str,
+    ylabel: str,
+) -> None:
+    figure, ax = plt.subplots(figsize=(8.8, 4.8))
+    draw_metric(ax, rows, metric_name, ylabel)
     ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), frameon=False)
     figure.tight_layout()
+    figure.savefig(out_path, bbox_inches="tight", facecolor="white")
+    plt.close(figure)
+
+
+def plot_combined(out_path: Path, rows: list[dict[str, object]]) -> None:
+    figure, axes = plt.subplots(1, 3, figsize=(17.2, 4.9))
+    for ax, (metric_name, specification) in zip(axes, METRICS.items(), strict=True):
+        draw_metric(ax, rows, metric_name, specification["ylabel"])
+    handles, labels = axes[0].get_legend_handles_labels()
+    figure.suptitle("ResNet18 + CIFAR-100: Model Stealing Overview", fontsize=14)
+    figure.legend(
+        handles,
+        labels,
+        loc="lower center",
+        bbox_to_anchor=(0.5, -0.01),
+        ncol=5,
+        frameon=False,
+    )
+    figure.tight_layout(rect=(0.0, 0.14, 1.0, 0.95))
     figure.savefig(out_path, bbox_inches="tight", facecolor="white")
     plt.close(figure)
 
@@ -220,6 +304,7 @@ def main() -> int:
     rows = load_rows(input_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
     write_data(out_dir / "data.tsv", rows)
+    configure_plot_style()
 
     for metric_name, specification in METRICS.items():
         plot_metric(
@@ -228,6 +313,7 @@ def main() -> int:
             metric_name,
             specification["ylabel"],
         )
+    plot_combined(out_dir / "metrics.png", rows)
 
     manifest = {
         "schema_version": 1,
@@ -241,7 +327,7 @@ def main() -> int:
         "lr_step": 60,
         "primary_checkpoint": "end.pth",
         "x_axis": "protected_param_ratio",
-        "strategy_artifacts": {
+        "curve_artifacts": {
             defense: [
                 row["artifact_id"]
                 for row in sorted(
@@ -249,10 +335,21 @@ def main() -> int:
                     key=lambda item: float(item["protected_param_ratio"]),
                 )
             ]
-            for defense in STRATEGIES
+            for defense in CURVE_STRATEGIES
         },
+        "point_artifacts": {
+            defense: next(row["artifact_id"] for row in rows if row["defense"] == defense)
+            for defense in ("head_only", "tensorshield")
+        },
+        "standalone_artifacts": ["teeslice"],
         "reference_artifacts": ["no_protection", "full_protection"],
-        "outputs": ["accuracy.png", "fidelity.png", "posterior_kl.png", "data.tsv"],
+        "outputs": [
+            "metrics.png",
+            "accuracy.png",
+            "fidelity.png",
+            "posterior_kl.png",
+            "data.tsv",
+        ],
     }
     with (out_dir / "manifest.json").open("w", encoding="utf-8") as writer:
         json.dump(manifest, writer, ensure_ascii=False, indent=2)
@@ -260,6 +357,7 @@ def main() -> int:
     print(f"[INFO] 绘图数据：{out_dir / 'data.tsv'}")
     for specification in METRICS.values():
         print(f"[INFO] 图像：{out_dir / specification['filename']}")
+    print(f"[INFO] 三联图：{out_dir / 'metrics.png'}")
     return 0
 
 

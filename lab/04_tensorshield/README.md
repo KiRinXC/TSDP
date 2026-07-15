@@ -56,13 +56,13 @@ query budget      500，即 CIFAR-100 训练集的 1%
 先验证 rank、12 个 mask、参数量与分类头模式：
 
 ```bash
-python3 lab/04_tensorshield/run.py --dry-run
+"$HOME/venvs/dl-py310-torch210-cu121/bin/python" lab/04_tensorshield/run.py --dry-run
 ```
 
 运行完整实验并覆盖旧 Lab 04 结果：
 
 ```bash
-python3 lab/04_tensorshield/run.py
+"$HOME/venvs/dl-py310-torch210-cu121/bin/python" lab/04_tensorshield/run.py
 ```
 
 ## 输出
@@ -95,13 +95,13 @@ drop_05_10   从完整 Top-10 同时删除 rank-5 和 rank-10
 先验证四组集合、mask 和复用输入：
 
 ```bash
-python3 lab/04_tensorshield/ablate.py --dry-run
+"$HOME/venvs/dl-py310-torch210-cu121/bin/python" lab/04_tensorshield/ablate.py --dry-run
 ```
 
 运行两组新增训练并覆盖同语义消融结果：
 
 ```bash
-python3 lab/04_tensorshield/ablate.py
+"$HOME/venvs/dl-py310-torch210-cu121/bin/python" lab/04_tensorshield/ablate.py
 ```
 
 新增输出为：
@@ -140,13 +140,13 @@ rank_32_41    32-41            layer3.0.conv2.weight, layer3.1.bn2.weight,
 先验证两个窗口、mask 和分类头模式：
 
 ```bash
-python3 lab/04_tensorshield/window.py --dry-run
+"$HOME/venvs/dl-py310-torch210-cu121/bin/python" lab/04_tensorshield/window.py --dry-run
 ```
 
 运行两组各一次训练并覆盖同语义结果：
 
 ```bash
-python3 lab/04_tensorshield/window.py
+"$HOME/venvs/dl-py310-torch210-cu121/bin/python" lab/04_tensorshield/window.py
 ```
 
 新增输出为：
