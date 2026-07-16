@@ -43,8 +43,5 @@ TSDP/
 │   ├── 03_baseline                  MS 策略保护比例与三项原始指标总览
 │   ├── 04_tensorshield              TensorShield 作者 rank 前缀、冗余与窗口验证
 │   └── 05_state                     State 类型保护对比
-├── test/                            与正式流程隔离的研究可行性验证及其产物
-│   ├── 01_flow                      比例原子块残差流守恒与局部递归规则负验证
-│   └── 02_route                     完整残差路线的低预算保护与隔离 MS 验证
-└── docs/                            论文证据与研究文档
+└── docs/                            参考论文
 ```

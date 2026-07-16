@@ -25,7 +25,7 @@ make unit
 
 `make gpu` 必须在正式训练会话中通过。它会核对 WSL `/dev/dxg`、`nvidia-smi`、固定 PyTorch/CUDA 版本，并执行真实 CUDA 前向和反向计算。不要使用系统 `/usr/bin/python3` 运行 TSDP。
 
-TSDP 当前实现 Model Stealing（MS）实验。受害者模型使用官方训练集全量训练，query pool 从同一训练集随机无放回抽取 1%，并使用最佳验证模型生成 posterior 和 hard pseudo label。正式 MS baseline 统一使用 posterior-visible 查询接口和 soft posterior；posterior 生成与 surrogate query 均使用确定性 test transform，攻击训练固定 `lr_step=60`。hard label 仅用于 Lab 输出能力消融。
+TSDP 当前实现 Model Stealing（MS）实验。受害者模型使用官方训练集全量训练，query pool 从同一训练集随机无放回抽取 1%。普通 victim 不另划 validation split，而是沿用 TensorShield 与 TEESlice 参考代码的训练风格，在官方 test/validation 对应的 `eval_ms` 上逐轮评估并保存 accuracy 最高的 `best.pth`，再用该 checkpoint 生成 posterior 和 hard pseudo label。正式 MS baseline 统一使用 posterior-visible 查询接口和 soft posterior；posterior 生成与 surrogate query 均使用确定性 test transform，攻击训练固定 `lr_step=60`。hard label 仅用于 Lab 输出能力消融。victim 的 best 选择不改变 surrogate 的主结果规则：正式攻击比较固定读取第 100 轮 `end.pth`，surrogate `best.pth` 只作诊断。
 
 MS 的基本流程：
 

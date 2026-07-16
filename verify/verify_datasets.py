@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
-"""验证本地公开数据集 canonical layout 与无标签查询集完成状态。"""
+"""验证本地公开数据集 canonical layout。"""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import pickle
 import sys
 from pathlib import Path
@@ -13,7 +12,6 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATASET_ROOT = REPO_ROOT / "dataset" / "public"
-DEFAULT_QUERY_ROOT = REPO_ROOT / "dataset" / "query"
 
 
 EXPECTED_ARCHIVE_MD5 = {
@@ -22,16 +20,6 @@ EXPECTED_ARCHIVE_MD5 = {
     "stl10_binary.tar.gz": "91f7769df0f17e558f3565bffb0c7dfb",
     "tiny-imagenet-200.zip": "90528d7ca1a48142e341f4ef8d21d0de",
 }
-
-EXPECTED_QUERY_COUNTS = {
-    "c10": 500,
-    "c100": 500,
-    "s10": 50,
-    "t200": 1000,
-}
-
-EXPECTED_QUERY_TOP = {"README.md", "c10", "c100", "s10", "t200"}
-
 
 def md5sum(path: Path) -> str:
     """按块计算 MD5，避免一次性把大压缩包读入内存。"""
@@ -51,11 +39,9 @@ def load_pickle(path: Path):
 class Verifier:
     """收集所有检查错误，尽量一次性报告完整问题列表。"""
 
-    def __init__(self, dataset_root: Path, query_root: Path, check_archives: bool, check_query: bool) -> None:
+    def __init__(self, dataset_root: Path, check_archives: bool) -> None:
         self.dataset_root = dataset_root
-        self.query_root = query_root
         self.check_archives = check_archives
-        self.check_query = check_query
         self.errors: list[str] = []
 
     def ok(self, message: str) -> None:
@@ -263,50 +249,6 @@ class Verifier:
     def count_pngs(root: Path) -> int:
         return sum(1 for path in root.rglob("*.png") if path.is_file())
 
-    def verify_query_top_level(self) -> None:
-        if not self.require_dir(self.query_root):
-            return
-        actual = {path.name for path in self.query_root.iterdir()}
-        self.expect_equal("query top-level entries", actual, EXPECTED_QUERY_TOP)
-
-    def verify_one_query_set(self, dataset_id: str, expected_count: int) -> None:
-        root = self.query_root / dataset_id
-        manifest_path = root / "manifest.json"
-        samples_path = root / "samples.tsv"
-        if not self.require_dir(root):
-            return
-        if not self.require_file(manifest_path) or not self.require_file(samples_path):
-            return
-
-        with manifest_path.open("r", encoding="utf-8") as reader:
-            manifest = json.load(reader)
-
-        self.expect_equal(f"{dataset_id} manifest dataset", manifest.get("dataset"), dataset_id)
-        self.expect_equal(f"{dataset_id} manifest sample_count", int(manifest.get("sample_count", -1)), expected_count)
-        self.expect_equal(f"{dataset_id} manifest kind", manifest.get("kind"), "unlabeled_query_subset")
-
-        indices = manifest.get("indices")
-        if isinstance(indices, list):
-            self.expect_equal(f"{dataset_id} manifest indices", len(indices), expected_count)
-        else:
-            self.fail(f"{dataset_id} manifest indices is not a list: {manifest_path}")
-
-        with samples_path.open("r", encoding="utf-8") as reader:
-            rows = [line.rstrip("\n") for line in reader]
-        if not rows:
-            self.fail(f"empty samples file: {samples_path}")
-            return
-        self.expect_equal(f"{dataset_id} samples header", rows[0], "rank\tsource_index")
-        self.expect_equal(f"{dataset_id} samples rows", len(rows) - 1, expected_count)
-
-    def verify_query_sets(self) -> None:
-        if not self.check_query:
-            self.ok("query-set checks skipped")
-            return
-        self.verify_query_top_level()
-        for dataset_id, expected_count in EXPECTED_QUERY_COUNTS.items():
-            self.verify_one_query_set(dataset_id, expected_count)
-
     def run(self) -> int:
         if not self.require_dir(self.dataset_root):
             return 1
@@ -316,7 +258,6 @@ class Verifier:
         self.verify_c100()
         self.verify_s10()
         self.verify_t200()
-        self.verify_query_sets()
 
         if self.errors:
             print()
@@ -329,7 +270,7 @@ class Verifier:
 
 
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(description="验证 public canonical layout 和 query-set completion。")
+    parser = argparse.ArgumentParser(description="验证 public canonical layout。")
     parser.add_argument(
         "--dataset-root",
         type=Path,
@@ -337,20 +278,9 @@ def parse_args() -> argparse.Namespace:
         help=f"公开数据集根目录，默认：{DEFAULT_DATASET_ROOT}",
     )
     parser.add_argument(
-        "--query-root",
-        type=Path,
-        default=DEFAULT_QUERY_ROOT,
-        help=f"无标签查询集根目录，默认：{DEFAULT_QUERY_ROOT}",
-    )
-    parser.add_argument(
         "--skip-archives",
         action="store_true",
         help="跳过 archive MD5 校验",
-    )
-    parser.add_argument(
-        "--skip-query",
-        action="store_true",
-        help="跳过无标签查询集完成状态校验",
     )
     return parser.parse_args()
 
@@ -359,9 +289,7 @@ def main() -> int:
     args = parse_args()
     verifier = Verifier(
         dataset_root=args.dataset_root.resolve(),
-        query_root=args.query_root.resolve(),
         check_archives=not args.skip_archives,
-        check_query=not args.skip_query,
     )
     return verifier.run()
 

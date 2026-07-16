@@ -23,7 +23,7 @@
    MS 中训练得到的攻击代理模型统一称为 `surrogate`；MIA 中用于模拟目标分布或训练攻击器的影子模型统一称为 `shadow`。文档、目录、变量和结果字段不要把两者混用。
 4. 正式实验脚本放在 `exp/`，小型验证和临时探索放在 `lab/`。实验目录可使用短编号加关键词，例如 `01_resnet18_c10`；详细目的写在该目录的 `README.md`。
 5. exp中的实验输出放在 `results/` 或 `weights/`，不要混入 `exp/`、`lab/` 或 `models/` 代码目录。可以被后续训练或评估直接消费的数据集产物应放在 `dataset/` 下的专门目录。
-6. `dataset/public/` 只保存原始公开数据；`dataset/doc/` 保存数据协议文档；`dataset/MS/` 保存 MS 协议下的 split、labels、posteriors 等派生产物；`dataset/MIA/` 保存 MIA 协议下的 target/shadow split、labels、posteriors 等派生产物。query 不单独保存为 `query.tsv`，而是在协议 `manifest.json` 中通过 `query.split` 指向 `splits.tsv` 内的指定 split。`dataset/query/` 和 `dataset/auxiliary/` 不再作为正式入口或正式结果目录。
+6. `dataset/public/` 只保存原始公开数据；`dataset/MS/` 保存 MS 协议下的 split、labels、posteriors 等派生产物；`dataset/MIA/` 预留给 MIA 协议下的 target/shadow split、labels、posteriors 等派生产物。query 不单独保存为 `query.tsv`，而是在协议 `manifest.json` 中通过 `query.split` 指向 `splits.tsv` 内的指定 split。`dataset/query/` 和 `dataset/auxiliary/` 不作为正式入口或正式结果目录。
 7. `dataset/MS/` 顶层只保留 `README.md` 和四个数据集目录：`c10/`、`c100/`、`s10/`、`t200/`。各数据集目录直接保存 `manifest.json` 和 `splits.tsv`；模型相关标签产物按模型分层，例如 `dataset/MS/c100/resnet18/manifest.json`、`labels.tsv` 和可选 `posteriors.pt`。MS 的 query 只能由 manifest 指向 `query_pool_ms`，不得新增独立 `query.tsv`。不要再用 `ratio-*`、`seed-*`、日期、预算或 run name 增加额外子目录，这些元数据统一写入 manifest。
 8. `dataset/MIA/` 顶层只保留 `README.md` 和四个数据集目录：`c10/`、`c100/`、`s10/`、`t200/`。各数据集目录直接保存 `manifest.json` 和 `splits.tsv`；模型相关标签产物按模型分层，例如 `dataset/MIA/c100/resnet18/manifest.json`、`labels.tsv` 和可选 `posteriors.pt`。MIA 的 query 只能由 manifest 指向 `shadow_train`，不得从 `target_train` 构造，也不得新增独立 `query.tsv`。
 9. 新增或调整目录结构时，同步更新最近一层的 `README.md`，让可读性主要来自文档而不是冗长路径。

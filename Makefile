@@ -5,7 +5,7 @@ VENV ?= $(HOME)/venvs/$(ENV_NAME)
 PYTHON ?= $(VENV)/bin/python
 REQUIREMENTS ?= requirements.lock.txt
 DATASETS ?= all
-VERIFY_ARGS ?= --skip-archives --skip-query
+VERIFY_ARGS ?= --skip-archives
 
 help:
 	@printf '%s\n' 'Available targets:'
@@ -15,7 +15,7 @@ help:
 	@printf '  %-18s %s\n' 'unit' 'run the MS, TensorShield, and TEESlice unit tests'
 	@printf '  %-18s %s\n' 'check' 'run gpu, unit, and dataset/protocol verification'
 	@printf '  %-18s %s\n' 'prepare' 'download public datasets and ImageNet pretrained weights; no training'
-	@printf '  %-18s %s\n' 'verify' 'verify local public dataset layout; override with VERIFY_ARGS=""'
+	@printf '  %-18s %s\n' 'verify' 'verify public datasets and MS splits; use VERIFY_ARGS="" to check archives'
 	@printf '  %-18s %s\n' 'datasets' 'download TensorShield datasets; override with DATASETS="c10 c100"'
 	@printf '  %-18s %s\n' 'weights' 'download ImageNet pretrained weights only'
 	@printf '  %-18s %s\n' 'c10' 'download CIFAR-10 only'

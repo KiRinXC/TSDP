@@ -13,8 +13,10 @@ make install     # 按 requirements.lock.txt 补齐或复现唯一环境
 make env         # 检查 Python 与依赖版本，允许当前会话暂时看不到 GPU
 make gpu         # 严格检查 WSL GPU，并执行 CUDA 矩阵乘法和卷积反向传播
 make unit        # 运行 MS、TensorShield、TEESlice 的 33 项单元测试
-make check       # 依次运行 GPU、单元测试和数据协议检查
+make check       # 依次运行 GPU、单元测试、公开数据和 MS 划分检查
 ```
+
+`make verify` 默认检查四个公开数据集的 canonical layout 和 `dataset/MS/` 划分协议，但跳过公开数据压缩包的 MD5。需要同时核对压缩包时使用 `make verify VERIFY_ARGS=""`。旧的 `dataset/query/` 已退出当前协议，不再由验证器读取；MS query 只由 `dataset/MS/<dataset>/manifest.json` 指向 `splits.tsv` 中的 `query_pool_ms`。
 
 `make gpu` 默认要求以下条件全部成立：
 

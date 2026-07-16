@@ -11,7 +11,7 @@ MS 随机重叠协议/
 ├── exp/MS/train_victim/<model>/
 │   ├── 读取 victim_train
 │   └── weights/MS/victim/<model>/<dataset>/
-│       ├── best.pth                  最佳验证准确率 checkpoint，也是 query 默认权重
+│       ├── best.pth                  eval_ms accuracy 最高的 checkpoint，也是 query 默认权重
 │       ├── end.pth                   最末 epoch 模型
 │       ├── train.log.tsv             训练和评估日志
 │       └── params.json               可复现实验参数
@@ -91,23 +91,6 @@ TensorShield 固定 rank baseline/
     ├── 全参数微调 100 epoch，只以 end.pth 作为主评估点
     ├── weights/MS/surrogate/resnet18/c100/tensorshield/protection_mask.pt
     └── results/MS/resnet18/c100/tensorshield/metrics.json
-
-隔离研究验证/
-├── test/01_flow/
-    ├── 只读加载 ImageNet public ResNet18、普通 victim best.pth 与固定数据协议
-    ├── 按每层通道数的 1/4 取最近 2 的幂，构造互不重叠的比例原子块
-    ├── 融合 Conv+BN，显式处理 ReLU、identity/downsample shortcut 与 residual add
-    ├── 在完整 ResNet18 图上分解传播残差和权重/BN 注入残差并核对节点守恒
-    ├── 从反事实输出按每节点局部 90% 正 alpha 递归提取连通子图并逐层重放
-    └── test/01_flow/{weights,results}/
-        └── 保存数值守恒、82.60% 保护扩散和约 58% 重放覆盖的规则拒绝证据
-└── test/02_route/
-    ├── 只读消费 test/01_flow 已通过守恒的 discovery/holdout 残差边
-    ├── 从输出端采样 50,000 条完整终止路线并按频次确定性排序
-    ├── 以完整路线物理闭包为单位，在严格低于 8% 参数预算处停止
-    ├── 冻结保护 manifest 后复用 500 条 soft posterior 与 100 epoch MS 协议
-    └── test/02_route/{weights,results}/
-        └── 保存本地 mask、路线图、XAI 诊断、checkpoint 与 MS gate
 
 Lab 验证实验/
 ├── lab/01_kmeans/

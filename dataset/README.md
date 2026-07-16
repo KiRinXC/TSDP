@@ -18,9 +18,8 @@ bash dataset/download_datasets.sh all
 
 ```text
 dataset/public/      原始公开数据
-dataset/doc/         数据集划分协议文档
 dataset/MS/          Model Stealing 协议划分和模型标签产物
-dataset/MIA/         Membership Inference Attack 协议划分和模型标签产物
+dataset/MIA/         Membership Inference Attack 协议预留目录，当前尚未展开
 ```
 
 MS 当前使用 `reference_random_overlap` 协议：victim 使用官方训练集全量，query 从同一
