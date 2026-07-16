@@ -143,7 +143,7 @@ Lab 验证实验/
 │       ├── window.json/tsv/png       两个 eligible 窗口的指标和参数占比三联直方图
 │       ├── window_history.tsv        两组窗口共 200 轮 query 训练记录
 │       └── <first|last>_10_mask.pt   两个窗口的紧凑保护掩码
-└── lab/05_state/
+├── lab/05_state/
     ├── 分别只保护五种完整 state 类型或十三种参数语义组，其余 victim 状态全部复制
     ├── 语义组拆分主路径/Stem/downsample Conv、局部/全局 BN affine、分类头与完整分支
     ├── 使用统一 soft posterior 与 finetune 协议分别训练十八个 surrogate
@@ -154,4 +154,16 @@ Lab 验证实验/
         ├── data.tsv                  绘图使用的 end 原始点
         ├── accuracy/fidelity/posterior_kl.png
         └── <group>_mask.pt           十八组紧凑保护掩码
+└── lab/06_weight/
+    ├── 读取 Lab04 Top-10 至 Top-17 的八个前缀点、mask 与固定 eligible rank
+    ├── 分别补充全部 BN gamma、三个 downsample Conv、二者组合、Stem Conv 或三类并集
+    ├── 每个新增组合重置种子并微调 100 轮，只在 end 读取 eval_ms
+    ├── Lab04 的八个原始 Top-k 点只复用，新增五条曲线共训练四十组
+    ├── 读取 Lab05 weight 结果作为 Top-17 并集的跨实验终点参考
+    └── results/lab/06_weight/
+        ├── metrics.json              四十八个组合、保护统计、输入哈希与 end 指标
+        ├── history.tsv               四十个新增组合共 4,000 轮 query 训练记录
+        ├── data.tsv                  六条曲线的成本、原始指标与相对 Top-k 差值
+        ├── metrics.png               三项 MS 指标与 soft 黑盒边界三联曲线
+        └── <case>_mask.pt            四十个新增组合的紧凑保护掩码
 ```

@@ -26,4 +26,7 @@ run.py
 
 05_state
   分别保护 ResNet18 的完整 state 类型和参数语义组，比较保护存储比例与 MS 原始指标。
+
+06_weight
+  在 TensorShield Top-10 至 Top-17 上补充 BN gamma、downsample Conv、二者组合与 Stem Conv，验证遗漏 weight 语义能否补齐 soft 黑盒差距。
 ```
