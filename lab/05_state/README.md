@@ -7,7 +7,7 @@
 ```text
 数据划分          dataset/MS/c100/manifest.json 中的 query_pool_ms 与 eval_ms
 victim            weights/MS/victim/resnet18/c100/best.pth
-surrogate 初始化  ImageNet-1K 官方预训练 ResNet18
+surrogate 初始化  formal_victim_then_public_v1：ImageNet-1K backbone + 固定随机分类头
 攻击者可观测输出  victim soft posterior
 query transform   确定性的 test transform
 query budget      500，即 CIFAR-100 训练集的 1%
@@ -22,6 +22,8 @@ query budget      500，即 CIFAR-100 训练集的 1%
 原始指标          surrogate accuracy、fidelity、posterior KL
 随机种子          42
 ```
+
+每组均把当前实验 seed 传给共享 canonical 初始化器；public surrogate 初态与正式 MS 入口及 Lab04/Lab06 使用同一构造轨迹，不依赖此前的 RNG 消耗。
 
 完整 state 类型使用 `state_dict` 名称最后一个字段精确匹配：
 

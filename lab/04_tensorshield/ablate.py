@@ -16,7 +16,7 @@ from torch.utils.data import DataLoader
 import run as prefix
 
 
-PREFIX_METRICS_SHA256 = "c05c7d158ff243878200ad40414c153630355d51a5de010e4ac12b570585c9a7"
+PREFIX_METRICS_SHA256 = "f090bb890ce295db2154fb7d700bd2d9d56d9771d7483768d9375d7f54dbc023"
 RANK_5 = "layer1.1.conv2.weight"
 RANK_10 = "layer2.1.conv2.weight"
 EXPECTED_STATS = {
@@ -107,6 +107,7 @@ def initialize_selection(
         protected_units=unit_spec,
         protected_layers=None,
         protected_scalars=None,
+        initialization_seed=prefix.SEED,
     )
     expected_units, expected_params = EXPECTED_STATS[case.name]
     actual = (plan.protected_unit_count, plan.protected_param_count)

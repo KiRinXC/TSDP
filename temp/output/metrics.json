@@ -1,0 +1,129 @@
+{
+  "schema_version": 1,
+  "experiment": "attack_recoverability_cut",
+  "scope": "temporary_validation",
+  "protocol": "MS",
+  "attack_protocol": "posterior_replace_finetune_v2",
+  "model": "resnet18",
+  "dataset": "c100",
+  "query_budget": 500,
+  "label_mode": "soft",
+  "query_transform": "test",
+  "training_mode": "finetune_all_parameters",
+  "randomization": {
+    "surrogate_initialization": "formal_victim_then_public_v1",
+    "surrogate_initialization_seed": 42,
+    "query_sampler_seed": 42,
+    "reset_before_each_surrogate_initialization": true
+  },
+  "primary": {
+    "checkpoint": "end.pth",
+    "epoch": 100
+  },
+  "protection": {
+    "strategy": "attack_recoverability_cut",
+    "head_mode": "protected_weight_and_bias",
+    "selected_block_count": 37,
+    "protection_mask_sha256": "be1a5bb25a7401ce0db7f0d91dfd01a48c434b48cd157be7b54b7ec6ff91c1a5",
+    "protected_param_count": 897796,
+    "total_param_count": 11227812,
+    "protected_param_ratio": 0.07996179487152083
+  },
+  "end": {
+    "eval_count": 10000,
+    "victim_correct": 6182,
+    "surrogate_correct": 2694,
+    "agreement_count": 2968,
+    "victim_acc": 0.6182,
+    "surrogate_acc": 0.2694,
+    "fidelity": 0.2968,
+    "posterior_kl_sum": 21336.369583129883,
+    "posterior_kl": 2.133636958312988
+  },
+  "selection_internal_hard_holdout": {
+    "count": 4096,
+    "soft_cross_entropy": 2.8348253667354584,
+    "agreement": 0.315185546875
+  },
+  "references": {
+    "no_protection": {
+      "path": "results/MS/resnet18/c100/no_protection/metrics.json",
+      "sha256": "33f9704ec10c634a4cf1dee5301aaff4217190f6e692e299fe09577257812df2",
+      "protected_param_ratio": 0.0,
+      "end": {
+        "eval_count": 10000,
+        "victim_correct": 6182,
+        "surrogate_correct": 6182,
+        "agreement_count": 10000,
+        "victim_acc": 0.6182,
+        "surrogate_acc": 0.6182,
+        "fidelity": 1.0,
+        "posterior_kl_sum": 1.1305409412187828e-05,
+        "posterior_kl": 1.1305409412187828e-09
+      }
+    },
+    "head_only": {
+      "path": "results/MS/resnet18/c100/head_only/metrics.json",
+      "sha256": "2190b5883ca12a7afc03607f7fd84aea3450768ce19e4a267eea0a3a53c66665",
+      "protected_param_ratio": 0.004569011308703779,
+      "end": {
+        "eval_count": 10000,
+        "victim_correct": 6182,
+        "surrogate_correct": 4404,
+        "agreement_count": 5135,
+        "victim_acc": 0.6182,
+        "surrogate_acc": 0.4404,
+        "fidelity": 0.5135,
+        "posterior_kl_sum": 13475.780418395996,
+        "posterior_kl": 1.3475780418395995
+      }
+    },
+    "tensorshield": {
+      "path": "results/MS/resnet18/c100/tensorshield/metrics.json",
+      "sha256": "cb0fb91c5ea7c563ab43b830bccfc00c913b8427461088aa5219638475a48d8e",
+      "protected_param_ratio": 0.08993417417391741,
+      "end": {
+        "eval_count": 10000,
+        "victim_correct": 6182,
+        "surrogate_correct": 1913,
+        "agreement_count": 2099,
+        "victim_acc": 0.6182,
+        "surrogate_acc": 0.1913,
+        "fidelity": 0.2099,
+        "posterior_kl_sum": 25058.30548095703,
+        "posterior_kl": 2.505830548095703
+      }
+    },
+    "full_protection": {
+      "path": "results/MS/resnet18/c100/full_protection/metrics.json",
+      "sha256": "372b3b02f8fdbd62850543ee125c4b9480e2672fc8140cdaf42b2863731d5722",
+      "protected_param_ratio": 1.0,
+      "end": {
+        "eval_count": 10000,
+        "victim_correct": 6182,
+        "surrogate_correct": 1545,
+        "agreement_count": 1610,
+        "victim_acc": 0.6182,
+        "surrogate_acc": 0.1545,
+        "fidelity": 0.161,
+        "posterior_kl_sum": 28352.90375518799,
+        "posterior_kl": 2.835290375518799
+      }
+    }
+  },
+  "inputs": {
+    "victim_checkpoint_sha256": "f6233c9361ed958846cdbccc8f96c9b3425c139d961cb25410409fb47179f8d4",
+    "official_weight_sha256": "5c106cde386e87d4033832f2996f5493238eda96ccf559d1d62760c4de0613f8",
+    "posterior_sha256": "cd2e4ec87b210262a34d4a20895cf1dcf8052c002a26d36cdfce0566accfe0c6"
+  },
+  "attack_end": {
+    "epoch": 100,
+    "learning_rate": 0.001,
+    "query_count": 500,
+    "query_loss_sum": 442.9127724170685,
+    "query_loss": 0.885825544834137,
+    "query_match_count": 474,
+    "query_match": 0.948
+  },
+  "created_at": "2026-07-16T14:39:18.418953+00:00"
+}

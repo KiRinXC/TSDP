@@ -52,9 +52,35 @@ def _copy_exposed_state(
     return trainable_masks
 
 
-def _build_public_model(factory, factory_name: str, weight_path: Path, num_classes: int):
+def reset_surrogate_initialization(factory, num_classes: int, initialization_seed: int) -> None:
+    """重放普通 surrogate 的 canonical RNG 构造前缀。"""
+    if initialization_seed < 0:
+        raise ValueError("surrogate initialization seed 不能为负数。")
+    torch.manual_seed(initialization_seed)
+    if torch.cuda.is_available():
+        torch.cuda.manual_seed_all(initialization_seed)
+    # 只重放正式 build_victim 中发生的目标类别模型构造；checkpoint 加载不消耗 RNG。
+    canonical_victim = factory(num_classes=num_classes)
+    del canonical_victim
+
+
+def build_public_model(
+    factory,
+    factory_name: str,
+    weight_path: Path,
+    num_classes: int,
+    initialization_seed: int | None = None,
+):
+    """构造公开初始化；给定 seed 时复现正式 victim→public RNG 轨迹。
+
+    正式入口历史上先构造目标类别 victim，再构造 1000 类公开模型并替换分类头。
+    这里显式重放同一模型构造序列，使 public surrogate 不再依赖调用者此前消耗了
+    多少次 RNG，同时保持 seed 42 的既有正式初始状态不变。
+    """
     from models.imagenet import load_official_imagenet_weights
 
+    if initialization_seed is not None:
+        reset_surrogate_initialization(factory, num_classes, initialization_seed)
     model = factory(num_classes=1000)
     load_official_imagenet_weights(factory_name, model, str(weight_path), strict=True)
     in_features = model.last_linear.in_features
@@ -72,13 +98,20 @@ def initialize_surrogate(
     protected_units: str | None,
     protected_layers: str | None,
     protected_scalars: int | None,
+    initialization_seed: int | None = None,
 ) -> tuple[nn.Module, ProtectionPlan, dict[str, torch.Tensor], dict[str, torch.Tensor]]:
     """由策略插件生成掩码，再统一组合公开与 victim 权重。"""
     if factory_name == "resnet18":
         build_resnet18_tensor_units(victim_model)
     victim_state = {name: value.detach().cpu() for name, value in victim_model.state_dict().items()}
 
-    public_model = _build_public_model(factory, factory_name, weight_path, num_classes)
+    public_model = build_public_model(
+        factory,
+        factory_name,
+        weight_path,
+        num_classes,
+        initialization_seed=initialization_seed,
+    )
     selection = build_mask_selection(
         defense,
         victim_model,

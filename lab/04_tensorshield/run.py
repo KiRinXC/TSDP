@@ -251,6 +251,7 @@ def initialize_case(
         protected_units=unit_spec,
         protected_layers=None,
         protected_scalars=None,
+        initialization_seed=SEED,
     )
     if bias_only_head:
         plan = _adjust_bias_only_head(surrogate, victim, plan, masks)
@@ -702,6 +703,8 @@ def main() -> int:
         "seed": SEED,
         "randomization": {
             "reset_before_each_surrogate_initialization": True,
+            "surrogate_initialization": "formal_victim_then_public_v1",
+            "surrogate_initialization_seed": SEED,
             "query_sampler_seed": SEED,
             "purpose": "controlled_prefix_comparison",
         },

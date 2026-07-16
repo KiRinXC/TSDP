@@ -15,6 +15,8 @@ adapter_finetune  保留上述两层分类头，全模型共同训练
 
 query budget 固定为 CIFAR-100 训练集的 1%，即 500。八组配置使用相同的 query、hard label、数据增强、优化器和 `eval_ms`，以 `surrogate_acc` 最高的 epoch 作为各配置的 best 结果。
 
+八组 surrogate 均使用 `formal_victim_then_public_v1` 和当前实验 seed。每个配置在构造前独立重放“目标类别 victim 结构 → ImageNet-1K public 结构”的 canonical RNG 前缀；`replace` 与 `adapter` 只在此前缀之后创建各自任务头。因此分类头结构是唯一实验变量，不再混入调用顺序导致的随机头差异。默认 seed 为 42；修改 `--seed` 时构造顺序保持不变。
+
 ## 运行方式
 
 ```bash

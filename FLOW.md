@@ -128,7 +128,10 @@ Lab 验证实验/
 │   ├── 从作者确认的 41-weight rank 派生 17-weight eligible rank
 │   ├── 分别构造 Top-1 至 Top-17 前缀 mask，每组固定加入 unit 121；Top-10 对应 Figure 12(d)
 │   ├── 每个 k 重置种子并微调 100 轮，只在 end 读取 eval_ms
-│   ├── 从 16 个非分类头 eligible 候选取前 10 与后 10，两组均固定保护完整分类头
+│   ├── 从 16 个非分类头 eligible 候选构造前 10、后 10 与分散 10 三组同数量集合
+│   ├── spread_10 固定候选位置 1,2,3,5,7,9,11,13,15,16
+│   ├── 三组均固定保护分类头 weight/bias，只比较非头候选位置与实际参数成本
+│   ├── 三组均独立重放 canonical 初始化并训练 100 轮，只在 end 读取 eval_ms
 │   └── results/lab/04_tensorshield/
 │       ├── metrics.json              作者 rank、17 组保护统计与 end 原始指标
 │       ├── history.tsv               17 组共 1,700 轮 query 训练记录
@@ -140,9 +143,9 @@ Lab 验证实验/
 │       ├── ablation.json/tsv/png     Top-12 内 rank-5/rank-10 删除消融、黑白盒边界与对比图
 │       ├── ablation_history.tsv      三组新增消融共 300 轮 query 训练记录
 │       ├── drop_<rank>_mask.pt       三组新增删除集合的紧凑保护掩码
-│       ├── window.json/tsv/png       两个 eligible 窗口的指标和参数占比三联直方图
-│       ├── window_history.tsv        两组窗口共 200 轮 query 训练记录
-│       └── <first|last>_10_mask.pt   两个窗口的紧凑保护掩码
+│       ├── window.json/tsv/png       三个候选位置集合的指标和参数占比三联直方图
+│       ├── window_history.tsv        三组集合共 300 轮 query 训练记录
+│       └── <first|spread|last>_10_mask.pt  三个集合的紧凑保护掩码
 ├── lab/05_state/
     ├── 分别只保护五种完整 state 类型或十三种参数语义组，其余 victim 状态全部复制
     ├── 语义组拆分主路径/Stem/downsample Conv、局部/全局 BN affine、分类头与完整分支
@@ -166,4 +169,16 @@ Lab 验证实验/
         ├── data.tsv                  六条曲线的成本、原始指标与相对 Top-k 差值
         ├── metrics.png               三项 MS 指标与 soft 黑盒边界三联曲线
         └── <case>_mask.pt            四十个新增组合的紧凑保护掩码
+
+临时 ARC 验证/
+└── temp/run.py
+    ├── 从 victim_train 排除正式 query 后构造 discovery query/holdout
+    ├── 在 272 个计算图对齐通道块上优化攻击可恢复性门，分类头固定保护
+    ├── 固定 8% 参数上限并硬化为全局静态 mask，再运行正式 500-query soft MS
+    └── temp/output/
+        ├── selection.json/tsv        数据隔离、候选块、优化协议与选择轨迹
+        ├── mask.pt                   37 个通道块加完整分类头的保护 mask
+        ├── attack.tsv                最终 surrogate 的 100 轮训练记录
+        ├── metrics.json              end 指标与正式边界对照
+        └── end.pth                   仅本地生成并由 Git 忽略的临时 checkpoint
 ```

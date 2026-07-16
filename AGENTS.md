@@ -32,7 +32,16 @@
 
 
 ## 实验可复现性
-- 随机种子统一采用 42
+- 单随机种子实验默认采用 42；明确设计的多随机种子实验可以使用协议中预先固化的其他 seed，但不得改变除 seed 及其派生随机流以外的实验条件。
+
+### Surrogate 随机初始化轨迹
+
+1. 普通 MS surrogate 的公开初始化统一使用 `formal_victim_then_public_v1`：先按当前实验 seed 构造一次目标类别 victim 结构，再构造 ImageNet-1K public 结构、加载官方预训练权重并创建目标类别任务头。该顺序必须通过 `exp/MS/train_surrogate/defense/initialize.py` 中的共享初始化器完成，不得在新的 `exp/`、`lab/` 或 `temp/` 入口中自行复制一套近似实现。
+2. 每个独立保护策略、消融 case 和随机种子运行都必须在 surrogate 构造前重放上述 canonical 轨迹，并把当前实验 seed 传给 `initialization_seed`；不能依赖调用者此前恰好消耗了多少次 Python、NumPy、CPU 或 CUDA RNG。
+3. 默认随机种子仍为 42。进行多随机种子实验时，canonical 构造顺序保持不变，只替换实验 seed；query DataLoader 使用由同一实验 seed 显式构造的独立 generator。结果元数据至少记录 `surrogate_initialization`、`surrogate_initialization_seed` 和 `query_sampler_seed`。
+4. exp 与 Lab 只有在模型、数据、query、训练协议、保护 mask、实验 seed 和 surrogate 初始化方案均相同时，才允许直接比较绝对指标。不同 CUDA 硬件可能产生极小浮点差异，不要求逐位一致，但不得把不同随机初始化轨迹造成的差异解释为保护策略效果。
+5. 专门研究分类头结构的实验可以在 canonical 构造前缀之后创建不同 head，但所有 head 变体必须从相同实验 seed 和相同构造前缀开始。完全由官方 checkpoint 覆盖、没有保留随机任务状态的公开特征提取模型不受本条约束。
+6. TEESlice 等结构与普通 public backbone 不同的独立方法使用其就近 README 固化的 seeded 构造轨迹；同一方法的 exp 与 Lab 入口仍必须共享该轨迹和 seed 元数据，不得套用普通 ResNet/VGG 的构造序列。
 
 
 ## 失效内容清理

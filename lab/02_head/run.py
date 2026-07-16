@@ -36,6 +36,7 @@ from exp.MS.train_surrogate.defense import (  # noqa: E402
     build_resnet18_tensor_units,
     build_unit_masks,
     protection_mask_sha256,
+    reset_surrogate_initialization,
 )
 from models import imagenet as imagenet_models  # noqa: E402
 from models.imagenet import load_official_imagenet_weights  # noqa: E402
@@ -127,7 +128,16 @@ def build_random_plan(model: nn.Module, seed: int) -> dict[str, Any]:
     }
 
 
-def make_task_model(head_mode: str, official_weight: Path) -> tuple[nn.Module, nn.Module]:
+def make_task_model(
+    head_mode: str,
+    official_weight: Path,
+    initialization_seed: int,
+) -> tuple[nn.Module, nn.Module]:
+    reset_surrogate_initialization(
+        imagenet_models.resnet18,
+        100,
+        initialization_seed,
+    )
     model = imagenet_models.resnet18(num_classes=1000)
     load_official_imagenet_weights("resnet18", model, official_weight, strict=True)
     if head_mode == "replace":
@@ -189,9 +199,10 @@ def build_surrogate(
     victim_state: dict[str, torch.Tensor],
     protected_units: tuple[int, ...],
     official_weight: Path,
+    initialization_seed: int,
     device: torch.device,
 ) -> SurrogateSetup:
-    model, task_head = make_task_model(head_mode, official_weight)
+    model, task_head = make_task_model(head_mode, official_weight, initialization_seed)
     freezer: ExposureFreezer | None = None
     trainable_masks: dict[str, torch.Tensor] | None = None
     frozen_scope: str | None = None
@@ -338,6 +349,7 @@ def run_configuration(
         victim_state=victim_state,
         protected_units=protected_units,
         official_weight=args.official_weight,
+        initialization_seed=args.seed,
         device=device,
     )
     optimizer = torch.optim.SGD(
@@ -397,13 +409,40 @@ def run_configuration(
     return result, history
 
 
-def load_existing_full_results(out_dir: Path) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def load_existing_full_results(
+    out_dir: Path,
+    args: argparse.Namespace,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     metrics_path = out_dir / "metrics.json"
     history_path = out_dir / "history.tsv"
     if not metrics_path.exists() or not history_path.exists():
         raise FileNotFoundError("--scope random 需要已有的全保护 metrics.json 和 history.tsv")
 
     payload = json.loads(metrics_path.read_text(encoding="utf-8"))
+    expected = {
+        "schema_version": 2,
+        "experiment": "head_and_stolen_weight_ablation",
+        "dataset": "c100",
+        "model": "resnet18",
+        "query_budget": args.budget,
+        "query_target": "hard",
+        "epochs": args.epochs,
+        "seed": args.seed,
+        "randomization": {
+            "surrogate_initialization": "formal_victim_then_public_v1",
+            "surrogate_initialization_seed": args.seed,
+            "query_sampler_seed": args.seed,
+            "reset_before_each_surrogate_initialization": True,
+        },
+        "victim_weight": str(args.victim_weight),
+        "official_weight": str(args.official_weight),
+    }
+    for field, expected_value in expected.items():
+        if payload.get(field) != expected_value:
+            raise ValueError(
+                f"已有 Lab02 {field}={payload.get(field)!r}，"
+                f"当前协议要求 {expected_value!r}，拒绝复用。"
+            )
     results: list[dict[str, Any]] = []
     for original in payload.get("results", []):
         row = dict(original)
@@ -438,6 +477,11 @@ def load_existing_full_results(out_dir: Path) -> tuple[list[dict[str, Any]], lis
     history = read_existing_history(history_path, PROTECTION_FULL)
     if len(results) != len(CONFIGURATIONS):
         raise RuntimeError("已有 metrics.json 不包含完整的四组全保护结果")
+    expected_history_count = len(CONFIGURATIONS) * args.epochs
+    if len(history) != expected_history_count:
+        raise RuntimeError(
+            f"已有全保护 history 应有 {expected_history_count} 行，实际为 {len(history)}。"
+        )
     return results, history
 
 
@@ -501,7 +545,12 @@ def write_history(path: Path, rows: list[dict[str, Any]]) -> None:
             if key not in fieldnames:
                 fieldnames.append(key)
     with path.open("w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, delimiter="\t", fieldnames=fieldnames)
+        writer = csv.DictWriter(
+            handle,
+            delimiter="\t",
+            fieldnames=fieldnames,
+            lineterminator="\n",
+        )
         writer.writeheader()
         writer.writerows(rows)
 
@@ -546,7 +595,7 @@ def main() -> None:
         torch.cuda.empty_cache()
 
     if args.scope == "random":
-        results, all_history = load_existing_full_results(args.out_dir)
+        results, all_history = load_existing_full_results(args.out_dir, args)
     else:
         results = []
         all_history = []
@@ -585,6 +634,12 @@ def main() -> None:
         "query_target": "hard",
         "epochs": args.epochs,
         "seed": args.seed,
+        "randomization": {
+            "surrogate_initialization": "formal_victim_then_public_v1",
+            "surrogate_initialization_seed": args.seed,
+            "query_sampler_seed": args.seed,
+            "reset_before_each_surrogate_initialization": True,
+        },
         "victim_weight": str(args.victim_weight),
         "official_weight": str(args.official_weight),
         "query_target_path": str(query_target_path),

@@ -27,6 +27,7 @@ from defense import (  # noqa: E402
     build_layer_groups,
     build_head_only,
     build_magnitude_masks,
+    build_public_model,
     build_resnet18_layer_groups,
     build_resnet18_tensor_units,
     build_unit_masks,
@@ -35,6 +36,7 @@ from defense import (  # noqa: E402
     parse_official_layer_selection,
     parse_unit_selection,
     protection_mask_sha256,
+    reset_surrogate_initialization,
     resolve_unit_selection,
     resolve_resnet18_layer_units,
     save_protection_mask,
@@ -72,6 +74,52 @@ class FlipLogits(nn.Module):
 
 
 class SurrogateProtectionTests(unittest.TestCase):
+    def test_canonical_initialization_accepts_arbitrary_seed(self):
+        def factory(num_classes: int):
+            return nn.Linear(num_classes, 2)
+
+        reset_surrogate_initialization(factory, 5, 7)
+        seed_7_first = torch.rand(8)
+        torch.manual_seed(999)
+        reset_surrogate_initialization(factory, 5, 7)
+        seed_7_second = torch.rand(8)
+        reset_surrogate_initialization(factory, 5, 8)
+        seed_8 = torch.rand(8)
+
+        self.assertTrue(torch.equal(seed_7_first, seed_7_second))
+        self.assertFalse(torch.equal(seed_7_first, seed_8))
+        with self.assertRaises(ValueError):
+            reset_surrogate_initialization(factory, 5, -1)
+
+    def test_seeded_public_initialization_matches_existing_formal_rng_trajectory(self):
+        weight_path = REPO_ROOT / "weights" / "pre_train" / "resnet18-5c106cde.pth"
+
+        torch.manual_seed(42)
+        historical_victim_constructor = resnet18(num_classes=100)
+        del historical_victim_constructor
+        historical = build_public_model(
+            resnet18,
+            "resnet18",
+            weight_path,
+            100,
+            initialization_seed=None,
+        )
+        historical_rng = torch.get_rng_state().clone()
+
+        torch.manual_seed(987654)
+        canonical = build_public_model(
+            resnet18,
+            "resnet18",
+            weight_path,
+            100,
+            initialization_seed=42,
+        )
+
+        self.assertEqual(tuple(historical.state_dict()), tuple(canonical.state_dict()))
+        for name, value in historical.state_dict().items():
+            self.assertTrue(torch.equal(value, canonical.state_dict()[name]), name)
+        self.assertTrue(torch.equal(historical_rng, torch.get_rng_state()))
+
     def test_semantic_artifact_ids_keep_internal_run_hash(self):
         self.assertEqual(make_artifact_id("shallow_06", "shallow", "abc123"), "shallow_06")
         self.assertEqual(

@@ -3,7 +3,7 @@
   "experiment": "06_weight",
   "protocol": "MS",
   "attack_protocol": "posterior_replace_finetune_v2",
-  "protocol_sha256": "4fe8ee5d79f8cdadf32e00186eeb710de9ac088bf664db516e06408ba7cde2ac",
+  "protocol_sha256": "83aeae0a98da70d5a0ee6b3fc70eeff68484a2992be7b03f2121ed05595c3916",
   "complete": true,
   "dataset": "c100",
   "victim_model": "resnet18",
@@ -13,6 +13,8 @@
   "seed": 42,
   "randomization": {
     "reset_before_each_surrogate_initialization": true,
+    "surrogate_initialization": "formal_victim_then_public_v1",
+    "surrogate_initialization_seed": 42,
     "query_sampler_seed": 42,
     "purpose": "controlled_weight_semantic_closure"
   },
@@ -156,9 +158,9 @@
       "layer3.1.conv1.weight"
     ],
     "lab04_metrics": "results/lab/04_tensorshield/metrics.json",
-    "lab04_metrics_sha256": "c05c7d158ff243878200ad40414c153630355d51a5de010e4ac12b570585c9a7",
+    "lab04_metrics_sha256": "f090bb890ce295db2154fb7d700bd2d9d56d9771d7483768d9375d7f54dbc023",
     "lab05_metrics": "results/lab/05_state/metrics.json",
-    "lab05_metrics_sha256": "b96e6fcbf6bf7157ef80fe440a2b2789441c5cefdfe47b793f5505a6ce16b1c4"
+    "lab05_metrics_sha256": "0c44d916c868cb3e6779a790f76876af23bf993f84f4a965cc12d9d8e468a506"
   },
   "victim_checkpoint": "weights/MS/victim/resnet18/c100/best.pth",
   "victim_checkpoint_sha256": "f6233c9361ed958846cdbccc8f96c9b3425c139d961cb25410409fb47179f8d4",
@@ -209,7 +211,7 @@
       "source": {
         "experiment": "04_tensorshield",
         "case": "top_10",
-        "metrics_sha256": "c05c7d158ff243878200ad40414c153630355d51a5de010e4ac12b570585c9a7"
+        "metrics_sha256": "f090bb890ce295db2154fb7d700bd2d9d56d9771d7483768d9375d7f54dbc023"
       },
       "protection": {
         "implementation_defense": "custom",
@@ -312,13 +314,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 2566,
-        "agreement_count": 2783,
+        "surrogate_correct": 1915,
+        "agreement_count": 2106,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.2566,
-        "fidelity": 0.2783,
-        "posterior_kl_sum": 21681.091068267822,
-        "posterior_kl": 2.1681091068267824
+        "surrogate_acc": 0.1915,
+        "fidelity": 0.2106,
+        "posterior_kl_sum": 25057.39372253418,
+        "posterior_kl": 2.505739372253418
       },
       "effect_vs_top_k": {
         "accuracy_change": 0.0,
@@ -659,18 +661,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1928,
-        "agreement_count": 2104,
+        "surrogate_correct": 1506,
+        "agreement_count": 1551,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1928,
-        "fidelity": 0.2104,
-        "posterior_kl_sum": 24541.53681564331,
-        "posterior_kl": 2.454153681564331
+        "surrogate_acc": 0.1506,
+        "fidelity": 0.1551,
+        "posterior_kl_sum": 28539.78092956543,
+        "posterior_kl": 2.853978092956543
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.0638,
-        "fidelity_change": -0.06789999999999999,
-        "posterior_kl_change": 0.28604457473754863
+        "accuracy_change": -0.04089999999999999,
+        "fidelity_change": -0.05550000000000002,
+        "posterior_kl_change": 0.348238720703125
       }
     },
     {
@@ -836,18 +838,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 2130,
-        "agreement_count": 2289,
+        "surrogate_correct": 1634,
+        "agreement_count": 1759,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.213,
-        "fidelity": 0.2289,
-        "posterior_kl_sum": 24517.154067993164,
-        "posterior_kl": 2.4517154067993165
+        "surrogate_acc": 0.1634,
+        "fidelity": 0.1759,
+        "posterior_kl_sum": 27197.73691177368,
+        "posterior_kl": 2.7197736911773682
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.0436,
-        "fidelity_change": -0.0494,
-        "posterior_kl_change": 0.28360629997253417
+        "accuracy_change": -0.028100000000000014,
+        "fidelity_change": -0.03470000000000001,
+        "posterior_kl_change": 0.2140343189239502
       }
     },
     {
@@ -1213,18 +1215,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1919,
-        "agreement_count": 2070,
+        "surrogate_correct": 1502,
+        "agreement_count": 1589,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1919,
-        "fidelity": 0.207,
-        "posterior_kl_sum": 24790.471252441406,
-        "posterior_kl": 2.479047125244141
+        "surrogate_acc": 0.1502,
+        "fidelity": 0.1589,
+        "posterior_kl_sum": 28471.186325073242,
+        "posterior_kl": 2.8471186325073243
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.06470000000000001,
-        "fidelity_change": -0.0713,
-        "posterior_kl_change": 0.31093801841735846
+        "accuracy_change": -0.0413,
+        "fidelity_change": -0.051699999999999996,
+        "posterior_kl_change": 0.3413792602539063
       }
     },
     {
@@ -1370,18 +1372,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 2446,
-        "agreement_count": 2655,
+        "surrogate_correct": 1918,
+        "agreement_count": 2053,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.2446,
-        "fidelity": 0.2655,
-        "posterior_kl_sum": 22137.86656188965,
-        "posterior_kl": 2.2137866561889648
+        "surrogate_acc": 0.1918,
+        "fidelity": 0.2053,
+        "posterior_kl_sum": 25520.076362609863,
+        "posterior_kl": 2.5520076362609863
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.011999999999999983,
-        "fidelity_change": -0.012799999999999978,
-        "posterior_kl_change": 0.04567754936218238
+        "accuracy_change": 0.0002999999999999947,
+        "fidelity_change": -0.005299999999999999,
+        "posterior_kl_change": 0.04626826400756823
       }
     },
     {
@@ -1757,18 +1759,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 2158,
-        "agreement_count": 2285,
+        "surrogate_correct": 1746,
+        "agreement_count": 1878,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.2158,
-        "fidelity": 0.2285,
-        "posterior_kl_sum": 23390.16900253296,
-        "posterior_kl": 2.339016900253296
+        "surrogate_acc": 0.1746,
+        "fidelity": 0.1878,
+        "posterior_kl_sum": 26535.768951416016,
+        "posterior_kl": 2.6535768951416014
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.0408,
-        "fidelity_change": -0.04979999999999998,
-        "posterior_kl_change": 0.17090779342651352
+        "accuracy_change": -0.0169,
+        "fidelity_change": -0.022800000000000015,
+        "posterior_kl_change": 0.14783752288818341
       }
     },
     {
@@ -1795,7 +1797,7 @@
       "source": {
         "experiment": "04_tensorshield",
         "case": "top_11",
-        "metrics_sha256": "c05c7d158ff243878200ad40414c153630355d51a5de010e4ac12b570585c9a7"
+        "metrics_sha256": "f090bb890ce295db2154fb7d700bd2d9d56d9771d7483768d9375d7f54dbc023"
       },
       "protection": {
         "implementation_defense": "custom",
@@ -1905,13 +1907,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 2200,
-        "agreement_count": 2353,
+        "surrogate_correct": 1757,
+        "agreement_count": 1910,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.22,
-        "fidelity": 0.2353,
-        "posterior_kl_sum": 23325.78148651123,
-        "posterior_kl": 2.3325781486511232
+        "surrogate_acc": 0.1757,
+        "fidelity": 0.191,
+        "posterior_kl_sum": 26074.575275421143,
+        "posterior_kl": 2.607457527542114
       },
       "effect_vs_top_k": {
         "accuracy_change": 0.0,
@@ -2261,18 +2263,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1748,
-        "agreement_count": 1862,
+        "surrogate_correct": 1451,
+        "agreement_count": 1556,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1748,
-        "fidelity": 0.1862,
-        "posterior_kl_sum": 25765.603412628174,
-        "posterior_kl": 2.5765603412628173
+        "surrogate_acc": 0.1451,
+        "fidelity": 0.1556,
+        "posterior_kl_sum": 28979.25239944458,
+        "posterior_kl": 2.897925239944458
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.04519999999999999,
-        "fidelity_change": -0.049100000000000005,
-        "posterior_kl_change": 0.24398219261169407
+        "accuracy_change": -0.03059999999999999,
+        "fidelity_change": -0.035400000000000015,
+        "posterior_kl_change": 0.2904677124023438
       }
     },
     {
@@ -2447,18 +2449,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1833,
-        "agreement_count": 1956,
+        "surrogate_correct": 1486,
+        "agreement_count": 1618,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1833,
-        "fidelity": 0.1956,
-        "posterior_kl_sum": 25710.96234893799,
-        "posterior_kl": 2.571096234893799
+        "surrogate_acc": 0.1486,
+        "fidelity": 0.1618,
+        "posterior_kl_sum": 27897.118034362793,
+        "posterior_kl": 2.7897118034362793
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.03670000000000001,
-        "fidelity_change": -0.03970000000000001,
-        "posterior_kl_change": 0.23851808624267568
+        "accuracy_change": -0.027099999999999985,
+        "fidelity_change": -0.029200000000000004,
+        "posterior_kl_change": 0.1822542758941652
       }
     },
     {
@@ -2833,18 +2835,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1685,
-        "agreement_count": 1796,
+        "surrogate_correct": 1458,
+        "agreement_count": 1545,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1685,
-        "fidelity": 0.1796,
-        "posterior_kl_sum": 26318.36919403076,
-        "posterior_kl": 2.631836919403076
+        "surrogate_acc": 0.1458,
+        "fidelity": 0.1545,
+        "posterior_kl_sum": 28763.459381103516,
+        "posterior_kl": 2.8763459381103518
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.05149999999999999,
-        "fidelity_change": -0.0557,
-        "posterior_kl_change": 0.29925877075195295
+        "accuracy_change": -0.029899999999999982,
+        "fidelity_change": -0.036500000000000005,
+        "posterior_kl_change": 0.26888841056823765
       }
     },
     {
@@ -2999,18 +3001,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 2170,
-        "agreement_count": 2338,
+        "surrogate_correct": 1720,
+        "agreement_count": 1829,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.217,
-        "fidelity": 0.2338,
-        "posterior_kl_sum": 23841.266090393066,
-        "posterior_kl": 2.3841266090393067
+        "surrogate_acc": 0.172,
+        "fidelity": 0.1829,
+        "posterior_kl_sum": 26618.182983398438,
+        "posterior_kl": 2.6618182983398437
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.0030000000000000027,
-        "fidelity_change": -0.0015000000000000013,
-        "posterior_kl_change": 0.051548460388183504
+        "accuracy_change": -0.003700000000000009,
+        "fidelity_change": -0.008099999999999996,
+        "posterior_kl_change": 0.05436077079772961
       }
     },
     {
@@ -3395,18 +3397,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1982,
-        "agreement_count": 2060,
+        "surrogate_correct": 1665,
+        "agreement_count": 1706,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1982,
-        "fidelity": 0.206,
-        "posterior_kl_sum": 24500.459003448486,
-        "posterior_kl": 2.4500459003448487
+        "surrogate_acc": 0.1665,
+        "fidelity": 0.1706,
+        "posterior_kl_sum": 27569.124198913574,
+        "posterior_kl": 2.7569124198913575
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.021800000000000014,
-        "fidelity_change": -0.02930000000000002,
-        "posterior_kl_change": 0.11746775169372548
+        "accuracy_change": -0.009199999999999986,
+        "fidelity_change": -0.0204,
+        "posterior_kl_change": 0.14945489234924336
       }
     },
     {
@@ -3434,7 +3436,7 @@
       "source": {
         "experiment": "04_tensorshield",
         "case": "top_12",
-        "metrics_sha256": "c05c7d158ff243878200ad40414c153630355d51a5de010e4ac12b570585c9a7"
+        "metrics_sha256": "f090bb890ce295db2154fb7d700bd2d9d56d9771d7483768d9375d7f54dbc023"
       },
       "protection": {
         "implementation_defense": "custom",
@@ -3551,13 +3553,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1934,
-        "agreement_count": 2121,
+        "surrogate_correct": 1655,
+        "agreement_count": 1757,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1934,
-        "fidelity": 0.2121,
-        "posterior_kl_sum": 24537.523956298828,
-        "posterior_kl": 2.453752395629883
+        "surrogate_acc": 0.1655,
+        "fidelity": 0.1757,
+        "posterior_kl_sum": 26904.428455352783,
+        "posterior_kl": 2.6904428455352782
       },
       "effect_vs_top_k": {
         "accuracy_change": 0.0,
@@ -3916,18 +3918,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1690,
-        "agreement_count": 1819,
+        "surrogate_correct": 1389,
+        "agreement_count": 1457,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.169,
-        "fidelity": 0.1819,
-        "posterior_kl_sum": 26395.438343048096,
-        "posterior_kl": 2.6395438343048094
+        "surrogate_acc": 0.1389,
+        "fidelity": 0.1457,
+        "posterior_kl_sum": 29273.859031677246,
+        "posterior_kl": 2.9273859031677247
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.024399999999999977,
-        "fidelity_change": -0.030200000000000005,
-        "posterior_kl_change": 0.18579143867492665
+        "accuracy_change": -0.026600000000000013,
+        "fidelity_change": -0.03,
+        "posterior_kl_change": 0.2369430576324465
       }
     },
     {
@@ -4111,18 +4113,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1718,
-        "agreement_count": 1863,
+        "surrogate_correct": 1500,
+        "agreement_count": 1608,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1718,
-        "fidelity": 0.1863,
-        "posterior_kl_sum": 26533.61349105835,
-        "posterior_kl": 2.6533613491058348
+        "surrogate_acc": 0.15,
+        "fidelity": 0.1608,
+        "posterior_kl_sum": 28338.90456390381,
+        "posterior_kl": 2.833890456390381
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.02159999999999998,
-        "fidelity_change": -0.025800000000000017,
-        "posterior_kl_change": 0.19960895347595198
+        "accuracy_change": -0.015500000000000014,
+        "fidelity_change": -0.014899999999999997,
+        "posterior_kl_change": 0.1434476108551026
       }
     },
     {
@@ -4506,18 +4508,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1604,
-        "agreement_count": 1725,
+        "surrogate_correct": 1474,
+        "agreement_count": 1540,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1604,
-        "fidelity": 0.1725,
-        "posterior_kl_sum": 26814.255241394043,
-        "posterior_kl": 2.6814255241394043
+        "surrogate_acc": 0.1474,
+        "fidelity": 0.154,
+        "posterior_kl_sum": 28913.023136138916,
+        "posterior_kl": 2.891302313613892
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.033,
-        "fidelity_change": -0.039600000000000024,
-        "posterior_kl_change": 0.22767312850952148
+        "accuracy_change": -0.018100000000000005,
+        "fidelity_change": -0.021699999999999997,
+        "posterior_kl_change": 0.20085946807861355
       }
     },
     {
@@ -4681,18 +4683,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1936,
-        "agreement_count": 2103,
+        "surrogate_correct": 1629,
+        "agreement_count": 1739,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1936,
-        "fidelity": 0.2103,
-        "posterior_kl_sum": 24881.34857940674,
-        "posterior_kl": 2.4881348579406737
+        "surrogate_acc": 0.1629,
+        "fidelity": 0.1739,
+        "posterior_kl_sum": 27279.2320022583,
+        "posterior_kl": 2.7279232002258302
       },
       "effect_vs_top_k": {
-        "accuracy_change": 0.00020000000000000573,
-        "fidelity_change": -0.0018000000000000238,
-        "posterior_kl_change": 0.034382462310790896
+        "accuracy_change": -0.002600000000000019,
+        "fidelity_change": -0.001799999999999996,
+        "posterior_kl_change": 0.037480354690552
       }
     },
     {
@@ -5086,18 +5088,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1910,
-        "agreement_count": 2035,
+        "surrogate_correct": 1681,
+        "agreement_count": 1757,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.191,
-        "fidelity": 0.2035,
-        "posterior_kl_sum": 25054.519081115723,
-        "posterior_kl": 2.5054519081115725
+        "surrogate_acc": 0.1681,
+        "fidelity": 0.1757,
+        "posterior_kl_sum": 26992.606384277344,
+        "posterior_kl": 2.6992606384277344
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.0023999999999999855,
-        "fidelity_change": -0.008600000000000024,
-        "posterior_kl_change": 0.05169951248168969
+        "accuracy_change": 0.002599999999999991,
+        "fidelity_change": 0.0,
+        "posterior_kl_change": 0.008817792892456211
       }
     },
     {
@@ -5126,7 +5128,7 @@
       "source": {
         "experiment": "04_tensorshield",
         "case": "top_13",
-        "metrics_sha256": "c05c7d158ff243878200ad40414c153630355d51a5de010e4ac12b570585c9a7"
+        "metrics_sha256": "f090bb890ce295db2154fb7d700bd2d9d56d9771d7483768d9375d7f54dbc023"
       },
       "protection": {
         "implementation_defense": "custom",
@@ -5250,13 +5252,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1862,
-        "agreement_count": 2048,
+        "surrogate_correct": 1600,
+        "agreement_count": 1732,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1862,
-        "fidelity": 0.2048,
-        "posterior_kl_sum": 25072.691539764404,
-        "posterior_kl": 2.5072691539764405
+        "surrogate_acc": 0.16,
+        "fidelity": 0.1732,
+        "posterior_kl_sum": 27073.843437194824,
+        "posterior_kl": 2.7073843437194824
       },
       "effect_vs_top_k": {
         "accuracy_change": 0.0,
@@ -5624,18 +5626,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1692,
-        "agreement_count": 1790,
+        "surrogate_correct": 1485,
+        "agreement_count": 1540,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1692,
-        "fidelity": 0.179,
-        "posterior_kl_sum": 26237.86361694336,
-        "posterior_kl": 2.6237863616943358
+        "surrogate_acc": 0.1485,
+        "fidelity": 0.154,
+        "posterior_kl_sum": 28685.483932495117,
+        "posterior_kl": 2.8685483932495117
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.017000000000000015,
-        "fidelity_change": -0.025800000000000017,
-        "posterior_kl_change": 0.11651720771789531
+        "accuracy_change": -0.01150000000000001,
+        "fidelity_change": -0.019199999999999995,
+        "posterior_kl_change": 0.16116404953002927
       }
     },
     {
@@ -5828,18 +5830,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1604,
-        "agreement_count": 1700,
+        "surrogate_correct": 1490,
+        "agreement_count": 1620,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1604,
-        "fidelity": 0.17,
-        "posterior_kl_sum": 27392.983711242676,
-        "posterior_kl": 2.7392983711242676
+        "surrogate_acc": 0.149,
+        "fidelity": 0.162,
+        "posterior_kl_sum": 28158.936084747314,
+        "posterior_kl": 2.8158936084747315
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.025800000000000017,
-        "fidelity_change": -0.0348,
-        "posterior_kl_change": 0.2320292171478271
+        "accuracy_change": -0.01100000000000001,
+        "fidelity_change": -0.011199999999999988,
+        "posterior_kl_change": 0.10850926475524902
       }
     },
     {
@@ -6232,18 +6234,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1636,
-        "agreement_count": 1749,
+        "surrogate_correct": 1521,
+        "agreement_count": 1576,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1636,
-        "fidelity": 0.1749,
-        "posterior_kl_sum": 26848.137939453125,
-        "posterior_kl": 2.6848137939453127
+        "surrogate_acc": 0.1521,
+        "fidelity": 0.1576,
+        "posterior_kl_sum": 28454.49811553955,
+        "posterior_kl": 2.845449811553955
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.02260000000000001,
-        "fidelity_change": -0.02990000000000001,
-        "posterior_kl_change": 0.17754463996887226
+        "accuracy_change": -0.00789999999999999,
+        "fidelity_change": -0.015600000000000003,
+        "posterior_kl_change": 0.1380654678344726
       }
     },
     {
@@ -6416,18 +6418,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1820,
-        "agreement_count": 2001,
+        "surrogate_correct": 1619,
+        "agreement_count": 1749,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.182,
-        "fidelity": 0.2001,
-        "posterior_kl_sum": 25526.18660736084,
-        "posterior_kl": 2.552618660736084
+        "surrogate_acc": 0.1619,
+        "fidelity": 0.1749,
+        "posterior_kl_sum": 27366.401763916016,
+        "posterior_kl": 2.7366401763916017
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.004200000000000009,
-        "fidelity_change": -0.00470000000000001,
-        "posterior_kl_change": 0.04534950675964344
+        "accuracy_change": 0.001899999999999985,
+        "fidelity_change": 0.001700000000000007,
+        "posterior_kl_change": 0.029255832672119286
       }
     },
     {
@@ -6830,18 +6832,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1854,
-        "agreement_count": 1931,
+        "surrogate_correct": 1704,
+        "agreement_count": 1761,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1854,
-        "fidelity": 0.1931,
-        "posterior_kl_sum": 25475.982711791992,
-        "posterior_kl": 2.5475982711791993
+        "surrogate_acc": 0.1704,
+        "fidelity": 0.1761,
+        "posterior_kl_sum": 26712.45534515381,
+        "posterior_kl": 2.6712455345153807
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.0007999999999999952,
-        "fidelity_change": -0.011700000000000016,
-        "posterior_kl_change": 0.04032911720275889
+        "accuracy_change": 0.010399999999999993,
+        "fidelity_change": 0.0029000000000000137,
+        "posterior_kl_change": -0.03613880920410173
       }
     },
     {
@@ -6871,7 +6873,7 @@
       "source": {
         "experiment": "04_tensorshield",
         "case": "top_14",
-        "metrics_sha256": "c05c7d158ff243878200ad40414c153630355d51a5de010e4ac12b570585c9a7"
+        "metrics_sha256": "f090bb890ce295db2154fb7d700bd2d9d56d9771d7483768d9375d7f54dbc023"
       },
       "protection": {
         "implementation_defense": "custom",
@@ -7002,13 +7004,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1835,
-        "agreement_count": 1982,
+        "surrogate_correct": 1611,
+        "agreement_count": 1732,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1835,
-        "fidelity": 0.1982,
-        "posterior_kl_sum": 25362.70810699463,
-        "posterior_kl": 2.5362708106994627
+        "surrogate_acc": 0.1611,
+        "fidelity": 0.1732,
+        "posterior_kl_sum": 27141.8515625,
+        "posterior_kl": 2.71418515625
       },
       "effect_vs_top_k": {
         "accuracy_change": 0.0,
@@ -7385,18 +7387,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1565,
-        "agreement_count": 1600,
+        "surrogate_correct": 1353,
+        "agreement_count": 1467,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1565,
-        "fidelity": 0.16,
-        "posterior_kl_sum": 27365.40496444702,
-        "posterior_kl": 2.736540496444702
+        "surrogate_acc": 0.1353,
+        "fidelity": 0.1467,
+        "posterior_kl_sum": 29072.02719116211,
+        "posterior_kl": 2.907202719116211
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.026999999999999996,
-        "fidelity_change": -0.038199999999999984,
-        "posterior_kl_change": 0.2002696857452393
+        "accuracy_change": -0.02579999999999999,
+        "fidelity_change": -0.026499999999999996,
+        "posterior_kl_change": 0.19301756286621075
       }
     },
     {
@@ -7598,18 +7600,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1613,
-        "agreement_count": 1701,
+        "surrogate_correct": 1495,
+        "agreement_count": 1623,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1613,
-        "fidelity": 0.1701,
-        "posterior_kl_sum": 27611.782680511475,
-        "posterior_kl": 2.7611782680511476
+        "surrogate_acc": 0.1495,
+        "fidelity": 0.1623,
+        "posterior_kl_sum": 28344.455348968506,
+        "posterior_kl": 2.8344455348968505
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.022199999999999998,
-        "fidelity_change": -0.028099999999999986,
-        "posterior_kl_change": 0.22490745735168494
+        "accuracy_change": -0.0116,
+        "fidelity_change": -0.010899999999999993,
+        "posterior_kl_change": 0.12026037864685035
       }
     },
     {
@@ -8011,18 +8013,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1593,
-        "agreement_count": 1687,
+        "surrogate_correct": 1515,
+        "agreement_count": 1597,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1593,
-        "fidelity": 0.1687,
-        "posterior_kl_sum": 27544.748680114746,
-        "posterior_kl": 2.754474868011475
+        "surrogate_acc": 0.1515,
+        "fidelity": 0.1597,
+        "posterior_kl_sum": 28453.380699157715,
+        "posterior_kl": 2.8453380699157713
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.0242,
-        "fidelity_change": -0.0295,
-        "posterior_kl_change": 0.2182040573120121
+        "accuracy_change": -0.009599999999999997,
+        "fidelity_change": -0.013499999999999984,
+        "posterior_kl_change": 0.1311529136657712
       }
     },
     {
@@ -8204,18 +8206,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1825,
-        "agreement_count": 1985,
+        "surrogate_correct": 1612,
+        "agreement_count": 1722,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1825,
-        "fidelity": 0.1985,
-        "posterior_kl_sum": 25727.223819732666,
-        "posterior_kl": 2.5727223819732665
+        "surrogate_acc": 0.1612,
+        "fidelity": 0.1722,
+        "posterior_kl_sum": 27459.797927856445,
+        "posterior_kl": 2.7459797927856444
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.0010000000000000009,
-        "fidelity_change": 0.00030000000000002247,
-        "posterior_kl_change": 0.03645157127380383
+        "accuracy_change": 0.00010000000000001674,
+        "fidelity_change": -0.0010000000000000009,
+        "posterior_kl_change": 0.031794636535644294
       }
     },
     {
@@ -8627,18 +8629,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1854,
-        "agreement_count": 1961,
+        "surrogate_correct": 1794,
+        "agreement_count": 1859,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1854,
-        "fidelity": 0.1961,
-        "posterior_kl_sum": 25487.98468017578,
-        "posterior_kl": 2.548798468017578
+        "surrogate_acc": 0.1794,
+        "fidelity": 0.1859,
+        "posterior_kl_sum": 26454.146488189697,
+        "posterior_kl": 2.64541464881897
       },
       "effect_vs_top_k": {
-        "accuracy_change": 0.0019000000000000128,
-        "fidelity_change": -0.0020999999999999908,
-        "posterior_kl_change": 0.012527657318115448
+        "accuracy_change": 0.01830000000000001,
+        "fidelity_change": 0.012700000000000017,
+        "posterior_kl_change": -0.0687705074310303
       }
     },
     {
@@ -8669,7 +8671,7 @@
       "source": {
         "experiment": "04_tensorshield",
         "case": "top_15",
-        "metrics_sha256": "c05c7d158ff243878200ad40414c153630355d51a5de010e4ac12b570585c9a7"
+        "metrics_sha256": "f090bb890ce295db2154fb7d700bd2d9d56d9771d7483768d9375d7f54dbc023"
       },
       "protection": {
         "implementation_defense": "custom",
@@ -8807,13 +8809,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1835,
-        "agreement_count": 1983,
+        "surrogate_correct": 1617,
+        "agreement_count": 1759,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1835,
-        "fidelity": 0.1983,
-        "posterior_kl_sum": 25880.098808288574,
-        "posterior_kl": 2.5880098808288574
+        "surrogate_acc": 0.1617,
+        "fidelity": 0.1759,
+        "posterior_kl_sum": 27290.915786743164,
+        "posterior_kl": 2.7290915786743164
       },
       "effect_vs_top_k": {
         "accuracy_change": 0.0,
@@ -9199,18 +9201,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1485,
-        "agreement_count": 1561,
+        "surrogate_correct": 1443,
+        "agreement_count": 1570,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1485,
-        "fidelity": 0.1561,
-        "posterior_kl_sum": 28132.393798828125,
-        "posterior_kl": 2.8132393798828126
+        "surrogate_acc": 0.1443,
+        "fidelity": 0.157,
+        "posterior_kl_sum": 28502.003505706787,
+        "posterior_kl": 2.8502003505706788
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.035,
-        "fidelity_change": -0.042200000000000015,
-        "posterior_kl_change": 0.22522949905395517
+        "accuracy_change": -0.0174,
+        "fidelity_change": -0.0189,
+        "posterior_kl_change": 0.12110877189636238
       }
     },
     {
@@ -9421,18 +9423,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1554,
-        "agreement_count": 1636,
+        "surrogate_correct": 1490,
+        "agreement_count": 1625,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1554,
-        "fidelity": 0.1636,
-        "posterior_kl_sum": 28083.375495910645,
-        "posterior_kl": 2.8083375495910645
+        "surrogate_acc": 0.149,
+        "fidelity": 0.1625,
+        "posterior_kl_sum": 28307.29901123047,
+        "posterior_kl": 2.8307299011230467
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.028099999999999986,
-        "fidelity_change": -0.03470000000000001,
-        "posterior_kl_change": 0.2203276687622071
+        "accuracy_change": -0.012700000000000017,
+        "fidelity_change": -0.013399999999999995,
+        "posterior_kl_change": 0.10163832244873028
       }
     },
     {
@@ -9843,18 +9845,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1574,
-        "agreement_count": 1694,
+        "surrogate_correct": 1543,
+        "agreement_count": 1614,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1574,
-        "fidelity": 0.1694,
-        "posterior_kl_sum": 27747.50904083252,
-        "posterior_kl": 2.774750904083252
+        "surrogate_acc": 0.1543,
+        "fidelity": 0.1614,
+        "posterior_kl_sum": 28077.437870025635,
+        "posterior_kl": 2.8077437870025634
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.026099999999999984,
-        "fidelity_change": -0.02890000000000001,
-        "posterior_kl_change": 0.18674102325439446
+        "accuracy_change": -0.007400000000000018,
+        "fidelity_change": -0.014500000000000013,
+        "posterior_kl_change": 0.07865220832824704
       }
     },
     {
@@ -10045,18 +10047,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1785,
-        "agreement_count": 1946,
+        "surrogate_correct": 1593,
+        "agreement_count": 1723,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1785,
-        "fidelity": 0.1946,
-        "posterior_kl_sum": 26326.88740158081,
-        "posterior_kl": 2.632688740158081
+        "surrogate_acc": 0.1593,
+        "fidelity": 0.1723,
+        "posterior_kl_sum": 27566.15835571289,
+        "posterior_kl": 2.756615835571289
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.0050000000000000044,
-        "fidelity_change": -0.003700000000000009,
-        "posterior_kl_change": 0.04467885932922355
+        "accuracy_change": -0.0024000000000000132,
+        "fidelity_change": -0.003599999999999992,
+        "posterior_kl_change": 0.027524256896972688
       }
     },
     {
@@ -10477,18 +10479,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1830,
-        "agreement_count": 1887,
+        "surrogate_correct": 1778,
+        "agreement_count": 1867,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.183,
-        "fidelity": 0.1887,
-        "posterior_kl_sum": 26646.8896484375,
-        "posterior_kl": 2.66468896484375
+        "surrogate_acc": 0.1778,
+        "fidelity": 0.1867,
+        "posterior_kl_sum": 26353.51693725586,
+        "posterior_kl": 2.635351693725586
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.0005000000000000004,
-        "fidelity_change": -0.009599999999999997,
-        "posterior_kl_change": 0.07667908401489276
+        "accuracy_change": 0.016100000000000003,
+        "fidelity_change": 0.010800000000000004,
+        "posterior_kl_change": -0.09373988494873053
       }
     },
     {
@@ -10520,7 +10522,7 @@
       "source": {
         "experiment": "04_tensorshield",
         "case": "top_16",
-        "metrics_sha256": "c05c7d158ff243878200ad40414c153630355d51a5de010e4ac12b570585c9a7"
+        "metrics_sha256": "f090bb890ce295db2154fb7d700bd2d9d56d9771d7483768d9375d7f54dbc023"
       },
       "protection": {
         "implementation_defense": "custom",
@@ -10665,13 +10667,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1845,
-        "agreement_count": 2013,
+        "surrogate_correct": 1633,
+        "agreement_count": 1783,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1845,
-        "fidelity": 0.2013,
-        "posterior_kl_sum": 25779.243560791016,
-        "posterior_kl": 2.5779243560791016
+        "surrogate_acc": 0.1633,
+        "fidelity": 0.1783,
+        "posterior_kl_sum": 27214.516677856445,
+        "posterior_kl": 2.7214516677856446
       },
       "effect_vs_top_k": {
         "accuracy_change": 0.0,
@@ -11066,18 +11068,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1451,
-        "agreement_count": 1528,
+        "surrogate_correct": 1397,
+        "agreement_count": 1497,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1451,
-        "fidelity": 0.1528,
-        "posterior_kl_sum": 28718.811893463135,
-        "posterior_kl": 2.8718811893463134
+        "surrogate_acc": 0.1397,
+        "fidelity": 0.1497,
+        "posterior_kl_sum": 28954.039268493652,
+        "posterior_kl": 2.895403926849365
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.03939999999999999,
-        "fidelity_change": -0.048500000000000015,
-        "posterior_kl_change": 0.2939568332672118
+        "accuracy_change": -0.02360000000000001,
+        "fidelity_change": -0.028599999999999987,
+        "posterior_kl_change": 0.17395225906372058
       }
     },
     {
@@ -11297,18 +11299,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1563,
-        "agreement_count": 1662,
+        "surrogate_correct": 1519,
+        "agreement_count": 1646,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1563,
-        "fidelity": 0.1662,
-        "posterior_kl_sum": 27983.696922302246,
-        "posterior_kl": 2.798369692230225
+        "surrogate_acc": 0.1519,
+        "fidelity": 0.1646,
+        "posterior_kl_sum": 28094.53716278076,
+        "posterior_kl": 2.8094537162780764
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.028200000000000003,
-        "fidelity_change": -0.03510000000000002,
-        "posterior_kl_change": 0.22044533615112316
+        "accuracy_change": -0.011399999999999993,
+        "fidelity_change": -0.01369999999999999,
+        "posterior_kl_change": 0.08800204849243176
       }
     },
     {
@@ -11728,18 +11730,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1470,
-        "agreement_count": 1518,
+        "surrogate_correct": 1401,
+        "agreement_count": 1505,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.147,
-        "fidelity": 0.1518,
-        "posterior_kl_sum": 28786.47576522827,
-        "posterior_kl": 2.878647576522827
+        "surrogate_acc": 0.1401,
+        "fidelity": 0.1505,
+        "posterior_kl_sum": 28820.442798614502,
+        "posterior_kl": 2.88204427986145
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.037500000000000006,
-        "fidelity_change": -0.049500000000000016,
-        "posterior_kl_change": 0.30072322044372557
+        "accuracy_change": -0.0232,
+        "fidelity_change": -0.02779999999999999,
+        "posterior_kl_change": 0.16059261207580544
       }
     },
     {
@@ -11939,18 +11941,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1800,
-        "agreement_count": 1945,
+        "surrogate_correct": 1612,
+        "agreement_count": 1736,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.18,
-        "fidelity": 0.1945,
-        "posterior_kl_sum": 26223.91526031494,
-        "posterior_kl": 2.6223915260314943
+        "surrogate_acc": 0.1612,
+        "fidelity": 0.1736,
+        "posterior_kl_sum": 27506.44249343872,
+        "posterior_kl": 2.750644249343872
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.004500000000000004,
-        "fidelity_change": -0.0068000000000000005,
-        "posterior_kl_change": 0.04446716995239264
+        "accuracy_change": -0.0020999999999999908,
+        "fidelity_change": -0.004699999999999982,
+        "posterior_kl_change": 0.02919258155822746
       }
     },
     {
@@ -12380,18 +12382,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1647,
-        "agreement_count": 1738,
+        "surrogate_correct": 1630,
+        "agreement_count": 1698,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1647,
-        "fidelity": 0.1738,
-        "posterior_kl_sum": 27461.03907394409,
-        "posterior_kl": 2.746103907394409
+        "surrogate_acc": 0.163,
+        "fidelity": 0.1698,
+        "posterior_kl_sum": 27161.651679992676,
+        "posterior_kl": 2.7161651679992675
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.019799999999999984,
-        "fidelity_change": -0.027499999999999997,
-        "posterior_kl_change": 0.16817955131530749
+        "accuracy_change": -0.0002999999999999947,
+        "fidelity_change": -0.00849999999999998,
+        "posterior_kl_change": -0.005286499786377075
       }
     },
     {
@@ -12424,7 +12426,7 @@
       "source": {
         "experiment": "04_tensorshield",
         "case": "top_17",
-        "metrics_sha256": "c05c7d158ff243878200ad40414c153630355d51a5de010e4ac12b570585c9a7"
+        "metrics_sha256": "f090bb890ce295db2154fb7d700bd2d9d56d9771d7483768d9375d7f54dbc023"
       },
       "protection": {
         "implementation_defense": "custom",
@@ -12576,13 +12578,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1804,
-        "agreement_count": 1959,
+        "surrogate_correct": 1650,
+        "agreement_count": 1790,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1804,
-        "fidelity": 0.1959,
-        "posterior_kl_sum": 25845.389572143555,
-        "posterior_kl": 2.5845389572143556
+        "surrogate_acc": 0.165,
+        "fidelity": 0.179,
+        "posterior_kl_sum": 27236.606174468994,
+        "posterior_kl": 2.7236606174468996
       },
       "effect_vs_top_k": {
         "accuracy_change": 0.0,
@@ -12986,18 +12988,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1319,
-        "agreement_count": 1436,
+        "surrogate_correct": 1346,
+        "agreement_count": 1435,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1319,
-        "fidelity": 0.1436,
-        "posterior_kl_sum": 29152.44563293457,
-        "posterior_kl": 2.915244563293457
+        "surrogate_acc": 0.1346,
+        "fidelity": 0.1435,
+        "posterior_kl_sum": 29231.2378616333,
+        "posterior_kl": 2.92312378616333
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.048500000000000015,
-        "fidelity_change": -0.052299999999999985,
-        "posterior_kl_change": 0.3307056060791016
+        "accuracy_change": -0.03040000000000001,
+        "fidelity_change": -0.035500000000000004,
+        "posterior_kl_change": 0.19946316871643033
       }
     },
     {
@@ -13226,18 +13228,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1532,
-        "agreement_count": 1617,
+        "surrogate_correct": 1487,
+        "agreement_count": 1608,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1532,
-        "fidelity": 0.1617,
-        "posterior_kl_sum": 28056.392539978027,
-        "posterior_kl": 2.8056392539978026
+        "surrogate_acc": 0.1487,
+        "fidelity": 0.1608,
+        "posterior_kl_sum": 28241.649742126465,
+        "posterior_kl": 2.8241649742126467
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.027200000000000002,
-        "fidelity_change": -0.03419999999999998,
-        "posterior_kl_change": 0.221100296783447
+        "accuracy_change": -0.01630000000000001,
+        "fidelity_change": -0.018199999999999994,
+        "posterior_kl_change": 0.1005043567657471
       }
     },
     {
@@ -13666,18 +13668,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1348,
-        "agreement_count": 1420,
+        "surrogate_correct": 1336,
+        "agreement_count": 1441,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1348,
-        "fidelity": 0.142,
-        "posterior_kl_sum": 29431.392051696777,
-        "posterior_kl": 2.9431392051696776
+        "surrogate_acc": 0.1336,
+        "fidelity": 0.1441,
+        "posterior_kl_sum": 29278.209159851074,
+        "posterior_kl": 2.9278209159851074
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.0456,
-        "fidelity_change": -0.0539,
-        "posterior_kl_change": 0.3586002479553221
+        "accuracy_change": -0.03140000000000001,
+        "fidelity_change": -0.03489999999999999,
+        "posterior_kl_change": 0.20416029853820783
       }
     },
     {
@@ -13886,18 +13888,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1782,
-        "agreement_count": 1928,
+        "surrogate_correct": 1577,
+        "agreement_count": 1715,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1782,
-        "fidelity": 0.1928,
-        "posterior_kl_sum": 26289.554920196533,
-        "posterior_kl": 2.6289554920196534
+        "surrogate_acc": 0.1577,
+        "fidelity": 0.1715,
+        "posterior_kl_sum": 27520.721717834473,
+        "posterior_kl": 2.752072171783447
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.0022000000000000075,
-        "fidelity_change": -0.0030999999999999917,
-        "posterior_kl_change": 0.044416534805297836
+        "accuracy_change": -0.007300000000000001,
+        "fidelity_change": -0.007499999999999979,
+        "posterior_kl_change": 0.028411554336547518
       }
     },
     {
@@ -14336,18 +14338,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1572,
-        "agreement_count": 1642,
+        "surrogate_correct": 1552,
+        "agreement_count": 1629,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1572,
-        "fidelity": 0.1642,
-        "posterior_kl_sum": 27902.13437271118,
-        "posterior_kl": 2.790213437271118
+        "surrogate_acc": 0.1552,
+        "fidelity": 0.1629,
+        "posterior_kl_sum": 27705.973930358887,
+        "posterior_kl": 2.7705973930358887
       },
       "effect_vs_top_k": {
-        "accuracy_change": -0.0232,
-        "fidelity_change": -0.03169999999999998,
-        "posterior_kl_change": 0.20567448005676248
+        "accuracy_change": -0.009800000000000003,
+        "fidelity_change": -0.016100000000000003,
+        "posterior_kl_change": 0.04693677558898912
       }
     }
   ],
@@ -14417,13 +14419,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1582,
-        "agreement_count": 1670,
+        "surrogate_correct": 1540,
+        "agreement_count": 1642,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1582,
-        "fidelity": 0.167,
-        "posterior_kl_sum": 27853.35219192505,
-        "posterior_kl": 2.785335219192505
+        "surrogate_acc": 0.154,
+        "fidelity": 0.1642,
+        "posterior_kl_sum": 27670.20680999756,
+        "posterior_kl": 2.7670206809997557
       }
     },
     "top17_all_extras_relation": "lab05_weight_plus_last_linear_bias"
@@ -14435,5 +14437,5 @@
     "plot": "results/lab/06_weight/metrics.png",
     "mask_pattern": "results/lab/06_weight/<case>_mask.pt"
   },
-  "created_at": "2026-07-16T13:11:03.540467+00:00"
+  "created_at": "2026-07-16T16:45:26.355018+00:00"
 }

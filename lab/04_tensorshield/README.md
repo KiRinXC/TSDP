@@ -38,7 +38,7 @@ unit 121 在所有 k 中固定保护。`last_linear.weight` 从 k=3 起进入前
 ```text
 数据划分          dataset/MS/c100/manifest.json 中的 query_pool_ms 与 eval_ms
 victim            weights/MS/victim/resnet18/c100/best.pth
-surrogate 初始化  ImageNet-1K 官方预训练 ResNet18
+surrogate 初始化  formal_victim_then_public_v1：ImageNet-1K backbone + 固定随机分类头
 攻击者可观测输出  victim soft posterior
 query transform   确定性的 test transform
 query budget      500，即 CIFAR-100 训练集的 1%
@@ -51,8 +51,13 @@ query budget      500，即 CIFAR-100 训练集的 1%
 学习率调度        StepLR，step_size=60，gamma=0.1
 主要评估点        第 100 轮 end；不使用 eval_ms 选点或选择 k
 原始指标          surrogate accuracy、fidelity、posterior KL
-随机种子          每个 k 均重置为 42
+随机种子          每个 k 均使用 canonical seed 42，与正式 TensorShield 单点相同
 ```
+
+`formal_victim_then_public_v1` 由正式共享初始化器构造，不依赖 Lab 调用前的 RNG 消耗。
+因此同一 Top-10 mask、query 顺序与训练协议应复现正式 TensorShield 单点的实验定义，
+而不再产生另一条随机分类头轨迹。不同 CUDA 硬件之间仍可能存在极小数值差异，不要求
+逐位一致。
 
 为避免把 `eval_ms` 用作训练过程中的选择信号，每个 k 只在 100 轮训练结束后评估一次。无保护和全保护不重复训练，只作为图中的当前正式参考线。Lab 输出不写入正式 `results/MS` 索引，也不保存 surrogate checkpoint。
 
@@ -123,47 +128,62 @@ results/lab/04_tensorshield/drop_10_mask.pt         删除 rank-10 的 mask
 results/lab/04_tensorshield/drop_05_10_mask.pt      同时删除 rank-5/rank-10 的 mask
 ```
 
-## Eligible rank 窗口消融
+## Eligible rank 位置集合消融
 
-从 17 个 eligible weight 中排除 `last_linear.weight`，得到 16 个非分类头候选。窗口实验选择该顺序的前 10 和后 10，并为两组固定加入 `last_linear.weight` 与 `last_linear.bias`，从而只比较非分类头候选位置，避免分类头状态成为混杂因素：
+从 17 个 eligible weight 中排除 `last_linear.weight`，得到 16 个非分类头候选。这里的候选位置是该 16 项过滤序列中的 1-based 编号，不是 `state_dict` 的 unit index。实验保留前 10、后 10 两个连续窗口，并新增覆盖头部、中部与尾部的 `spread_10` 分散集合：
 
 ```text
-窗口       候选位置   保护的 10 个非分类头 eligible weight
-first_10   1-10       layer1.1.conv1.weight, layer2.0.conv1.weight,
-                      layer1.0.conv1.weight, layer1.1.conv2.weight,
-                      layer2.0.conv2.weight, layer2.1.conv1.weight,
-                      layer1.0.conv2.weight, layer3.0.conv1.weight,
-                      layer2.1.conv2.weight, layer3.0.conv2.weight
-last_10    7-16       layer1.0.conv2.weight, layer3.0.conv1.weight,
-                      layer2.1.conv2.weight, layer3.0.conv2.weight,
-                      layer4.0.conv1.weight, layer4.0.conv2.weight,
-                      layer4.1.conv1.weight, layer4.1.conv2.weight,
-                      layer3.1.conv2.weight, layer3.1.conv1.weight
+集合        候选位置                        保护的 10 个非分类头 eligible weight
+first_10    1-10                            layer1.1.conv1.weight, layer2.0.conv1.weight,
+                                             layer1.0.conv1.weight, layer1.1.conv2.weight,
+                                             layer2.0.conv2.weight, layer2.1.conv1.weight,
+                                             layer1.0.conv2.weight, layer3.0.conv1.weight,
+                                             layer2.1.conv2.weight, layer3.0.conv2.weight
+spread_10   1,2,3,5,7,9,11,13,15,16        layer1.1.conv1.weight, layer2.0.conv1.weight,
+                                             layer1.0.conv1.weight, layer2.0.conv2.weight,
+                                             layer1.0.conv2.weight, layer2.1.conv2.weight,
+                                             layer4.0.conv1.weight, layer4.1.conv1.weight,
+                                             layer3.1.conv2.weight, layer3.1.conv1.weight
+last_10     7-16                            layer1.0.conv2.weight, layer3.0.conv1.weight,
+                                             layer2.1.conv2.weight, layer3.0.conv2.weight,
+                                             layer4.0.conv1.weight, layer4.0.conv2.weight,
+                                             layer4.1.conv1.weight, layer4.1.conv2.weight,
+                                             layer3.1.conv2.weight, layer3.1.conv1.weight
 ```
 
-两组均额外保护分类头 weight 与 bias，并使用 `replace`。每组只训练一次，均沿用前缀曲线的 CIFAR-100 数据划分、500 条 soft posterior query、确定性 test transform、公开预训练初始化、种子 42、全参数微调、100 轮训练和 end-only 评估。
+三组均额外固定保护 unit 120 `last_linear.weight` 与 unit 121 `last_linear.bias`，分类头模式统一为 `replace`。每组共保护 12 个 unit，保护成本如下：
 
-两组都选择 10 个非分类头候选并使用相同分类头控制，但 tensor 尺寸不同，因此并非等参数成本比较。结果使用三联直方图，横轴类别标签显示实际保护参数比例，同时报告原始三项 MS 指标。
+```text
+集合        非头候选数   保护参数       参数比例
+first_10            10   1,599,588      14.2467%
+spread_10           10   5,249,124      46.7511%
+last_10             10  10,557,540      94.0303%
+```
 
-先验证两个窗口、mask 和分类头模式：
+三组均沿用前缀曲线的 CIFAR-100 数据划分、500 条 soft posterior query、确定性 test transform、`formal_victim_then_public_v1` 初始化、种子 42、全参数微调、100 轮训练和 end-only 评估。每组独立重放 canonical 构造轨迹，不复用旧随机头结果。
+
+三组选择相同数量的非分类头候选并使用相同分类头控制，但 tensor 尺寸不同，因此并非等参数成本比较。结果使用三联直方图，横轴类别标签显示实际保护参数比例，同时报告原始三项 MS 指标。
+
+核对三个集合、分类头模式和 canonical 初始化协议：
 
 ```bash
 "$HOME/venvs/dl-py310-torch210-cu121/bin/python" lab/04_tensorshield/window.py --dry-run
 ```
 
-运行两组各一次训练并覆盖同语义结果：
+全量重跑三个位置集合并覆盖同语义旧结果：
 
 ```bash
 "$HOME/venvs/dl-py310-torch210-cu121/bin/python" lab/04_tensorshield/window.py
 ```
 
-新增输出为：
+运行后输出为：
 
 ```text
-results/lab/04_tensorshield/window.json          两个 eligible 窗口、保护统计与 end 指标
-results/lab/04_tensorshield/window.tsv           两组原始指标与保护成本
-results/lab/04_tensorshield/window_history.tsv   两组各 100 轮 query 训练记录
-results/lab/04_tensorshield/window.png           两个窗口的三项 MS 指标三联直方图
+results/lab/04_tensorshield/window.json          三个候选集合、保护统计与 end 指标
+results/lab/04_tensorshield/window.tsv           三组候选位置、原始指标与保护成本
+results/lab/04_tensorshield/window_history.tsv   三组各 100 轮、共 300 轮 query 训练记录
+results/lab/04_tensorshield/window.png           三个集合的三项 MS 指标三联直方图
 results/lab/04_tensorshield/first_10_mask.pt      前 10 候选加分类头的紧凑保护掩码
+results/lab/04_tensorshield/spread_10_mask.pt     分散 10 候选加分类头的紧凑保护掩码
 results/lab/04_tensorshield/last_10_mask.pt       后 10 候选加分类头的紧凑保护掩码
 ```

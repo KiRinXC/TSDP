@@ -27,7 +27,7 @@ query_pool_ms  从同一官方训练集随机无放回抽取 1%
 eval_ms        官方 test 或 validation split；普通 victim 逐轮评估，surrogate 用于攻击评估
 ```
 
-query 因而可能与 victim 训练数据重叠，这是当前论文 baseline 协议的有意选择，不是数据泄漏 bug。普通 victim 不另划 validation split，而是与 TensorShield、TEESlice 两个参考仓库保持一致，在 `eval_ms` 上逐轮评估并保存 accuracy 最高的 `best.pth`；该 checkpoint 用于生成 query 输出。这个约定只适用于 victim 固定，不能用于选择 surrogate 正式结果。随机种子统一为 `42`。
+query 因而可能与 victim 训练数据重叠，这是当前论文 baseline 协议的有意选择，不是数据泄漏 bug。普通 victim 不另划 validation split，而是与 TensorShield、TEESlice 两个参考仓库保持一致，在 `eval_ms` 上逐轮评估并保存 accuracy 最高的 `best.pth`；该 checkpoint 用于生成 query 输出。这个约定只适用于 victim 固定，不能用于选择 surrogate 正式结果。单随机种子正式结果当前统一为 `42`。普通 MS surrogate 必须按 `formal_victim_then_public_v1` 重放目标类别 victim→ImageNet public→目标类别任务头的构造轨迹，并为 query DataLoader 使用由同一实验 seed 显式构造的 generator；完整规则见 `AGENTS.md`。后续多随机种子实验只替换预先固化的 seed，不改变构造顺序。
 
 四个数据集的正式 query budget：
 
@@ -218,11 +218,15 @@ TEESlice 结果只在 `results/MS/resnet18/c100/teeslice/` 保存，并标记为
 - `lab/01_kmeans`：预训练特征聚类验证。
 - `lab/02_head`：分类头 replace/adapter 与 frozen/finetune 消融；结论支持参数不可见时使用 replace，并统一对 surrogate 执行 finetune。暴露分类头仍按正式可见性规则复制。
 - `lab/03_baseline`：四种通用 baseline 曲线、分类头与 TensorShield 单点、TEESlice standalone 单点、普通 victim 的 soft no/full 主参考线，以及 hard-label 全保护辅助参考线的三指标总图。
-- `lab/04_tensorshield`：作者 eligible rank 的 Top-1 至 Top-17 前缀曲线、Top-12 内 rank-5/rank-10 删除消融，以及排除分类头后前 10/后 10 候选窗口对照；每组均固定保护分类头 bias，窗口对照固定保护完整分类头。
-- `lab/05_state`：五种完整 state 类型与十三种参数语义组的独立保护对比。结果表明主路径 Conv 不能单独解释近黑盒效果，后续通道块候选还需覆盖 Stem、downsample、BN affine 和分类头 weight；BN buffer 只作为执行状态记录，不能解释为独立长期安全来源。
-- `lab/06_weight`：在 Top-10 至 Top-17 上分别补充全部 BN gamma、downsample Conv、二者组合、Stem Conv 与三类并集。BN gamma 在所有 k 上稳定提供最大或接近最大的低成本增益；Top-16/17 + BN gamma 及其 downsample 组合均达到 soft 黑盒参考，但组合没有提前首次达到黑盒的 k，且多保护 `1.5322%` 参数。并集与二项组合均存在非单调点，后续需要评估攻击者主动忽略部分暴露状态的更强初始化选择。
+- `lab/04_tensorshield`：作者 eligible rank 的 Top-1 至 Top-17 前缀曲线、Top-12 内 rank-5/rank-10 删除消融，以及排除分类头后的候选位置集合对照；前缀与删除消融固定保护分类头 bias，位置集合固定保护完整分类头。三项实验现均采用 `formal_victim_then_public_v1`、seed 42 全量运行。位置集合的 `first_10` 与主曲线 Top-11 三指标逐值相同；`spread_10` 为 `0.2121/0.2342/2.419835`，明显弱于 `first_10`，说明分散或后部候选没有因保护参数更多而改善效果。
+- `lab/05_state`：五种完整 state 类型与十三种参数语义组的独立保护对比。结果表明主路径 Conv 不能单独解释近黑盒效果，后续通道块候选还需覆盖 Stem、downsample、BN affine 和分类头 weight；BN buffer 只作为执行状态记录，不能解释为独立长期安全来源。统一轨迹后，Lab05 `head` 与正式 `head_only` 的 end 三指标逐值相同。
+- `lab/06_weight`：在 Top-10 至 Top-17 上分别补充全部 BN gamma、downsample Conv、二者组合、Stem Conv 与三类并集。统一轨迹后，`Top-10 + BN gamma` 已以 `9.0362%` 参数比例达到 `0.1506/0.1551/2.8540`，同时达到当前 soft 黑盒三项参考线；Downsample 单项未严格达到三线，二项组合和并集仍存在非单调点。该结论尚需多随机种子复现，也不能替代后续跨模型通道块选择方法。
 
 Lab 结果不能混入正式主实验索引，但也不能以“清理历史”为由删除仍承担独立结论的 Lab。
+
+### 4.9 临时 ARC 通道块验证
+
+`temp/` 保存当前 Attack-Recoverability Cut 的一次完整 8% scientific gate。它从 victim_train 中排除正式 query，使用互不重叠的 discovery query/holdout 优化 272 个计算图对齐通道块的攻击可恢复性门，再固定 mask 运行正式 500-query soft MS。当前选择 37 个块，连同完整分类头保护 `7.9962%` 参数，end 指标为 `0.2694/0.2968/2.133637`，明显弱于 TensorShield，未通过 gate。因此不能把当前 ARC 规则升级为正式方法，也不能继续只靠增加独立节点门预算；后续若继续，应先引入显式边传播或连通路径规则。`temp/output/end.pth` 是可再生的大型临时 checkpoint，只保留在本地并由 Git 忽略；mask、选择日志、攻击日志和指标需要随代码提交。
 
 ## 5. 当前卡在哪里
 

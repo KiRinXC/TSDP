@@ -12,12 +12,14 @@
   "seed": 42,
   "randomization": {
     "reset_before_each_surrogate_initialization": true,
+    "surrogate_initialization": "formal_victim_then_public_v1",
+    "surrogate_initialization_seed": 42,
     "query_sampler_seed": 42,
     "purpose": "controlled_prefix_comparison"
   },
   "source": {
     "prefix_metrics": "results/lab/04_tensorshield/metrics.json",
-    "prefix_metrics_sha256": "c05c7d158ff243878200ad40414c153630355d51a5de010e4ac12b570585c9a7",
+    "prefix_metrics_sha256": "f090bb890ce295db2154fb7d700bd2d9d56d9771d7483768d9375d7f54dbc023",
     "author_rank_sha256": "86304f95210a12ed118cefcaca7b10775716780cd7f1836ca3c3f4b8b3f37b1a",
     "full_top12": [
       "layer1.1.conv1.weight",
@@ -204,13 +206,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1934,
-        "agreement_count": 2121,
+        "surrogate_correct": 1655,
+        "agreement_count": 1757,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1934,
-        "fidelity": 0.2121,
-        "posterior_kl_sum": 24537.523956298828,
-        "posterior_kl": 2.453752395629883
+        "surrogate_acc": 0.1655,
+        "fidelity": 0.1757,
+        "posterior_kl_sum": 26904.428455352783,
+        "posterior_kl": 2.6904428455352782
       },
       "attack_gain_from_deletion": {
         "accuracy_increase": 0.0,
@@ -348,18 +350,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1966,
-        "agreement_count": 2147,
+        "surrogate_correct": 1635,
+        "agreement_count": 1745,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1966,
-        "fidelity": 0.2147,
-        "posterior_kl_sum": 24620.208423614502,
-        "posterior_kl": 2.4620208423614502
+        "surrogate_acc": 0.1635,
+        "fidelity": 0.1745,
+        "posterior_kl_sum": 27146.428680419922,
+        "posterior_kl": 2.714642868041992
       },
       "attack_gain_from_deletion": {
-        "accuracy_increase": 0.0032000000000000084,
-        "fidelity_increase": 0.002599999999999991,
-        "posterior_kl_decrease": -0.008268446731567458
+        "accuracy_increase": -0.0020000000000000018,
+        "fidelity_increase": -0.0012000000000000066,
+        "posterior_kl_decrease": -0.024200022506713825
       }
     },
     {
@@ -492,18 +494,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1985,
-        "agreement_count": 2154,
+        "surrogate_correct": 1623,
+        "agreement_count": 1753,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1985,
-        "fidelity": 0.2154,
-        "posterior_kl_sum": 24521.017749786377,
-        "posterior_kl": 2.4521017749786376
+        "surrogate_acc": 0.1623,
+        "fidelity": 0.1753,
+        "posterior_kl_sum": 27044.148162841797,
+        "posterior_kl": 2.7044148162841797
       },
       "attack_gain_from_deletion": {
-        "accuracy_increase": 0.005100000000000021,
-        "fidelity_increase": 0.0032999999999999974,
-        "posterior_kl_decrease": 0.001650620651245216
+        "accuracy_increase": -0.0032000000000000084,
+        "fidelity_increase": -0.0003999999999999837,
+        "posterior_kl_decrease": -0.013971970748901441
       }
     },
     {
@@ -630,18 +632,18 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 2011,
-        "agreement_count": 2166,
+        "surrogate_correct": 1579,
+        "agreement_count": 1705,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.2011,
-        "fidelity": 0.2166,
-        "posterior_kl_sum": 24572.841835021973,
-        "posterior_kl": 2.4572841835021975
+        "surrogate_acc": 0.1579,
+        "fidelity": 0.1705,
+        "posterior_kl_sum": 27184.30680847168,
+        "posterior_kl": 2.718430680847168
       },
       "attack_gain_from_deletion": {
-        "accuracy_increase": 0.007700000000000012,
-        "fidelity_increase": 0.004499999999999976,
-        "posterior_kl_decrease": -0.0035317878723146734
+        "accuracy_increase": -0.007599999999999996,
+        "fidelity_increase": -0.005199999999999982,
+        "posterior_kl_decrease": -0.027987835311889864
       }
     }
   ],
@@ -710,5 +712,5 @@
     "history": "results/lab/04_tensorshield/ablation_history.tsv",
     "plot": "results/lab/04_tensorshield/ablation.png"
   },
-  "created_at": "2026-07-16T09:18:07.076597+00:00"
+  "created_at": "2026-07-16T15:15:03.917988+00:00"
 }

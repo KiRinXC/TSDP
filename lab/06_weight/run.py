@@ -79,8 +79,8 @@ WEIGHT_DECAY = 5e-4
 LR_STEP = 60
 LR_GAMMA = 0.1
 SEED = 42
-LAB04_METRICS_SHA256 = "c05c7d158ff243878200ad40414c153630355d51a5de010e4ac12b570585c9a7"
-LAB05_METRICS_SHA256 = "b96e6fcbf6bf7157ef80fe440a2b2789441c5cefdfe47b793f5505a6ce16b1c4"
+LAB04_METRICS_SHA256 = "f090bb890ce295db2154fb7d700bd2d9d56d9771d7483768d9375d7f54dbc023"
+LAB05_METRICS_SHA256 = "0c44d916c868cb3e6779a790f76876af23bf993f84f4a965cc12d9d8e468a506"
 EXPECTED_EXTRA_COUNTS = {
     "bn_gamma": (20, 4_800),
     "downsample_conv": (3, 172_032),
@@ -285,6 +285,7 @@ def initialize_case(
         protected_units=unit_spec,
         protected_layers=None,
         protected_scalars=None,
+        initialization_seed=SEED,
     )
     if not plan.classifier_protected or plan.head_mode != "replace":
         raise RuntimeError(f"{case.name} 必须完整保护分类头，实际为 {plan.head_mode}。")
@@ -351,10 +352,13 @@ def load_lab04(path: Path) -> tuple[dict[str, object], dict[int, dict[str, objec
     for field, value in expected.items():
         if payload.get(field) != value:
             raise ValueError(f"Lab04 {field}={payload.get(field)!r}，期望 {value!r}。")
-    if payload.get("randomization", {}).get(
-        "reset_before_each_surrogate_initialization"
-    ) is not True:
+    randomization = payload.get("randomization", {})
+    if randomization.get("reset_before_each_surrogate_initialization") is not True:
         raise ValueError("Lab04 没有固定每个 Top-k 的初始化 RNG。")
+    if randomization.get("surrogate_initialization") != "formal_victim_then_public_v1":
+        raise ValueError("Lab04 surrogate 初始化方案不是 canonical 轨迹。")
+    if randomization.get("surrogate_initialization_seed") != SEED:
+        raise ValueError("Lab04 surrogate 初始化 seed 与 Lab06 不一致。")
     ranking = tuple(payload.get("source", {}).get("eligible_rank", ()))
     if ranking != tuple(AUTHOR_RESNET18_C100_ELIGIBLE_RANK):
         raise ValueError("Lab04 eligible rank 与当前作者固定列表不一致。")
@@ -680,6 +684,15 @@ def validate_reuse_payload(
     for field, value in expected.items():
         if payload.get(field) != value:
             raise ValueError(f"已有 Lab06 {field} 与当前协议不一致，拒绝复用。")
+    expected_randomization = {
+        "reset_before_each_surrogate_initialization": True,
+        "surrogate_initialization": "formal_victim_then_public_v1",
+        "surrogate_initialization_seed": SEED,
+        "query_sampler_seed": SEED,
+        "purpose": "controlled_weight_semantic_closure",
+    }
+    if payload.get("randomization") != expected_randomization:
+        raise ValueError("已有 Lab06 随机初始化或 query sampler 轨迹不一致，拒绝复用。")
     study = payload.get("study", {})
     if study.get("top_k_values") != list(TOP_K_VALUES):
         raise ValueError("已有 Lab06 Top-k 范围与当前协议不一致，拒绝复用。")
@@ -820,6 +833,8 @@ def main() -> int:
         "label_mode": "soft",
         "query_transform": "test",
         "seed": SEED,
+        "surrogate_initialization": "formal_victim_then_public_v1",
+        "surrogate_initialization_seed": SEED,
         "top_k_values": list(TOP_K_VALUES),
         "variants": list(VARIANTS),
         "eligible_rank": list(ranking),
@@ -953,6 +968,8 @@ def main() -> int:
             "seed": SEED,
             "randomization": {
                 "reset_before_each_surrogate_initialization": True,
+                "surrogate_initialization": "formal_victim_then_public_v1",
+                "surrogate_initialization_seed": SEED,
                 "query_sampler_seed": SEED,
                 "purpose": "controlled_weight_semantic_closure",
             },

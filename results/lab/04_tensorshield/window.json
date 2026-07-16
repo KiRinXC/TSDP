@@ -1,7 +1,7 @@
 {
-  "schema_version": 1,
+  "schema_version": 3,
   "experiment": "04_tensorshield",
-  "study": "eligible_rank_head_control_windows",
+  "study": "eligible_rank_head_control_position_sets",
   "protocol": "MS",
   "attack_protocol": "posterior_replace_finetune_v2",
   "dataset": "c100",
@@ -12,13 +12,14 @@
   "seed": 42,
   "randomization": {
     "reset_before_each_surrogate_initialization": true,
+    "surrogate_initialization": "formal_victim_then_public_v1",
+    "surrogate_initialization_seed": 42,
     "query_sampler_seed": 42,
-    "purpose": "controlled_eligible_rank_window_comparison"
+    "purpose": "controlled_eligible_rank_position_set_comparison"
   },
   "source": {
     "method": "TensorShield",
     "rank_provenance": "author_confirmed_final_rank",
-    "rank_scope": "eligible_16_non_head_weight_rank",
     "eligible_rank": [
       "layer1.1.conv1.weight",
       "layer2.0.conv1.weight",
@@ -39,63 +40,15 @@
       "layer3.1.conv1.weight"
     ],
     "eligible_rank_sha256": "da056dbbb30aca812dbeb4285c78eb385ad63206963ddc0c61d295dac8987252",
-    "non_head_candidate_rank": [
-      "layer1.1.conv1.weight",
-      "layer2.0.conv1.weight",
-      "layer1.0.conv1.weight",
-      "layer1.1.conv2.weight",
-      "layer2.0.conv2.weight",
-      "layer2.1.conv1.weight",
-      "layer1.0.conv2.weight",
-      "layer3.0.conv1.weight",
-      "layer2.1.conv2.weight",
-      "layer3.0.conv2.weight",
-      "layer4.0.conv1.weight",
-      "layer4.0.conv2.weight",
-      "layer4.1.conv1.weight",
-      "layer4.1.conv2.weight",
-      "layer3.1.conv2.weight",
-      "layer3.1.conv1.weight"
-    ],
     "fixed_head_states": [
       "last_linear.weight",
       "last_linear.bias"
     ],
-    "windows": {
-      "first_10": {
-        "candidate_start": 1,
-        "candidate_end": 10,
-        "selected_weight_names": [
-          "layer1.1.conv1.weight",
-          "layer2.0.conv1.weight",
-          "layer1.0.conv1.weight",
-          "layer1.1.conv2.weight",
-          "layer2.0.conv2.weight",
-          "layer2.1.conv1.weight",
-          "layer1.0.conv2.weight",
-          "layer3.0.conv1.weight",
-          "layer2.1.conv2.weight",
-          "layer3.0.conv2.weight"
-        ]
-      },
-      "last_10": {
-        "candidate_start": 7,
-        "candidate_end": 16,
-        "selected_weight_names": [
-          "layer1.0.conv2.weight",
-          "layer3.0.conv1.weight",
-          "layer2.1.conv2.weight",
-          "layer3.0.conv2.weight",
-          "layer4.0.conv1.weight",
-          "layer4.0.conv2.weight",
-          "layer4.1.conv1.weight",
-          "layer4.1.conv2.weight",
-          "layer3.1.conv2.weight",
-          "layer3.1.conv1.weight"
-        ]
-      }
-    },
     "comparison_scope": "same_non_head_candidate_count_and_same_head_control_not_same_param_cost"
+  },
+  "assembly": {
+    "mode": "full_canonical_rerun",
+    "reused_cases": []
   },
   "victim_checkpoint": "weights/MS/victim/resnet18/c100/best.pth",
   "victim_checkpoint_sha256": "f6233c9361ed958846cdbccc8f96c9b3425c139d961cb25410409fb47179f8d4",
@@ -119,6 +72,7 @@
     "evaluation_schedule": "end_only",
     "trained_cases": [
       "first_10",
+      "spread_10",
       "last_10"
     ]
   },
@@ -129,7 +83,19 @@
   "results": [
     {
       "case": "first_10",
-      "origin": "trained_eligible_window",
+      "selection_kind": "contiguous_window",
+      "candidate_positions": [
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10
+      ],
       "candidate_start": 1,
       "candidate_end": 10,
       "selected_weight_names": [
@@ -252,18 +218,176 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 2200,
-        "agreement_count": 2353,
+        "surrogate_correct": 1757,
+        "agreement_count": 1910,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.22,
-        "fidelity": 0.2353,
-        "posterior_kl_sum": 23325.78148651123,
-        "posterior_kl": 2.3325781486511232
+        "surrogate_acc": 0.1757,
+        "fidelity": 0.191,
+        "posterior_kl_sum": 26074.575275421143,
+        "posterior_kl": 2.607457527542114
+      }
+    },
+    {
+      "case": "spread_10",
+      "selection_kind": "explicit_positions",
+      "candidate_positions": [
+        1,
+        2,
+        3,
+        5,
+        7,
+        9,
+        11,
+        13,
+        15,
+        16
+      ],
+      "candidate_start": null,
+      "candidate_end": null,
+      "selected_weight_names": [
+        "layer1.1.conv1.weight",
+        "layer2.0.conv1.weight",
+        "layer1.0.conv1.weight",
+        "layer2.0.conv2.weight",
+        "layer1.0.conv2.weight",
+        "layer2.1.conv2.weight",
+        "layer4.0.conv1.weight",
+        "layer4.1.conv1.weight",
+        "layer3.1.conv2.weight",
+        "layer3.1.conv1.weight"
+      ],
+      "protection": {
+        "implementation_defense": "custom",
+        "defense": "custom",
+        "tensor_unit_count": 122,
+        "protected_unit_count": 12,
+        "protection_mask_sha256": "b771c0fa3306467ec09fb5d49383fe613f60d665256233122600195e11c244bd",
+        "classifier_protected": true,
+        "head_mode": "replace",
+        "total_param_count": 11227812,
+        "protected_param_count": 5249124,
+        "protected_param_ratio": 0.46751085607774695,
+        "magnitude_eligible_count": null,
+        "magnitude_protected_count": null,
+        "selected_units": [
+          {
+            "rank": 1,
+            "index": 18,
+            "state_name": "layer1.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 2,
+            "index": 30,
+            "state_name": "layer2.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 73728
+          },
+          {
+            "rank": 4,
+            "index": 6,
+            "state_name": "layer1.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 6,
+            "index": 36,
+            "state_name": "layer2.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 8,
+            "index": 12,
+            "state_name": "layer1.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 10,
+            "index": 54,
+            "state_name": "layer2.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 12,
+            "index": 90,
+            "state_name": "layer4.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 1179648
+          },
+          {
+            "rank": 14,
+            "index": 108,
+            "state_name": "layer4.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 2359296
+          },
+          {
+            "rank": 16,
+            "index": 84,
+            "state_name": "layer3.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 589824
+          },
+          {
+            "rank": 17,
+            "index": 78,
+            "state_name": "layer3.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 589824
+          },
+          {
+            "rank": 3,
+            "index": 120,
+            "state_name": "last_linear.weight",
+            "state_kind": "parameter",
+            "numel": 51200
+          },
+          {
+            "rank": null,
+            "index": 121,
+            "state_name": "last_linear.bias",
+            "state_kind": "parameter",
+            "numel": 100
+          }
+        ],
+        "mask_path": "results/lab/04_tensorshield/spread_10_mask.pt"
+      },
+      "primary": {
+        "evaluation": "end",
+        "epoch": 100
+      },
+      "end": {
+        "eval_count": 10000,
+        "victim_correct": 6182,
+        "surrogate_correct": 2121,
+        "agreement_count": 2342,
+        "victim_acc": 0.6182,
+        "surrogate_acc": 0.2121,
+        "fidelity": 0.2342,
+        "posterior_kl_sum": 24198.353588104248,
+        "posterior_kl": 2.419835358810425
       }
     },
     {
       "case": "last_10",
-      "origin": "trained_eligible_window",
+      "selection_kind": "contiguous_window",
+      "candidate_positions": [
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15,
+        16
+      ],
       "candidate_start": 7,
       "candidate_end": 16,
       "selected_weight_names": [
@@ -386,13 +510,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 2324,
-        "agreement_count": 2514,
+        "surrogate_correct": 2120,
+        "agreement_count": 2283,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.2324,
-        "fidelity": 0.2514,
-        "posterior_kl_sum": 23059.418907165527,
-        "posterior_kl": 2.3059418907165528
+        "surrogate_acc": 0.212,
+        "fidelity": 0.2283,
+        "posterior_kl_sum": 24204.54048538208,
+        "posterior_kl": 2.420454048538208
       }
     }
   ],
@@ -459,7 +583,12 @@
   "outputs": {
     "data": "results/lab/04_tensorshield/window.tsv",
     "history": "results/lab/04_tensorshield/window_history.tsv",
-    "plot": "results/lab/04_tensorshield/window.png"
+    "plot": "results/lab/04_tensorshield/window.png",
+    "masks": {
+      "first_10": "results/lab/04_tensorshield/first_10_mask.pt",
+      "spread_10": "results/lab/04_tensorshield/spread_10_mask.pt",
+      "last_10": "results/lab/04_tensorshield/last_10_mask.pt"
+    }
   },
-  "created_at": "2026-07-16T08:29:43.638661+00:00"
+  "created_at": "2026-07-16T15:46:36.562535+00:00"
 }

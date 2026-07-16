@@ -1,7 +1,12 @@
 #!/usr/bin/env python3
 """MS surrogate 保护策略插件。"""
 
-from .initialize import ExposureFreezer, initialize_surrogate
+from .initialize import (
+    ExposureFreezer,
+    build_public_model,
+    initialize_surrogate,
+    reset_surrogate_initialization,
+)
 from .head import build_head_only
 from .magnitude import build_magnitude_masks
 from .mask import (
@@ -25,6 +30,7 @@ __all__ = [
     "build_layer_groups",
     "build_head_only",
     "build_magnitude_masks",
+    "build_public_model",
     "build_mask_selection",
     "build_resnet18_layer_groups",
     "build_resnet18_tensor_units",
@@ -37,5 +43,6 @@ __all__ = [
     "protection_mask_sha256",
     "resolve_unit_selection",
     "resolve_resnet18_layer_units",
+    "reset_surrogate_initialization",
     "save_protection_mask",
 ]

@@ -21,11 +21,14 @@ from common.trainer import configure_reproducibility  # noqa: E402
 from core.artifacts import display_path, sha256_file  # noqa: E402
 from core.config import ATTACK_PROTOCOL_VERSION  # noqa: E402
 from core.data import build_victim  # noqa: E402
-from defense import build_mask_selection, protection_mask_sha256  # noqa: E402
+from defense import (  # noqa: E402
+    build_mask_selection,
+    build_public_model as build_seeded_public_model,
+    protection_mask_sha256,
+)
 from defense.base import DefenseOptions  # noqa: E402
 from defense.mask import build_protection_mask_payload  # noqa: E402
 from models import imagenet as imagenet_models  # noqa: E402
-from models.imagenet import load_official_imagenet_weights  # noqa: E402
 
 
 MODEL_NAME = "resnet18"
@@ -54,10 +57,13 @@ MAGNITUDE_ANCHORS = (
 
 
 def build_public_model(weight_path: Path) -> nn.Module:
-    model = imagenet_models.resnet18(num_classes=1000)
-    load_official_imagenet_weights(MODEL_NAME, model, str(weight_path), strict=True)
-    model.last_linear = nn.Linear(model.last_linear.in_features, NUM_CLASSES)
-    return model
+    return build_seeded_public_model(
+        imagenet_models.resnet18,
+        MODEL_NAME,
+        weight_path,
+        NUM_CLASSES,
+        initialization_seed=SEED,
+    )
 
 
 def magnitude_eligible_count(model: nn.Module) -> int:

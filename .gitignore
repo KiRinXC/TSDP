@@ -11,6 +11,9 @@ __pycache__/
 /weights/victim/**
 /weights/MS/**
 
+# 临时验证产生的大型 surrogate checkpoint；指标、日志和 mask 可提交
+/temp/output/*.pth
+
 # 本地 MS 派生产物，可由正式脚本重新生成
 /dataset/MS/*/
 

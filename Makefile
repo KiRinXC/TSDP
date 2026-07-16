@@ -1,4 +1,4 @@
-.PHONY: help install env gpu unit check prepare verify datasets dataset download-datasets weights pre-train c10 c100 s10 t200
+.PHONY: help install env gpu unit results check prepare verify datasets dataset download-datasets weights pre-train c10 c100 s10 t200
 
 ENV_NAME ?= dl-py310-torch210-cu121
 VENV ?= $(HOME)/venvs/$(ENV_NAME)
@@ -13,6 +13,7 @@ help:
 	@printf '  %-18s %s\n' 'env' 'verify Python and dependency versions; GPU may be unavailable'
 	@printf '  %-18s %s\n' 'gpu' 'strictly verify WSL GPU and run CUDA forward/backward smoke tests'
 	@printf '  %-18s %s\n' 'unit' 'run the MS, TensorShield, and TEESlice unit tests'
+	@printf '  %-18s %s\n' 'results' 'verify Lab/temp metrics, histories, masks, hashes, plots, and READMEs'
 	@printf '  %-18s %s\n' 'check' 'run gpu, unit, and dataset/protocol verification'
 	@printf '  %-18s %s\n' 'prepare' 'download public datasets and ImageNet pretrained weights; no training'
 	@printf '  %-18s %s\n' 'verify' 'verify public datasets and MS splits; use VERIFY_ARGS="" to check archives'
@@ -39,7 +40,10 @@ unit:
 		verify.test_tensorshield \
 		verify.test_teeslice
 
-check: gpu unit verify
+results:
+	PYTHONDONTWRITEBYTECODE=1 "$(PYTHON)" verify/verify_lab.py
+
+check: gpu unit verify results
 
 prepare: datasets weights
 

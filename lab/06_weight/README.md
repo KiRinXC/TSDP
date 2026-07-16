@@ -36,7 +36,7 @@ Stem Conv                  1       9,408       0.0838%
 ```text
 数据划分          dataset/MS/c100/manifest.json 中的 query_pool_ms 与 eval_ms
 victim            weights/MS/victim/resnet18/c100/best.pth
-surrogate 初始化  ImageNet-1K 官方预训练 ResNet18
+surrogate 初始化  formal_victim_then_public_v1：ImageNet-1K backbone + 固定随机分类头
 攻击者可观测输出  victim soft posterior
 query transform   确定性的 test transform
 query budget      500，即 CIFAR-100 训练集的 1%
@@ -50,8 +50,10 @@ Top-k             TensorShield 作者 eligible rank 的 k=10,...,17
 学习率调度        StepLR，step_size=60，gamma=0.1
 主要评估点        第 100 轮 end；不使用 eval_ms 选点或选择 k
 原始指标          surrogate accuracy、fidelity、posterior KL
-随机种子          每个组合均在初始化前重置为 42
+随机种子          每个组合均把 seed 42 传给共享 canonical 初始化器
 ```
+
+每个组合独立重放与正式 MS 入口、Lab04 和 Lab05 相同的 canonical 构造轨迹。以后扩展多随机种子时只替换实验 seed，不改变 victim→public→任务头的构造顺序。
 
 `top_k` 的 8 个点直接读取 `results/lab/04_tensorshield/metrics.json`，并核对源文件 SHA256、mask、保护参数量和协议，不重复训练。其余五条曲线各训练 8 组，共新增 40 组、4,000 轮 query 训练。Lab05 只提供 `weight` 终点交叉参考，不参与结果复用。
 

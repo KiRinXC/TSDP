@@ -106,10 +106,17 @@ query 输入变换       与 posterior 生成一致的确定性 test transform
 分类头完整暴露      复制 victim 分类头，head_mode=exposed
 分类头部分保护      按 mask 混合随机初始化与 victim 标量，head_mode=mixed
 分类头完整保护      使用目标类别随机初始化 Linear，head_mode=replace
+随机初始化轨迹      formal_victim_then_public_v1，seed 42；与调用者此前 RNG 消耗无关
 训练方式            除无保护恒等上界外，所有参数共同 finetune
 正式 checkpoint     固定训练轮数后的 end.pth
 诊断 checkpoint     best.pth，仅记录 eval_ms accuracy 最高点，不进入主结果汇总
 ```
+
+`formal_victim_then_public_v1` 显式复现既有正式入口的初始化顺序：重置 PyTorch
+seed 后先构造一次目标类别 victim 结构，再构造 1000 类 ImageNet public 结构并替换为
+目标类别随机分类头。checkpoint 加载本身不消耗 RNG。该过程由共享初始化器完成，因此
+后续策略不能通过改变函数调用顺序得到不同的随机分类头。seed 42 下生成的 public
+初始状态与本协议调整前的正式入口逐 tensor 相同，现有正式 baseline 不因此失效。
 
 主保护策略不改变查询接口。`no_protection`、partial protection 和 `full_protection` 均读取 `posteriors.pt`，不得因为保护位置不同而切换 hard/soft。唯一例外是单独注册的 `hard_blackbox` 输出能力对比；它不参与 soft-posterior 保护策略排序，也不替换主黑盒下界。
 

@@ -33,7 +33,7 @@ TSDP/
 │       ├── 01_kmeans                ResNet18+CIFAR-100 特征聚类
 │       ├── 02_head                  全保护/随机保护的分类头与权重消融
 │       ├── 03_baseline              普通 MS 策略、双黑盒参考线与 TEESlice 独立点总览
-│       ├── 04_tensorshield          TensorShield eligible rank 的完整前缀、冗余及窗口消融
+│       ├── 04_tensorshield          TensorShield eligible rank 的完整前缀、冗余及位置集合消融
 │       ├── 05_state                 State 类型与参数语义保护的 MS 对比结果
 │       └── 06_weight                TensorShield Top-k 的遗漏 weight 语义闭包结果
 ├── models/                          统一模型结构及 TEESlice slice/backbone 接口
@@ -42,8 +42,10 @@ TSDP/
 │   ├── 01_kmeans                    ResNet18+CIFAR-100 特征聚类
 │   ├── 02_head                      分类头与权重训练方式消融
 │   ├── 03_baseline                  MS 策略保护比例、双黑盒参考线与三项指标总览
-│   ├── 04_tensorshield              TensorShield eligible rank 完整前缀、冗余与窗口验证
+│   ├── 04_tensorshield              TensorShield eligible rank 完整前缀、冗余与连续/分散集合验证
 │   ├── 05_state                     State 类型与参数语义保护对比
 │   └── 06_weight                    TensorShield Top-k 的遗漏 weight 语义闭包验证
+├── temp/                            当前攻击可恢复性通道块规则的临时验证
+│   └── output/                      ARC mask、选择日志、攻击指标与本地 checkpoint
 └── docs/                            参考论文
 ```

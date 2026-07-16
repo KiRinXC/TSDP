@@ -11,6 +11,8 @@
   "seed": 42,
   "randomization": {
     "reset_before_each_surrogate_initialization": true,
+    "surrogate_initialization": "formal_victim_then_public_v1",
+    "surrogate_initialization_seed": 42,
     "query_sampler_seed": 42,
     "purpose": "controlled_prefix_comparison"
   },
@@ -168,13 +170,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 5984,
-        "agreement_count": 8164,
+        "surrogate_correct": 5980,
+        "agreement_count": 8153,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.5984,
-        "fidelity": 0.8164,
-        "posterior_kl_sum": 1678.8581562042236,
-        "posterior_kl": 0.16788581562042237
+        "surrogate_acc": 0.598,
+        "fidelity": 0.8153,
+        "posterior_kl_sum": 1678.7546067237854,
+        "posterior_kl": 0.16787546067237855
       }
     },
     {
@@ -230,13 +232,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 5494,
-        "agreement_count": 6969,
+        "surrogate_correct": 5499,
+        "agreement_count": 6977,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.5494,
-        "fidelity": 0.6969,
-        "posterior_kl_sum": 4476.261707305908,
-        "posterior_kl": 0.4476261707305908
+        "surrogate_acc": 0.5499,
+        "fidelity": 0.6977,
+        "posterior_kl_sum": 4476.968200683594,
+        "posterior_kl": 0.44769682006835937
       }
     },
     {
@@ -300,13 +302,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 4056,
-        "agreement_count": 4657,
+        "surrogate_correct": 3493,
+        "agreement_count": 3923,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.4056,
-        "fidelity": 0.4657,
-        "posterior_kl_sum": 14565.945356369019,
-        "posterior_kl": 1.4565945356369019
+        "surrogate_acc": 0.3493,
+        "fidelity": 0.3923,
+        "posterior_kl_sum": 17570.92510986328,
+        "posterior_kl": 1.757092510986328
       }
     },
     {
@@ -378,13 +380,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 3919,
-        "agreement_count": 4436,
+        "surrogate_correct": 3282,
+        "agreement_count": 3681,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.3919,
-        "fidelity": 0.4436,
-        "posterior_kl_sum": 15358.023607254028,
-        "posterior_kl": 1.5358023607254028
+        "surrogate_acc": 0.3282,
+        "fidelity": 0.3681,
+        "posterior_kl_sum": 18441.415153503418,
+        "posterior_kl": 1.8441415153503418
       }
     },
     {
@@ -464,13 +466,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 3910,
-        "agreement_count": 4432,
+        "surrogate_correct": 3333,
+        "agreement_count": 3721,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.391,
-        "fidelity": 0.4432,
-        "posterior_kl_sum": 15236.86922454834,
-        "posterior_kl": 1.523686922454834
+        "surrogate_acc": 0.3333,
+        "fidelity": 0.3721,
+        "posterior_kl_sum": 18228.627285003662,
+        "posterior_kl": 1.8228627285003662
       }
     },
     {
@@ -558,13 +560,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 3627,
-        "agreement_count": 4076,
+        "surrogate_correct": 3011,
+        "agreement_count": 3331,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.3627,
-        "fidelity": 0.4076,
-        "posterior_kl_sum": 16694.901613235474,
-        "posterior_kl": 1.6694901613235473
+        "surrogate_acc": 0.3011,
+        "fidelity": 0.3331,
+        "posterior_kl_sum": 19750.754676818848,
+        "posterior_kl": 1.9750754676818847
       }
     },
     {
@@ -660,13 +662,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 3374,
-        "agreement_count": 3738,
+        "surrogate_correct": 2727,
+        "agreement_count": 2992,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.3374,
-        "fidelity": 0.3738,
-        "posterior_kl_sum": 17836.059394836426,
-        "posterior_kl": 1.7836059394836425
+        "surrogate_acc": 0.2727,
+        "fidelity": 0.2992,
+        "posterior_kl_sum": 20941.035346984863,
+        "posterior_kl": 2.0941035346984864
       }
     },
     {
@@ -770,13 +772,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 3279,
-        "agreement_count": 3646,
+        "surrogate_correct": 2732,
+        "agreement_count": 2992,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.3279,
-        "fidelity": 0.3646,
-        "posterior_kl_sum": 18039.983470916748,
-        "posterior_kl": 1.8039983470916747
+        "surrogate_acc": 0.2732,
+        "fidelity": 0.2992,
+        "posterior_kl_sum": 21010.542724609375,
+        "posterior_kl": 2.1010542724609373
       }
     },
     {
@@ -888,13 +890,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 2594,
-        "agreement_count": 2824,
+        "surrogate_correct": 1984,
+        "agreement_count": 2160,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.2594,
-        "fidelity": 0.2824,
-        "posterior_kl_sum": 21380.115913391113,
-        "posterior_kl": 2.138011591339111
+        "surrogate_acc": 0.1984,
+        "fidelity": 0.216,
+        "posterior_kl_sum": 24793.649909973145,
+        "posterior_kl": 2.4793649909973143
       }
     },
     {
@@ -1014,13 +1016,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 2566,
-        "agreement_count": 2783,
+        "surrogate_correct": 1915,
+        "agreement_count": 2106,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.2566,
-        "fidelity": 0.2783,
-        "posterior_kl_sum": 21681.091068267822,
-        "posterior_kl": 2.1681091068267824
+        "surrogate_acc": 0.1915,
+        "fidelity": 0.2106,
+        "posterior_kl_sum": 25057.39372253418,
+        "posterior_kl": 2.505739372253418
       }
     },
     {
@@ -1148,13 +1150,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 2200,
-        "agreement_count": 2353,
+        "surrogate_correct": 1757,
+        "agreement_count": 1910,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.22,
-        "fidelity": 0.2353,
-        "posterior_kl_sum": 23325.78148651123,
-        "posterior_kl": 2.3325781486511232
+        "surrogate_acc": 0.1757,
+        "fidelity": 0.191,
+        "posterior_kl_sum": 26074.575275421143,
+        "posterior_kl": 2.607457527542114
       }
     },
     {
@@ -1290,13 +1292,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1934,
-        "agreement_count": 2121,
+        "surrogate_correct": 1655,
+        "agreement_count": 1757,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1934,
-        "fidelity": 0.2121,
-        "posterior_kl_sum": 24537.523956298828,
-        "posterior_kl": 2.453752395629883
+        "surrogate_acc": 0.1655,
+        "fidelity": 0.1757,
+        "posterior_kl_sum": 26904.428455352783,
+        "posterior_kl": 2.6904428455352782
       }
     },
     {
@@ -1440,13 +1442,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1862,
-        "agreement_count": 2048,
+        "surrogate_correct": 1600,
+        "agreement_count": 1732,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1862,
-        "fidelity": 0.2048,
-        "posterior_kl_sum": 25072.691539764404,
-        "posterior_kl": 2.5072691539764405
+        "surrogate_acc": 0.16,
+        "fidelity": 0.1732,
+        "posterior_kl_sum": 27073.843437194824,
+        "posterior_kl": 2.7073843437194824
       }
     },
     {
@@ -1598,13 +1600,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1835,
-        "agreement_count": 1982,
+        "surrogate_correct": 1611,
+        "agreement_count": 1732,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1835,
-        "fidelity": 0.1982,
-        "posterior_kl_sum": 25362.70810699463,
-        "posterior_kl": 2.5362708106994627
+        "surrogate_acc": 0.1611,
+        "fidelity": 0.1732,
+        "posterior_kl_sum": 27141.8515625,
+        "posterior_kl": 2.71418515625
       }
     },
     {
@@ -1764,13 +1766,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1835,
-        "agreement_count": 1983,
+        "surrogate_correct": 1617,
+        "agreement_count": 1759,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1835,
-        "fidelity": 0.1983,
-        "posterior_kl_sum": 25880.098808288574,
-        "posterior_kl": 2.5880098808288574
+        "surrogate_acc": 0.1617,
+        "fidelity": 0.1759,
+        "posterior_kl_sum": 27290.915786743164,
+        "posterior_kl": 2.7290915786743164
       }
     },
     {
@@ -1938,13 +1940,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1845,
-        "agreement_count": 2013,
+        "surrogate_correct": 1633,
+        "agreement_count": 1783,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1845,
-        "fidelity": 0.2013,
-        "posterior_kl_sum": 25779.243560791016,
-        "posterior_kl": 2.5779243560791016
+        "surrogate_acc": 0.1633,
+        "fidelity": 0.1783,
+        "posterior_kl_sum": 27214.516677856445,
+        "posterior_kl": 2.7214516677856446
       }
     },
     {
@@ -2120,13 +2122,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1804,
-        "agreement_count": 1959,
+        "surrogate_correct": 1650,
+        "agreement_count": 1790,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1804,
-        "fidelity": 0.1959,
-        "posterior_kl_sum": 25845.389572143555,
-        "posterior_kl": 2.5845389572143556
+        "surrogate_acc": 0.165,
+        "fidelity": 0.179,
+        "posterior_kl_sum": 27236.606174468994,
+        "posterior_kl": 2.7236606174468996
       }
     }
   ],
@@ -2199,5 +2201,5 @@
       "posterior_kl": "results/lab/04_tensorshield/posterior_kl.png"
     }
   },
-  "created_at": "2026-07-16T08:28:21.250057+00:00"
+  "created_at": "2026-07-16T15:08:21.899497+00:00"
 }

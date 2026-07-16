@@ -52,13 +52,12 @@ from exp.MS.train_surrogate.core.engine import (  # noqa: E402
     train_one_epoch,
 )
 from exp.MS.train_surrogate.defense import (  # noqa: E402
+    build_public_model as build_canonical_public_model,
     build_resnet18_tensor_units,
     load_protection_mask,
     protection_mask_sha256,
     save_protection_mask,
 )
-from models import imagenet as imagenet_models  # noqa: E402
-from models.imagenet import load_official_imagenet_weights  # noqa: E402
 
 
 EXPERIMENT = "05_state"
@@ -175,10 +174,15 @@ def parse_args() -> argparse.Namespace:
 
 
 def build_public_model(weight_path: Path) -> nn.Module:
-    model = imagenet_models.resnet18(num_classes=1000)
-    load_official_imagenet_weights("resnet18", model, str(weight_path), strict=True)
-    model.last_linear = nn.Linear(model.last_linear.in_features, NUM_CLASSES)
-    return model
+    from models import imagenet as imagenet_models
+
+    return build_canonical_public_model(
+        imagenet_models.resnet18,
+        MODEL,
+        weight_path,
+        NUM_CLASSES,
+        initialization_seed=SEED,
+    )
 
 
 def is_bn_state(name: str) -> bool:
@@ -634,6 +638,13 @@ def main() -> int:
             "label_mode": "soft",
             "query_transform": "test",
             "seed": SEED,
+            "randomization": {
+                "surrogate_initialization": "formal_victim_then_public_v1",
+                "surrogate_initialization_seed": SEED,
+                "query_sampler_seed": SEED,
+                "reset_before_each_surrogate_initialization": True,
+                "purpose": "controlled_state_semantic_comparison",
+            },
             "victim_checkpoint": str(victim_checkpoint.relative_to(ROOT)),
             "victim_checkpoint_sha256": victim_sha256,
             "official_weight": str(official_weight.relative_to(ROOT)),
@@ -701,6 +712,13 @@ def main() -> int:
             "label_mode": "soft",
             "query_transform": "test",
             "seed": SEED,
+            "randomization": {
+                "surrogate_initialization": "formal_victim_then_public_v1",
+                "surrogate_initialization_seed": SEED,
+                "query_sampler_seed": SEED,
+                "reset_before_each_surrogate_initialization": True,
+                "purpose": "controlled_state_semantic_comparison",
+            },
             "victim_checkpoint": str(victim_checkpoint.relative_to(ROOT)),
             "victim_checkpoint_sha256": victim_sha256,
             "victim_checkpoint_epoch": victim_metadata.get("epoch"),

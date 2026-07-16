@@ -109,6 +109,7 @@ def main() -> int:
         protected_units=args.protected_units,
         protected_layers=args.protected_layers,
         protected_scalars=args.protected_scalars,
+        initialization_seed=args.seed,
     )
     validate_built_plan(plan_config, protection_plan)
     query_dataset = build_query_dataset(
@@ -267,6 +268,9 @@ def main() -> int:
     query_target_params = {f"{query_target_name}_path": str(query_target_path)}
     params = {
         **run_config,
+        "surrogate_initialization": "formal_victim_then_public_v1",
+        "surrogate_initialization_seed": args.seed,
+        "query_sampler_seed": args.seed,
         "artifact_id": artifact_id,
         "run_id": run_id,
         "device": str(device),
@@ -361,6 +365,9 @@ def main() -> int:
         "query_transform": query_transform,
         "lr_step": args.lr_step,
         "training_mode": execution_mode,
+        "surrogate_initialization": "formal_victim_then_public_v1",
+        "surrogate_initialization_seed": args.seed,
+        "query_sampler_seed": args.seed,
         **plan_run_config,
         "protection": protection_metadata,
         "primary": {"checkpoint": "end.pth", "epoch": end_epoch},

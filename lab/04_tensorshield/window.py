@@ -1,11 +1,13 @@
 #!/usr/bin/env python3
-"""比较 TensorShield eligible 非分类头候选的前 10 与后 10。"""
+"""全量比较 TensorShield eligible rank 的三个非分类头位置集合。"""
 
 from __future__ import annotations
 
 import argparse
 import csv
 import json
+import math
+import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -13,41 +15,51 @@ from pathlib import Path
 import torch
 from torch.utils.data import DataLoader
 
-import run as prefix
+
+ROOT = Path(__file__).resolve().parents[2]
+LAB_ROOT = Path(__file__).resolve().parent
+for import_root in (ROOT, LAB_ROOT):
+    if str(import_root) not in sys.path:
+        sys.path.insert(0, str(import_root))
+
+import run as prefix  # noqa: E402
 
 
-EXPECTED_WINDOWS = {
-    "first_10": (
-        "layer1.1.conv1.weight",
-        "layer2.0.conv1.weight",
-        "layer1.0.conv1.weight",
-        "layer1.1.conv2.weight",
-        "layer2.0.conv2.weight",
-        "layer2.1.conv1.weight",
-        "layer1.0.conv2.weight",
-        "layer3.0.conv1.weight",
-        "layer2.1.conv2.weight",
-        "layer3.0.conv2.weight",
-    ),
-    "last_10": (
-        "layer1.0.conv2.weight",
-        "layer3.0.conv1.weight",
-        "layer2.1.conv2.weight",
-        "layer3.0.conv2.weight",
-        "layer4.0.conv1.weight",
-        "layer4.0.conv2.weight",
-        "layer4.1.conv1.weight",
-        "layer4.1.conv2.weight",
-        "layer3.1.conv2.weight",
-        "layer3.1.conv1.weight",
-    ),
+EXPECTED_POSITIONS = {
+    "first_10": tuple(range(1, 11)),
+    "spread_10": (1, 2, 3, 5, 7, 9, 11, 13, 15, 16),
+    "last_10": tuple(range(7, 17)),
 }
 EXPECTED_STATS = {
     "first_10": (12, 1_599_588, True, "replace"),
+    "spread_10": (12, 5_249_124, True, "replace"),
     "last_10": (12, 10_557_540, True, "replace"),
 }
+CASE_LABELS = {
+    "first_10": "First 10",
+    "spread_10": "Spread 10",
+    "last_10": "Last 10",
+}
+CASE_COLORS = {
+    "first_10": "#0072B2",
+    "spread_10": "#CC79A7",
+    "last_10": "#D55E00",
+}
+END_FIELDS = (
+    "eval_count",
+    "victim_correct",
+    "surrogate_correct",
+    "agreement_count",
+    "victim_acc",
+    "surrogate_acc",
+    "fidelity",
+    "posterior_kl_sum",
+    "posterior_kl",
+)
 DATA_FIELDS = (
     "case",
+    "selection_kind",
+    "candidate_positions",
     "candidate_start",
     "candidate_end",
     "selected_weight_names",
@@ -66,9 +78,26 @@ DATA_FIELDS = (
 @dataclass(frozen=True)
 class WindowCase:
     name: str
-    candidate_start: int
-    candidate_end: int
+    candidate_positions: tuple[int, ...]
     selected_weights: tuple[str, ...]
+
+    @property
+    def is_contiguous(self) -> bool:
+        return self.candidate_positions == tuple(
+            range(self.candidate_positions[0], self.candidate_positions[-1] + 1)
+        )
+
+    @property
+    def selection_kind(self) -> str:
+        return "contiguous_window" if self.is_contiguous else "explicit_positions"
+
+    @property
+    def candidate_start(self) -> int | None:
+        return self.candidate_positions[0] if self.is_contiguous else None
+
+    @property
+    def candidate_end(self) -> int | None:
+        return self.candidate_positions[-1] if self.is_contiguous else None
 
 
 def parse_args() -> argparse.Namespace:
@@ -78,7 +107,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="只验证两个 rank 窗口、mask 和分类头模式，不训练或写结果。",
+        help="只验证三个候选集合、mask 和 canonical 初始化，不训练或写结果。",
     )
     return parser.parse_args()
 
@@ -91,17 +120,18 @@ def build_cases() -> tuple[WindowCase, ...]:
         name for name in eligible_rank if name != "last_linear.weight"
     )
     if len(candidates) != 16 or len(candidates) != len(set(candidates)):
-        raise ValueError(f"排除分类头后应有 16 个候选，实际为 {len(candidates)}。")
-    cases = (
-        WindowCase("first_10", 1, 10, candidates[:10]),
-        WindowCase("last_10", 7, 16, candidates[-10:]),
+        raise ValueError(f"排除分类头后应有 16 个唯一候选，实际为 {len(candidates)}。")
+    cases = tuple(
+        WindowCase(
+            name=name,
+            candidate_positions=positions,
+            selected_weights=tuple(candidates[position - 1] for position in positions),
+        )
+        for name, positions in EXPECTED_POSITIONS.items()
     )
     for case in cases:
-        if case.selected_weights != EXPECTED_WINDOWS[case.name]:
-            raise ValueError(
-                f"{case.name} 已变化：实际 {case.selected_weights}，"
-                f"期望 {EXPECTED_WINDOWS[case.name]}。"
-            )
+        if len(case.candidate_positions) != 10 or len(set(case.candidate_positions)) != 10:
+            raise ValueError(f"{case.name} 必须选择 10 个唯一候选位置。")
     return cases
 
 
@@ -109,11 +139,7 @@ def protected_state_names(case: WindowCase) -> tuple[str, ...]:
     return (*case.selected_weights, "last_linear.weight", "last_linear.bias")
 
 
-def initialize_case(
-    case: WindowCase,
-    victim: torch.nn.Module,
-    official_weight: Path,
-):
+def initialize_case(case: WindowCase, victim: torch.nn.Module, official_weight: Path):
     units = prefix.build_resnet18_tensor_units(victim)
     if len(units) != 122:
         raise RuntimeError(f"ResNet18 unit 数量应为 122，实际为 {len(units)}。")
@@ -134,6 +160,7 @@ def initialize_case(
         protected_units=unit_spec,
         protected_layers=None,
         protected_scalars=None,
+        initialization_seed=prefix.SEED,
     )
     actual = (
         plan.protected_unit_count,
@@ -141,9 +168,10 @@ def initialize_case(
         plan.classifier_protected,
         plan.head_mode,
     )
-    expected = EXPECTED_STATS[case.name]
-    if actual != expected:
-        raise RuntimeError(f"{case.name} 保护统计为 {actual}，期望 {expected}。")
+    if actual != EXPECTED_STATS[case.name]:
+        raise RuntimeError(
+            f"{case.name} 保护统计为 {actual}，期望 {EXPECTED_STATS[case.name]}。"
+        )
     eligible_rank = tuple(prefix.AUTHOR_RESNET18_C100_ELIGIBLE_RANK)
     selected_metadata = [
         {
@@ -162,79 +190,50 @@ def initialize_case(
     return surrogate, plan, masks, selected_metadata
 
 
-def train_case(
+def validate_end_metrics(end_metrics: object, label: str) -> dict[str, int | float]:
+    if not isinstance(end_metrics, dict) or set(end_metrics) != set(END_FIELDS):
+        raise ValueError(f"{label} 字段不完整。")
+    normalized: dict[str, int | float] = {}
+    for field in END_FIELDS:
+        value = end_metrics[field]
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            raise ValueError(f"{label}.{field} 不是数值。")
+        if not math.isfinite(float(value)):
+            raise ValueError(f"{label}.{field} 不是有限值。")
+        normalized[field] = value
+    eval_count = int(normalized["eval_count"])
+    if eval_count <= 0:
+        raise ValueError(f"{label}.eval_count 必须为正数。")
+    for count_name in ("victim_correct", "surrogate_correct", "agreement_count"):
+        count = int(normalized[count_name])
+        if count != normalized[count_name] or not 0 <= count <= eval_count:
+            raise ValueError(f"{label}.{count_name} 不是有效计数。")
+        normalized[count_name] = count
+    normalized["eval_count"] = eval_count
+    checks = (
+        ("victim_acc", "victim_correct"),
+        ("surrogate_acc", "surrogate_correct"),
+        ("fidelity", "agreement_count"),
+        ("posterior_kl", "posterior_kl_sum"),
+    )
+    for ratio_name, numerator_name in checks:
+        expected = float(normalized[numerator_name]) / eval_count
+        if not math.isclose(float(normalized[ratio_name]), expected, abs_tol=1e-12):
+            raise ValueError(f"{label}.{ratio_name} 与计数不一致。")
+    return normalized
+
+
+def build_case_result(
     case: WindowCase,
-    victim: torch.nn.Module,
-    official_weight: Path,
-    query_dataset,
-    eval_loader: DataLoader,
-    reference,
-    device: torch.device,
-    history_writer: csv.DictWriter,
-    history_file,
-    out_dir: Path,
-    num_workers: int,
+    plan,
+    selected_units: list[dict[str, object]],
+    end_metrics: dict[str, object],
+    mask_path: Path,
 ) -> dict[str, object]:
-    prefix.configure_reproducibility(prefix.SEED, deterministic=True)
-    surrogate, plan, masks, selected_units = initialize_case(
-        case, victim, official_weight
-    )
-    mask_path = out_dir / f"{case.name}_mask.pt"
-    prefix.save_protection_mask(mask_path, masks)
-    surrogate = surrogate.to(device)
-    query_loader = DataLoader(
-        query_dataset,
-        batch_size=prefix.BATCH_SIZE,
-        shuffle=True,
-        num_workers=num_workers,
-        pin_memory=device.type == "cuda",
-        worker_init_fn=prefix.seed_worker,
-        generator=prefix.build_generator(prefix.SEED),
-    )
-    optimizer = torch.optim.SGD(
-        surrogate.parameters(),
-        lr=prefix.LEARNING_RATE,
-        momentum=prefix.MOMENTUM,
-        weight_decay=prefix.WEIGHT_DECAY,
-    )
-    scheduler = torch.optim.lr_scheduler.StepLR(
-        optimizer, step_size=prefix.LR_STEP, gamma=prefix.LR_GAMMA
-    )
-    for epoch in range(1, prefix.EPOCHS + 1):
-        learning_rate = optimizer.param_groups[0]["lr"]
-        train_metrics = prefix.train_one_epoch(
-            surrogate,
-            query_loader,
-            optimizer,
-            device,
-            "soft",
-            epoch,
-            prefix.EPOCHS,
-            None,
-        )
-        scheduler.step()
-        history_writer.writerow(
-            {
-                "case": case.name,
-                "top_k": len(case.selected_weights),
-                "epoch": epoch,
-                "learning_rate": learning_rate,
-                **train_metrics,
-            }
-        )
-        history_file.flush()
-    end_metrics = prefix.evaluate_surrogate(surrogate, eval_loader, reference, device)
-    print(
-        f"[END/{case.name}] accuracy={end_metrics['surrogate_acc']:.6f} "
-        f"fidelity={end_metrics['fidelity']:.6f} "
-        f"posterior_kl={end_metrics['posterior_kl']:.6f}"
-    )
-    del surrogate, optimizer, scheduler, query_loader
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
     return {
         "case": case.name,
-        "origin": "trained_eligible_window",
+        "selection_kind": case.selection_kind,
+        "candidate_positions": list(case.candidate_positions),
         "candidate_start": case.candidate_start,
         "candidate_end": case.candidate_end,
         "selected_weight_names": list(case.selected_weights),
@@ -242,17 +241,64 @@ def train_case(
             "implementation_defense": "custom",
             **plan.to_metadata(),
             "selected_units": selected_units,
-            "mask_path": str(mask_path.relative_to(prefix.ROOT)),
+            "mask_path": str(mask_path.relative_to(ROOT)),
         },
         "primary": {"evaluation": "end", "epoch": prefix.EPOCHS},
-        "end": end_metrics,
+        "end": validate_end_metrics(end_metrics, f"{case.name} end"),
     }
 
 
-def write_data(path: Path, results: list[dict[str, object]]) -> None:
-    with path.open("w", newline="", encoding="utf-8") as writer_file:
+def write_history(path: Path, rows: list[dict[str, object]]) -> None:
+    with path.open("w", newline="", encoding="utf-8") as history_file:
         writer = csv.DictWriter(
-            writer_file,
+            history_file,
+            fieldnames=prefix.HISTORY_FIELDS,
+            delimiter="\t",
+            lineterminator="\n",
+        )
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+def validate_history_rows(
+    path: Path,
+    allowed_cases: set[str],
+    required_cases: tuple[str, ...],
+    expected_case_order: tuple[str, ...],
+) -> dict[str, list[dict[str, str]]]:
+    with path.open("r", newline="", encoding="utf-8") as history_file:
+        reader = csv.DictReader(history_file, delimiter="\t")
+        if reader.fieldnames != list(prefix.HISTORY_FIELDS):
+            raise ValueError("history 表头不一致。")
+        rows = list(reader)
+    if {row["case"] for row in rows} - allowed_cases:
+        raise ValueError("history 包含未知 case。")
+    expected_order = [
+        case_name
+        for case_name in expected_case_order
+        for _ in range(prefix.EPOCHS)
+    ]
+    if [row["case"] for row in rows] != expected_order:
+        raise ValueError("history case 顺序不一致。")
+    grouped = {
+        case_name: [row for row in rows if row["case"] == case_name]
+        for case_name in allowed_cases
+    }
+    for case_name in required_cases:
+        case_rows = grouped.get(case_name, [])
+        if len(case_rows) != prefix.EPOCHS:
+            raise ValueError(f"{case_name} history 行数不一致。")
+        if [int(row["epoch"]) for row in case_rows] != list(
+            range(1, prefix.EPOCHS + 1)
+        ):
+            raise ValueError(f"{case_name} history epoch 不一致。")
+    return grouped
+
+
+def write_data(path: Path, results: list[dict[str, object]]) -> None:
+    with path.open("w", newline="", encoding="utf-8") as data_file:
+        writer = csv.DictWriter(
+            data_file,
             fieldnames=DATA_FIELDS,
             delimiter="\t",
             lineterminator="\n",
@@ -264,6 +310,10 @@ def write_data(path: Path, results: list[dict[str, object]]) -> None:
             writer.writerow(
                 {
                     "case": result["case"],
+                    "selection_kind": result["selection_kind"],
+                    "candidate_positions": ",".join(
+                        str(position) for position in result["candidate_positions"]
+                    ),
                     "candidate_start": result["candidate_start"],
                     "candidate_end": result["candidate_end"],
                     "selected_weight_names": ",".join(result["selected_weight_names"]),
@@ -280,98 +330,78 @@ def write_data(path: Path, results: list[dict[str, object]]) -> None:
             )
 
 
+def validate_existing_data(
+    path: Path,
+    raw_results: dict[str, dict[str, object]],
+    cases: dict[str, WindowCase],
+    schema_version: int,
+) -> None:
+    if schema_version < 2:
+        raise ValueError("window.tsv schema_version 已失效。")
+    with path.open("r", newline="", encoding="utf-8") as data_file:
+        reader = csv.DictReader(data_file, delimiter="\t")
+        if reader.fieldnames != list(DATA_FIELDS):
+            raise ValueError("window.tsv 表头不一致。")
+        rows = list(reader)
+    if [row["case"] for row in rows] != list(cases):
+        raise ValueError("window.tsv case 顺序不一致。")
+    for row in rows:
+        case = cases[row["case"]]
+        expected_positions = ",".join(str(value) for value in case.candidate_positions)
+        if row["candidate_positions"] != expected_positions:
+            raise ValueError(f"{case.name} candidate_positions 不一致。")
+        result = raw_results[case.name]
+        if row["selected_weight_names"] != ",".join(result["selected_weight_names"]):
+            raise ValueError(f"{case.name} selected_weight_names 不一致。")
+
+
 def plot_windows(
     path: Path,
     results: list[dict[str, object]],
     references: dict[str, dict[str, object]],
 ) -> None:
     specifications = (
-        ("surrogate_acc", "Surrogate accuracy", "#0072B2"),
-        ("fidelity", "Fidelity", "#009E73"),
-        ("posterior_kl", "Posterior KL", "#D55E00"),
+        ("surrogate_acc", "Surrogate accuracy"),
+        ("fidelity", "Fidelity"),
+        ("posterior_kl", "Posterior KL"),
     )
-    x_values = [
+    positions = range(len(results))
+    colors = [CASE_COLORS[str(result["case"])] for result in results]
+    ratios = [
         100.0 * float(result["protection"]["protected_param_ratio"])
         for result in results
     ]
-    labels = ("First-10 + head", "Last-10 + head")
-    positions = range(len(results))
-    tick_labels = [f"{value:.2f}%" for value in x_values]
     figure, axes = prefix.plt.subplots(1, 3, figsize=(13.8, 4.2))
-    for axis, (metric, title, color) in zip(axes, specifications):
+    for axis, (metric, title) in zip(axes, specifications):
         values = [float(result["end"][metric]) for result in results]
-        no_value = float(references["no_protection"]["end"][metric])
-        full_value = float(references["full_protection"]["end"][metric])
-        bars = axis.bar(
-            positions,
-            values,
-            color=("#555555", color),
-            width=0.62,
-        )
-        axis.axhline(
-            no_value,
-            color="#222222",
-            linestyle="--",
-            linewidth=1.1,
-            label="No protection",
-        )
-        axis.axhline(
-            full_value,
-            color="#777777",
-            linestyle=":",
-            linewidth=1.3,
-            label="Full protection",
-        )
-        for bar, value, label in zip(bars, values, labels):
+        white = float(references["no_protection"]["end"][metric])
+        black = float(references["full_protection"]["end"][metric])
+        bars = axis.bar(positions, values, color=colors, width=0.62)
+        axis.axhline(white, color="#222222", linestyle="--", label="No protection")
+        axis.axhline(black, color="#777777", linestyle=":", label="Full protection")
+        for bar, value, result in zip(bars, values, results):
             axis.annotate(
-                f"{label}\n{value:.4f}",
+                f"{CASE_LABELS[str(result['case'])]}\n{value:.4f}",
                 (bar.get_x() + bar.get_width() / 2, value),
                 xytext=(0, 7),
                 textcoords="offset points",
                 ha="center",
-                va="bottom",
                 fontsize=7.5,
             )
         axis.set_title(title)
         axis.set_xlabel("Protected parameters (%)")
         axis.set_ylabel(title)
-        axis.set_xticks(positions, tick_labels)
+        axis.set_xticks(positions, [f"{ratio:.2f}%" for ratio in ratios])
         axis.grid(axis="y", color="#D9D9D9", linewidth=0.7, alpha=0.75)
-        axis.set_axisbelow(True)
         axis.spines["top"].set_visible(False)
         axis.spines["right"].set_visible(False)
-        prefix.set_y_limits(
-            axis,
-            [*values, no_value, full_value],
-            bounded=metric != "posterior_kl",
-        )
-    handles, legend_labels = axes[0].get_legend_handles_labels()
-    figure.legend(
-        handles,
-        legend_labels,
-        loc="upper center",
-        bbox_to_anchor=(0.5, 1.03),
-        ncol=2,
-        frameon=False,
-    )
-    figure.suptitle("TensorShield eligible-rank window ablation", y=1.10)
+        prefix.set_y_limits(axis, [*values, white, black], bounded=metric != "posterior_kl")
+    handles, labels = axes[0].get_legend_handles_labels()
+    figure.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 1.03), ncol=2, frameon=False)
+    figure.suptitle("TensorShield eligible-rank position-set ablation", y=1.10)
     figure.tight_layout()
     figure.savefig(path, bbox_inches="tight", facecolor="white", dpi=240)
     prefix.plt.close(figure)
-
-
-def clean_outputs(out_dir: Path) -> None:
-    for filename in (
-        "window.json",
-        "window.tsv",
-        "window_history.tsv",
-        "window.png",
-        "first_10_mask.pt",
-        "last_10_mask.pt",
-        "rank_11_20_mask.pt",
-        "rank_32_41_mask.pt",
-    ):
-        (out_dir / filename).unlink(missing_ok=True)
 
 
 def main() -> int:
@@ -379,19 +409,11 @@ def main() -> int:
     if args.num_workers < 0:
         raise ValueError("num-workers 不能小于 0。")
     device = prefix.resolve_device(args.device)
-    dataset_root = prefix.ROOT / "dataset" / "public"
-    protocol_root = prefix.ROOT / "dataset" / "MS"
-    victim_checkpoint = (
-        prefix.ROOT
-        / "weights"
-        / "MS"
-        / "victim"
-        / prefix.MODEL
-        / prefix.DATASET
-        / "best.pth"
-    )
-    official_weight = prefix.ROOT / "weights" / "pre_train" / "resnet18-5c106cde.pth"
-    out_dir = prefix.ROOT / "results" / "lab" / prefix.EXPERIMENT
+    dataset_root = ROOT / "dataset" / "public"
+    protocol_root = ROOT / "dataset" / "MS"
+    victim_checkpoint = ROOT / "weights" / "MS" / "victim" / prefix.MODEL / prefix.DATASET / "best.pth"
+    official_weight = ROOT / "weights" / "pre_train" / "resnet18-5c106cde.pth"
+    out_dir = ROOT / "results" / "lab" / prefix.EXPERIMENT
 
     prefix.configure_reproducibility(prefix.SEED, deterministic=True)
     query_indices, query_posteriors, query_labels, posterior_path, query_manifest = (
@@ -409,38 +431,33 @@ def main() -> int:
     victim_sha256 = prefix.sha256_file(victim_checkpoint)
     expected_victim_sha256 = query_manifest.get("victim", {}).get("checkpoint_sha256")
     if expected_victim_sha256 and expected_victim_sha256 != victim_sha256:
-        raise ValueError(
-            "victim best.pth 与生成 soft posterior 时使用的 checkpoint 不一致。"
-        )
-    cases = build_cases()
+        raise ValueError("victim best.pth 与 soft posterior 不一致。")
 
+    cases = build_cases()
+    plans = {}
     for case in cases:
-        prefix.configure_reproducibility(prefix.SEED, deterministic=True)
         surrogate, plan, _, _ = initialize_case(case, victim, official_weight)
+        plans[case.name] = plan
         print(
-            f"[MASK/{case.name}] candidates={case.candidate_start}-{case.candidate_end} "
-            f"weights={len(case.selected_weights)} units={plan.protected_unit_count}/122 "
+            f"[MASK/{case.name}] positions="
+            f"{','.join(str(position) for position in case.candidate_positions)} "
+            f"units={plan.protected_unit_count}/122 "
             f"params={plan.protected_param_count}/{plan.total_param_count} "
             f"ratio={plan.protected_param_ratio:.6f} "
-            f"head={plan.head_mode} sha256={plan.protection_mask_sha256}"
+            f"sha256={plan.protection_mask_sha256}"
         )
         del surrogate
     if args.dry_run:
-        print(
-            f"[INFO] eligible rank SHA256："
-            f"{prefix.rank_sha256(tuple(prefix.AUTHOR_RESNET18_C100_ELIGIBLE_RANK))}"
-        )
-        print("[INFO] dry-run 完成，未写入 rank 窗口消融产物。")
+        print("[INFO] dry-run 完成，未写入候选位置集合产物。")
         return 0
 
-    out_dir.mkdir(parents=True, exist_ok=True)
-    clean_outputs(out_dir)
     query_dataset = prefix.build_query_dataset(
         prefix.DATASET,
         dataset_root,
         query_indices,
         query_posteriors,
         query_labels,
+        input_transform="test",
     )
     eval_dataset = prefix.build_eval_dataset(
         prefix.DATASET, dataset_root, protocol_root, None
@@ -454,133 +471,195 @@ def main() -> int:
         worker_init_fn=prefix.seed_worker,
         generator=prefix.build_generator(prefix.SEED, offset=1),
     )
-    eval_victim = victim.to(device)
-    reference = prefix.collect_eval_reference(eval_victim, eval_loader, device)
-    victim = eval_victim.cpu()
-    del eval_victim
+    victim = victim.to(device)
+    reference = prefix.collect_eval_reference(victim, eval_loader, device)
+    victim = victim.cpu()
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
 
-    results: list[dict[str, object]] = []
-    history_path = out_dir / "window_history.tsv"
-    with history_path.open("w", newline="", encoding="utf-8") as history_file:
-        history_writer = csv.DictWriter(
-            history_file,
-            fieldnames=prefix.HISTORY_FIELDS,
-            delimiter="\t",
-            lineterminator="\n",
-        )
-        history_writer.writeheader()
-        for case in cases:
-            results.append(
-                train_case(
-                    case,
-                    victim,
-                    official_weight,
-                    query_dataset,
-                    eval_loader,
-                    reference,
-                    device,
-                    history_writer,
-                    history_file,
-                    out_dir,
-                    args.num_workers,
-                )
-            )
+    out_dir.mkdir(parents=True, exist_ok=True)
+    final_paths = {
+        "history": out_dir / "window_history.tsv",
+        "data": out_dir / "window.tsv",
+        "plot": out_dir / "window.png",
+        "metrics": out_dir / "window.json",
+        **{case.name: out_dir / f"{case.name}_mask.pt" for case in cases},
+    }
+    staged_paths = {
+        name: path.with_name(f".{path.name}.tmp") for name, path in final_paths.items()
+    }
+    staged_paths["plot"] = final_paths["plot"].with_name(".window.tmp.png")
+    for path in staged_paths.values():
+        path.unlink(missing_ok=True)
 
-    bounds_root = prefix.ROOT / "results" / "MS" / prefix.MODEL / prefix.DATASET
+    references_root = ROOT / "results" / "MS" / prefix.MODEL / prefix.DATASET
     references = {
         "no_protection": prefix.load_bound(
-            bounds_root / "no_protection" / "metrics.json", "no_protection"
+            references_root / "no_protection" / "metrics.json", "no_protection"
         ),
         "full_protection": prefix.load_bound(
-            bounds_root / "full_protection" / "metrics.json", "full_protection"
+            references_root / "full_protection" / "metrics.json", "full_protection"
         ),
     }
-    metrics_path = out_dir / "window.json"
-    data_path = out_dir / "window.tsv"
-    plot_path = out_dir / "window.png"
-    payload = {
-        "schema_version": 1,
-        "experiment": prefix.EXPERIMENT,
-        "study": "eligible_rank_head_control_windows",
-        "protocol": "MS",
-        "attack_protocol": prefix.ATTACK_PROTOCOL_VERSION,
-        "dataset": prefix.DATASET,
-        "victim_model": prefix.MODEL,
-        "query_budget": prefix.BUDGET,
-        "label_mode": "soft",
-        "query_transform": "test",
-        "seed": prefix.SEED,
-        "randomization": {
-            "reset_before_each_surrogate_initialization": True,
-            "query_sampler_seed": prefix.SEED,
-            "purpose": "controlled_eligible_rank_window_comparison",
-        },
-        "source": {
-            "method": "TensorShield",
-            "rank_provenance": "author_confirmed_final_rank",
-            "rank_scope": "eligible_16_non_head_weight_rank",
-            "eligible_rank": list(prefix.AUTHOR_RESNET18_C100_ELIGIBLE_RANK),
-            "eligible_rank_sha256": prefix.rank_sha256(
-                tuple(prefix.AUTHOR_RESNET18_C100_ELIGIBLE_RANK)
-            ),
-            "non_head_candidate_rank": [
-                name
-                for name in prefix.AUTHOR_RESNET18_C100_ELIGIBLE_RANK
-                if name != "last_linear.weight"
-            ],
-            "fixed_head_states": ["last_linear.weight", "last_linear.bias"],
-            "windows": {
-                case.name: {
-                    "candidate_start": case.candidate_start,
-                    "candidate_end": case.candidate_end,
-                    "selected_weight_names": list(case.selected_weights),
-                }
-                for case in cases
+    results: list[dict[str, object]] = []
+    history_rows: list[dict[str, object]] = []
+    try:
+        for case in cases:
+            prefix.configure_reproducibility(prefix.SEED, deterministic=True)
+            surrogate, plan, masks, selected_units = initialize_case(
+                case, victim, official_weight
+            )
+            prefix.save_protection_mask(staged_paths[case.name], masks)
+            surrogate = surrogate.to(device)
+            query_loader = DataLoader(
+                query_dataset,
+                batch_size=prefix.BATCH_SIZE,
+                shuffle=True,
+                num_workers=args.num_workers,
+                pin_memory=device.type == "cuda",
+                worker_init_fn=prefix.seed_worker,
+                generator=prefix.build_generator(prefix.SEED),
+            )
+            optimizer = torch.optim.SGD(
+                surrogate.parameters(),
+                lr=prefix.LEARNING_RATE,
+                momentum=prefix.MOMENTUM,
+                weight_decay=prefix.WEIGHT_DECAY,
+            )
+            scheduler = torch.optim.lr_scheduler.StepLR(
+                optimizer, step_size=prefix.LR_STEP, gamma=prefix.LR_GAMMA
+            )
+            for epoch in range(1, prefix.EPOCHS + 1):
+                learning_rate = optimizer.param_groups[0]["lr"]
+                train_metrics = prefix.train_one_epoch(
+                    surrogate,
+                    query_loader,
+                    optimizer,
+                    device,
+                    "soft",
+                    epoch,
+                    prefix.EPOCHS,
+                    None,
+                )
+                scheduler.step()
+                history_rows.append(
+                    {
+                        "case": case.name,
+                        "top_k": len(case.selected_weights),
+                        "epoch": epoch,
+                        "learning_rate": learning_rate,
+                        **train_metrics,
+                    }
+                )
+            end_metrics = prefix.evaluate_surrogate(
+                surrogate, eval_loader, reference, device
+            )
+            print(
+                f"[END/{case.name}] accuracy={end_metrics['surrogate_acc']:.6f} "
+                f"fidelity={end_metrics['fidelity']:.6f} "
+                f"posterior_kl={end_metrics['posterior_kl']:.6f}"
+            )
+            results.append(
+                build_case_result(
+                    case,
+                    plan,
+                    selected_units,
+                    end_metrics,
+                    final_paths[case.name],
+                )
+            )
+            del surrogate, optimizer, scheduler, query_loader
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
+        write_history(staged_paths["history"], history_rows)
+        write_data(staged_paths["data"], results)
+        plot_windows(staged_paths["plot"], results, references)
+        payload = {
+            "schema_version": 3,
+            "experiment": prefix.EXPERIMENT,
+            "study": "eligible_rank_head_control_position_sets",
+            "protocol": "MS",
+            "attack_protocol": prefix.ATTACK_PROTOCOL_VERSION,
+            "dataset": prefix.DATASET,
+            "victim_model": prefix.MODEL,
+            "query_budget": prefix.BUDGET,
+            "label_mode": "soft",
+            "query_transform": "test",
+            "seed": prefix.SEED,
+            "randomization": {
+                "reset_before_each_surrogate_initialization": True,
+                "surrogate_initialization": "formal_victim_then_public_v1",
+                "surrogate_initialization_seed": prefix.SEED,
+                "query_sampler_seed": prefix.SEED,
+                "purpose": "controlled_eligible_rank_position_set_comparison",
             },
-            "comparison_scope": "same_non_head_candidate_count_and_same_head_control_not_same_param_cost",
-        },
-        "victim_checkpoint": str(victim_checkpoint.relative_to(prefix.ROOT)),
-        "victim_checkpoint_sha256": victim_sha256,
-        "victim_checkpoint_epoch": victim_metadata.get("epoch"),
-        "official_weight": str(official_weight.relative_to(prefix.ROOT)),
-        "official_weight_sha256": prefix.sha256_file(official_weight),
-        "posterior_path": str(posterior_path.relative_to(prefix.ROOT)),
-        "posterior_sha256": prefix.sha256_file(posterior_path),
-        "training": {
-            "mode": "finetune",
-            "epochs": prefix.EPOCHS,
-            "batch_size": prefix.BATCH_SIZE,
-            "eval_batch_size": prefix.EVAL_BATCH_SIZE,
-            "optimizer": "SGD",
-            "learning_rate": prefix.LEARNING_RATE,
-            "momentum": prefix.MOMENTUM,
-            "weight_decay": prefix.WEIGHT_DECAY,
-            "lr_scheduler": "StepLR",
-            "lr_step": prefix.LR_STEP,
-            "lr_gamma": prefix.LR_GAMMA,
-            "evaluation_schedule": "end_only",
-            "trained_cases": [case.name for case in cases],
-        },
-        "primary": {"evaluation": "end", "epoch": prefix.EPOCHS},
-        "results": results,
-        "references": references,
-        "outputs": {
-            "data": str(data_path.relative_to(prefix.ROOT)),
-            "history": str(history_path.relative_to(prefix.ROOT)),
-            "plot": str(plot_path.relative_to(prefix.ROOT)),
-        },
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    metrics_path.write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
-        encoding="utf-8",
-    )
-    write_data(data_path, results)
-    plot_windows(plot_path, results, references)
-    print(f"[INFO] 结果：{metrics_path.relative_to(prefix.ROOT)}")
-    print(f"[INFO] 对比图：{plot_path.relative_to(prefix.ROOT)}")
+            "source": {
+                "method": "TensorShield",
+                "rank_provenance": "author_confirmed_final_rank",
+                "eligible_rank": list(prefix.AUTHOR_RESNET18_C100_ELIGIBLE_RANK),
+                "eligible_rank_sha256": prefix.rank_sha256(
+                    tuple(prefix.AUTHOR_RESNET18_C100_ELIGIBLE_RANK)
+                ),
+                "fixed_head_states": ["last_linear.weight", "last_linear.bias"],
+                "comparison_scope": "same_non_head_candidate_count_and_same_head_control_not_same_param_cost",
+            },
+            "assembly": {"mode": "full_canonical_rerun", "reused_cases": []},
+            "victim_checkpoint": str(victim_checkpoint.relative_to(ROOT)),
+            "victim_checkpoint_sha256": victim_sha256,
+            "victim_checkpoint_epoch": victim_metadata.get("epoch"),
+            "official_weight": str(official_weight.relative_to(ROOT)),
+            "official_weight_sha256": prefix.sha256_file(official_weight),
+            "posterior_path": str(posterior_path.relative_to(ROOT)),
+            "posterior_sha256": prefix.sha256_file(posterior_path),
+            "training": {
+                "mode": "finetune",
+                "epochs": prefix.EPOCHS,
+                "batch_size": prefix.BATCH_SIZE,
+                "eval_batch_size": prefix.EVAL_BATCH_SIZE,
+                "optimizer": "SGD",
+                "learning_rate": prefix.LEARNING_RATE,
+                "momentum": prefix.MOMENTUM,
+                "weight_decay": prefix.WEIGHT_DECAY,
+                "lr_scheduler": "StepLR",
+                "lr_step": prefix.LR_STEP,
+                "lr_gamma": prefix.LR_GAMMA,
+                "evaluation_schedule": "end_only",
+                "trained_cases": [case.name for case in cases],
+            },
+            "primary": {"evaluation": "end", "epoch": prefix.EPOCHS},
+            "results": results,
+            "references": references,
+            "outputs": {
+                "data": str(final_paths["data"].relative_to(ROOT)),
+                "history": str(final_paths["history"].relative_to(ROOT)),
+                "plot": str(final_paths["plot"].relative_to(ROOT)),
+                "masks": {
+                    case.name: str(final_paths[case.name].relative_to(ROOT))
+                    for case in cases
+                },
+            },
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        staged_paths["metrics"].write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
+        for name, final_path in final_paths.items():
+            staged_paths[name].replace(final_path)
+    finally:
+        for path in staged_paths.values():
+            path.unlink(missing_ok=True)
+
+    for stale in (
+        ".window_transaction.json",
+        ".window_transaction.json.tmp",
+    ):
+        (out_dir / stale).unlink(missing_ok=True)
+    for path in out_dir.glob(".window_transaction.*.backup*"):
+        path.unlink()
+    print(f"[INFO] 结果：{final_paths['metrics'].relative_to(ROOT)}")
+    print(f"[INFO] 对比图：{final_paths['plot'].relative_to(ROOT)}")
     return 0
 
 
