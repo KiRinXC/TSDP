@@ -1,38 +1,39 @@
-artifact_id	role	comparison_scope	defense	protected_layer_count	source_ratio	protected_scalar_count	protected_param_ratio	head_mode	run_id	surrogate_acc	fidelity	posterior_kl
-shallow_02	curve	ordinary_fixed_victim	shallow	2			0.004143995285991607	exposed	6b914ea4296f	0.5651	0.728	0.3891442051887512
-shallow_04	curve	ordinary_fixed_victim	shallow	4			0.01073334679989298	exposed	0b3d1cd918d7	0.556	0.6992	0.47133347244262697
-shallow_06	curve	ordinary_fixed_victim	shallow	6			0.021369791371640353	exposed	a9a896399d20	0.5177	0.622	0.7482952932357788
-shallow_08	curve	ordinary_fixed_victim	shallow	8			0.04768159637870673	exposed	23e836d6f8d8	0.4812	0.5519	0.9660816722869873
-shallow_10	curve	ordinary_fixed_victim	shallow	10			0.09011337204434844	exposed	07db694abb70	0.3767	0.4152	1.5572703296661377
-shallow_12	curve	ordinary_fixed_victim	shallow	12			0.19526938997553575	exposed	f04be94da29a	0.3134	0.3364	1.8691159521102905
-shallow_14	curve	ordinary_fixed_victim	shallow	14			0.36476848739540707	exposed	3f7fd5bc2855	0.2253	0.2388	2.2604483383178713
-shallow_16	curve	ordinary_fixed_victim	shallow	16			0.7852101549259999	exposed	0f4feab02570	0.2205	0.2297	2.2716711448669433
-middle_02	curve	ordinary_fixed_victim	middle	2			0.04243177566564171	exposed	85b0c7a78d51	0.4429	0.5204	1.058431407928467
-middle_04	curve	ordinary_fixed_victim	middle	4			0.10816568713476855	exposed	03a5fc63510c	0.3446	0.3833	1.6159926708221435
-middle_06	curve	ordinary_fixed_victim	middle	6			0.1738995986038954	exposed	0b92a5dad0df	0.3068	0.3422	1.804017437171936
-middle_08	curve	ordinary_fixed_victim	middle	8			0.23381937638428574	exposed	c6f2e6ab1432	0.2379	0.258	2.2655721977233885
-middle_10	curve	ordinary_fixed_victim	middle	10			0.35403514059551405	exposed	0201b96f1d19	0.1901	0.2088	2.4288078311920165
-middle_12	curve	ordinary_fixed_victim	middle	12			0.5675506501177612	exposed	ec11a110d02a	0.1925	0.2007	2.4553677536010743
-middle_14	curve	ordinary_fixed_victim	middle	14			0.7810661596400083	exposed	7acc1cb76571	0.2009	0.2081	2.3967877067565917
-middle_16	curve	ordinary_fixed_victim	middle	16			0.9945816691622553	exposed	4751ac7ad798	0.169	0.1735	2.866977167129517
-deep_02	curve	ordinary_fixed_victim	deep	2			0.21478984507400017	replace	7e8461743363	0.4567	0.5429	1.0009623348236083
-deep_04	curve	ordinary_fixed_victim	deep	4			0.635231512604593	replace	6a9209e44869	0.3821	0.4325	1.4447182670593262
-deep_06	curve	ordinary_fixed_victim	deep	6			0.8047306100244642	replace	51e3f483761d	0.2589	0.287	2.070987643814087
-deep_08	curve	ordinary_fixed_victim	deep	8			0.9098866279556516	replace	4f25170d6bd0	0.2113	0.2298	2.398825852203369
-deep_10	curve	ordinary_fixed_victim	deep	10			0.9523184036212933	replace	c8fe155fe6d0	0.1785	0.1908	2.658920083236694
-deep_12	curve	ordinary_fixed_victim	deep	12			0.9786302086283597	replace	afcbf141807f	0.1433	0.1582	2.8439138092041016
-deep_14	curve	ordinary_fixed_victim	deep	14			0.989266653200107	replace	b41105de655c	0.1373	0.1452	2.9540763900756835
-deep_16	curve	ordinary_fixed_victim	deep	16			0.9958560047140084	replace	602a690de30a	0.1346	0.1439	2.970564563751221
-large_01	curve	ordinary_fixed_victim	large_weight		0.01	112229	0.010411289394585516	exposed	7c1a21f74bef	0.409	0.4764	1.256362858581543
-large_02	curve	ordinary_fixed_victim	large_weight		0.1	1122291	0.10038215816224924	mixed	5ea025eee887	0.319	0.3562	1.767944160270691
-large_03	curve	ordinary_fixed_victim	large_weight		0.3	3366873	0.30029572992493997	mixed	e160367115d2	0.2413	0.2594	2.290452165222168
-large_04	curve	ordinary_fixed_victim	large_weight		0.5	5611456	0.5002085001066994	mixed	3a0bb7b78a62	0.2003	0.2087	2.5411619213104246
-large_05	curve	ordinary_fixed_victim	large_weight		0.7	7856038	0.7001211812239108	mixed	3cca6b2e6d08	0.1806	0.1845	2.697672386550903
-large_06	curve	ordinary_fixed_victim	large_weight		0.8	8978329	0.8000776108470644	mixed	b1a96363a767	0.1672	0.1763	2.765885908126831
-large_07	curve	ordinary_fixed_victim	large_weight		0.9	10100620	0.9000339514056701	mixed	e9e3d872bb06	0.1591	0.1658	2.833833336639404
-large_08	curve	ordinary_fixed_victim	large_weight		0.95	10661766	0.9500121662172469	mixed	d015cc290489	0.1533	0.16	2.8377581481933594
-head_only	point	ordinary_fixed_victim	head_only				0.004569011308703779	replace	a669fb8f80e8	0.4404	0.5135	1.3475780418395995
-tensorshield	point	ordinary_fixed_victim	tensorshield				0.08993417417391741	replace	81fce87f83b4	0.1913	0.2099	2.505830548095703
-teeslice	standalone	standalone_reproduction	teeslice				0.059223088018420605	replace	3660f3292c52	0.1619	0.1784	3.251131031036377
-no_protection	bound	ordinary_fixed_victim	no_protection				0.0	exposed	3a23bf66e57f	0.6182	1.0	1.1305409412187828e-09
-full_protection	bound	ordinary_fixed_victim	full_protection				1.0	replace	b05bdd3dc9a3	0.1545	0.161	2.835290375518799
+artifact_id	role	comparison_scope	defense	protected_layer_count	source_ratio	protected_scalar_count	protected_param_ratio	head_mode	label_mode	source_path	run_id	surrogate_acc	fidelity	posterior_kl
+shallow_02	curve	ordinary_fixed_victim	shallow	2			0.004143995285991607	exposed	soft	results/MS/resnet18/c100/shallow_02/metrics.json	6b914ea4296f	0.5651	0.728	0.3891442051887512
+shallow_04	curve	ordinary_fixed_victim	shallow	4			0.01073334679989298	exposed	soft	results/MS/resnet18/c100/shallow_04/metrics.json	0b3d1cd918d7	0.556	0.6992	0.47133347244262697
+shallow_06	curve	ordinary_fixed_victim	shallow	6			0.021369791371640353	exposed	soft	results/MS/resnet18/c100/shallow_06/metrics.json	a9a896399d20	0.5177	0.622	0.7482952932357788
+shallow_08	curve	ordinary_fixed_victim	shallow	8			0.04768159637870673	exposed	soft	results/MS/resnet18/c100/shallow_08/metrics.json	23e836d6f8d8	0.4812	0.5519	0.9660816722869873
+shallow_10	curve	ordinary_fixed_victim	shallow	10			0.09011337204434844	exposed	soft	results/MS/resnet18/c100/shallow_10/metrics.json	07db694abb70	0.3767	0.4152	1.5572703296661377
+shallow_12	curve	ordinary_fixed_victim	shallow	12			0.19526938997553575	exposed	soft	results/MS/resnet18/c100/shallow_12/metrics.json	f04be94da29a	0.3134	0.3364	1.8691159521102905
+shallow_14	curve	ordinary_fixed_victim	shallow	14			0.36476848739540707	exposed	soft	results/MS/resnet18/c100/shallow_14/metrics.json	3f7fd5bc2855	0.2253	0.2388	2.2604483383178713
+shallow_16	curve	ordinary_fixed_victim	shallow	16			0.7852101549259999	exposed	soft	results/MS/resnet18/c100/shallow_16/metrics.json	0f4feab02570	0.2205	0.2297	2.2716711448669433
+middle_02	curve	ordinary_fixed_victim	middle	2			0.04243177566564171	exposed	soft	results/MS/resnet18/c100/middle_02/metrics.json	85b0c7a78d51	0.4429	0.5204	1.058431407928467
+middle_04	curve	ordinary_fixed_victim	middle	4			0.10816568713476855	exposed	soft	results/MS/resnet18/c100/middle_04/metrics.json	03a5fc63510c	0.3446	0.3833	1.6159926708221435
+middle_06	curve	ordinary_fixed_victim	middle	6			0.1738995986038954	exposed	soft	results/MS/resnet18/c100/middle_06/metrics.json	0b92a5dad0df	0.3068	0.3422	1.804017437171936
+middle_08	curve	ordinary_fixed_victim	middle	8			0.23381937638428574	exposed	soft	results/MS/resnet18/c100/middle_08/metrics.json	c6f2e6ab1432	0.2379	0.258	2.2655721977233885
+middle_10	curve	ordinary_fixed_victim	middle	10			0.35403514059551405	exposed	soft	results/MS/resnet18/c100/middle_10/metrics.json	0201b96f1d19	0.1901	0.2088	2.4288078311920165
+middle_12	curve	ordinary_fixed_victim	middle	12			0.5675506501177612	exposed	soft	results/MS/resnet18/c100/middle_12/metrics.json	ec11a110d02a	0.1925	0.2007	2.4553677536010743
+middle_14	curve	ordinary_fixed_victim	middle	14			0.7810661596400083	exposed	soft	results/MS/resnet18/c100/middle_14/metrics.json	7acc1cb76571	0.2009	0.2081	2.3967877067565917
+middle_16	curve	ordinary_fixed_victim	middle	16			0.9945816691622553	exposed	soft	results/MS/resnet18/c100/middle_16/metrics.json	4751ac7ad798	0.169	0.1735	2.866977167129517
+deep_02	curve	ordinary_fixed_victim	deep	2			0.21478984507400017	replace	soft	results/MS/resnet18/c100/deep_02/metrics.json	7e8461743363	0.4567	0.5429	1.0009623348236083
+deep_04	curve	ordinary_fixed_victim	deep	4			0.635231512604593	replace	soft	results/MS/resnet18/c100/deep_04/metrics.json	6a9209e44869	0.3821	0.4325	1.4447182670593262
+deep_06	curve	ordinary_fixed_victim	deep	6			0.8047306100244642	replace	soft	results/MS/resnet18/c100/deep_06/metrics.json	51e3f483761d	0.2589	0.287	2.070987643814087
+deep_08	curve	ordinary_fixed_victim	deep	8			0.9098866279556516	replace	soft	results/MS/resnet18/c100/deep_08/metrics.json	4f25170d6bd0	0.2113	0.2298	2.398825852203369
+deep_10	curve	ordinary_fixed_victim	deep	10			0.9523184036212933	replace	soft	results/MS/resnet18/c100/deep_10/metrics.json	c8fe155fe6d0	0.1785	0.1908	2.658920083236694
+deep_12	curve	ordinary_fixed_victim	deep	12			0.9786302086283597	replace	soft	results/MS/resnet18/c100/deep_12/metrics.json	afcbf141807f	0.1433	0.1582	2.8439138092041016
+deep_14	curve	ordinary_fixed_victim	deep	14			0.989266653200107	replace	soft	results/MS/resnet18/c100/deep_14/metrics.json	b41105de655c	0.1373	0.1452	2.9540763900756835
+deep_16	curve	ordinary_fixed_victim	deep	16			0.9958560047140084	replace	soft	results/MS/resnet18/c100/deep_16/metrics.json	602a690de30a	0.1346	0.1439	2.970564563751221
+large_01	curve	ordinary_fixed_victim	large_weight		0.01	112229	0.010411289394585516	exposed	soft	results/MS/resnet18/c100/large_01/metrics.json	7c1a21f74bef	0.409	0.4764	1.256362858581543
+large_02	curve	ordinary_fixed_victim	large_weight		0.1	1122291	0.10038215816224924	mixed	soft	results/MS/resnet18/c100/large_02/metrics.json	5ea025eee887	0.319	0.3562	1.767944160270691
+large_03	curve	ordinary_fixed_victim	large_weight		0.3	3366873	0.30029572992493997	mixed	soft	results/MS/resnet18/c100/large_03/metrics.json	e160367115d2	0.2413	0.2594	2.290452165222168
+large_04	curve	ordinary_fixed_victim	large_weight		0.5	5611456	0.5002085001066994	mixed	soft	results/MS/resnet18/c100/large_04/metrics.json	3a0bb7b78a62	0.2003	0.2087	2.5411619213104246
+large_05	curve	ordinary_fixed_victim	large_weight		0.7	7856038	0.7001211812239108	mixed	soft	results/MS/resnet18/c100/large_05/metrics.json	3cca6b2e6d08	0.1806	0.1845	2.697672386550903
+large_06	curve	ordinary_fixed_victim	large_weight		0.8	8978329	0.8000776108470644	mixed	soft	results/MS/resnet18/c100/large_06/metrics.json	b1a96363a767	0.1672	0.1763	2.765885908126831
+large_07	curve	ordinary_fixed_victim	large_weight		0.9	10100620	0.9000339514056701	mixed	soft	results/MS/resnet18/c100/large_07/metrics.json	e9e3d872bb06	0.1591	0.1658	2.833833336639404
+large_08	curve	ordinary_fixed_victim	large_weight		0.95	10661766	0.9500121662172469	mixed	soft	results/MS/resnet18/c100/large_08/metrics.json	d015cc290489	0.1533	0.16	2.8377581481933594
+head_only	point	ordinary_fixed_victim	head_only				0.004569011308703779	replace	soft	results/MS/resnet18/c100/head_only/metrics.json	a669fb8f80e8	0.4404	0.5135	1.3475780418395995
+tensorshield	point	ordinary_fixed_victim	tensorshield				0.08993417417391741	replace	soft	results/MS/resnet18/c100/tensorshield/metrics.json	81fce87f83b4	0.1913	0.2099	2.505830548095703
+teeslice	standalone	standalone_reproduction	teeslice				0.059223088018420605	replace	soft	results/MS/resnet18/c100/teeslice/metrics.json	3660f3292c52	0.1619	0.1784	3.251131031036377
+no_protection	bound	ordinary_fixed_victim	no_protection				0.0	exposed	soft	results/MS/resnet18/c100/no_protection/metrics.json	3a23bf66e57f	0.6182	1.0	1.1305409412187828e-09
+full_protection	bound	ordinary_fixed_victim	full_protection				1.0	replace	soft	results/MS/resnet18/c100/full_protection/metrics.json	b05bdd3dc9a3	0.1545	0.161	2.835290375518799
+hard_blackbox	auxiliary_bound	ordinary_fixed_victim_output_ablation	hard_blackbox				1.0	replace	hard	results/MS/resnet18/c100/hard_blackbox/metrics.json	c9a62938cfcf	0.1393	0.1443	3.4277568561553955

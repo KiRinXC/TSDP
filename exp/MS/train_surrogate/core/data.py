@@ -137,6 +137,8 @@ def load_query_targets(
         raise ValueError(f"query manifest 与 {model_name}+{dataset_name} 不一致。")
     query_indices = read_query_indices(protocol_root, dataset_name)
     if label_mode == "hard":
+        if query_manifest.get("query", {}).get("input_transform") != "test":
+            raise ValueError("正式 hard label 必须来自确定性 test transform 查询。")
         labels_path = model_root / query_manifest.get("outputs", {}).get("labels", "labels.tsv")
         pseudo_labels = read_hard_labels(labels_path, query_indices)
         return query_indices[:budget], None, pseudo_labels[:budget], labels_path, query_manifest
@@ -181,9 +183,17 @@ def build_query_dataset(
     source_indices: list[int],
     posteriors: torch.Tensor | None,
     pseudo_labels: torch.Tensor,
+    input_transform: str | None = None,
 ) -> QueryDataset:
     train_transform, test_transform = build_transforms(dataset_name)
-    query_transform = test_transform if posteriors is not None else train_transform
+    if input_transform is None:
+        query_transform = test_transform if posteriors is not None else train_transform
+    elif input_transform == "test":
+        query_transform = test_transform
+    elif input_transform == "train":
+        query_transform = train_transform
+    else:
+        raise ValueError(f"未知 query input transform：{input_transform}")
     public_dataset = build_public_split_dataset(dataset_name, dataset_root, "train", query_transform)
     invalid = [index for index in source_indices if index < 0 or index >= len(public_dataset)]
     if invalid:

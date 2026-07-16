@@ -134,13 +134,13 @@
         "implementation_defense": "custom",
         "defense": "custom",
         "tensor_unit_count": 122,
-        "protected_unit_count": 1,
-        "protection_mask_sha256": "2cb52584123f17f0a018efd39f9ad12bd6673fd30aa7c5a48d09cbcfe860e374",
-        "classifier_protected": false,
-        "head_mode": "exposed",
+        "protected_unit_count": 2,
+        "protection_mask_sha256": "d9a44621fbde99c93a9c16e5989dcbc654014d3d1fa4daa87c43b071fc1afa2a",
+        "classifier_protected": true,
+        "head_mode": "mixed",
         "total_param_count": 11227812,
-        "protected_param_count": 36864,
-        "protected_param_ratio": 0.0032832754948159087,
+        "protected_param_count": 36964,
+        "protected_param_ratio": 0.0032921819496087037,
         "magnitude_eligible_count": null,
         "magnitude_protected_count": null,
         "selected_units": [
@@ -150,6 +150,13 @@
             "state_name": "layer1.1.conv1.weight",
             "state_kind": "parameter",
             "numel": 36864
+          },
+          {
+            "rank": null,
+            "index": 121,
+            "state_name": "last_linear.bias",
+            "state_kind": "parameter",
+            "numel": 100
           }
         ],
         "mask_path": "results/lab/04_tensorshield/top_01_mask.pt"
@@ -161,13 +168,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 5983,
-        "agreement_count": 8155,
+        "surrogate_correct": 5984,
+        "agreement_count": 8164,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.5983,
-        "fidelity": 0.8155,
-        "posterior_kl_sum": 1678.1290173530579,
-        "posterior_kl": 0.16781290173530578
+        "surrogate_acc": 0.5984,
+        "fidelity": 0.8164,
+        "posterior_kl_sum": 1678.8581562042236,
+        "posterior_kl": 0.16788581562042237
       }
     },
     {
@@ -182,13 +189,13 @@
         "implementation_defense": "custom",
         "defense": "custom",
         "tensor_unit_count": 122,
-        "protected_unit_count": 2,
-        "protection_mask_sha256": "a8e05934bf7b01d4a0cfd5fc1978e8cff277a5f588d64ecdf343d9159025a011",
-        "classifier_protected": false,
-        "head_mode": "exposed",
+        "protected_unit_count": 3,
+        "protection_mask_sha256": "eadf01718dff9476eb0a356367f6bb6d42d9cbda66cea618b251feab52f436c4",
+        "classifier_protected": true,
+        "head_mode": "mixed",
         "total_param_count": 11227812,
-        "protected_param_count": 110592,
-        "protected_param_ratio": 0.009849826484447727,
+        "protected_param_count": 110692,
+        "protected_param_ratio": 0.009858732939240522,
         "magnitude_eligible_count": null,
         "magnitude_protected_count": null,
         "selected_units": [
@@ -205,6 +212,13 @@
             "state_name": "layer2.0.conv1.weight",
             "state_kind": "parameter",
             "numel": 73728
+          },
+          {
+            "rank": null,
+            "index": 121,
+            "state_name": "last_linear.bias",
+            "state_kind": "parameter",
+            "numel": 100
           }
         ],
         "mask_path": "results/lab/04_tensorshield/top_02_mask.pt"
@@ -216,13 +230,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 5493,
-        "agreement_count": 6987,
+        "surrogate_correct": 5494,
+        "agreement_count": 6969,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.5493,
-        "fidelity": 0.6987,
-        "posterior_kl_sum": 4473.482663154602,
-        "posterior_kl": 0.4473482663154602
+        "surrogate_acc": 0.5494,
+        "fidelity": 0.6969,
+        "posterior_kl_sum": 4476.261707305908,
+        "posterior_kl": 0.4476261707305908
       }
     },
     {
@@ -286,13 +300,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 4059,
+        "surrogate_correct": 4056,
         "agreement_count": 4657,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.4059,
+        "surrogate_acc": 0.4056,
         "fidelity": 0.4657,
-        "posterior_kl_sum": 14566.480743408203,
-        "posterior_kl": 1.4566480743408203
+        "posterior_kl_sum": 14565.945356369019,
+        "posterior_kl": 1.4565945356369019
       }
     },
     {
@@ -364,13 +378,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 3922,
-        "agreement_count": 4435,
+        "surrogate_correct": 3919,
+        "agreement_count": 4436,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.3922,
-        "fidelity": 0.4435,
-        "posterior_kl_sum": 15357.936748504639,
-        "posterior_kl": 1.535793674850464
+        "surrogate_acc": 0.3919,
+        "fidelity": 0.4436,
+        "posterior_kl_sum": 15358.023607254028,
+        "posterior_kl": 1.5358023607254028
       }
     },
     {
@@ -450,13 +464,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 3909,
+        "surrogate_correct": 3910,
         "agreement_count": 4432,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.3909,
+        "surrogate_acc": 0.391,
         "fidelity": 0.4432,
-        "posterior_kl_sum": 15236.750370025635,
-        "posterior_kl": 1.5236750370025636
+        "posterior_kl_sum": 15236.86922454834,
+        "posterior_kl": 1.523686922454834
       }
     },
     {
@@ -544,13 +558,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 3623,
+        "surrogate_correct": 3627,
         "agreement_count": 4076,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.3623,
+        "surrogate_acc": 0.3627,
         "fidelity": 0.4076,
-        "posterior_kl_sum": 16694.337982177734,
-        "posterior_kl": 1.6694337982177734
+        "posterior_kl_sum": 16694.901613235474,
+        "posterior_kl": 1.6694901613235473
       }
     },
     {
@@ -647,12 +661,12 @@
         "eval_count": 10000,
         "victim_correct": 6182,
         "surrogate_correct": 3374,
-        "agreement_count": 3742,
+        "agreement_count": 3738,
         "victim_acc": 0.6182,
         "surrogate_acc": 0.3374,
-        "fidelity": 0.3742,
-        "posterior_kl_sum": 17837.013286590576,
-        "posterior_kl": 1.7837013286590577
+        "fidelity": 0.3738,
+        "posterior_kl_sum": 17836.059394836426,
+        "posterior_kl": 1.7836059394836425
       }
     },
     {
@@ -756,13 +770,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 3274,
-        "agreement_count": 3644,
+        "surrogate_correct": 3279,
+        "agreement_count": 3646,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.3274,
-        "fidelity": 0.3644,
-        "posterior_kl_sum": 18040.096408843994,
-        "posterior_kl": 1.8040096408843995
+        "surrogate_acc": 0.3279,
+        "fidelity": 0.3646,
+        "posterior_kl_sum": 18039.983470916748,
+        "posterior_kl": 1.8039983470916747
       }
     },
     {
@@ -874,13 +888,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 2596,
-        "agreement_count": 2821,
+        "surrogate_correct": 2594,
+        "agreement_count": 2824,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.2596,
-        "fidelity": 0.2821,
-        "posterior_kl_sum": 21379.937690734863,
-        "posterior_kl": 2.1379937690734865
+        "surrogate_acc": 0.2594,
+        "fidelity": 0.2824,
+        "posterior_kl_sum": 21380.115913391113,
+        "posterior_kl": 2.138011591339111
       }
     },
     {
@@ -1000,13 +1014,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 2569,
-        "agreement_count": 2785,
+        "surrogate_correct": 2566,
+        "agreement_count": 2783,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.2569,
-        "fidelity": 0.2785,
-        "posterior_kl_sum": 21679.61302947998,
-        "posterior_kl": 2.167961302947998
+        "surrogate_acc": 0.2566,
+        "fidelity": 0.2783,
+        "posterior_kl_sum": 21681.091068267822,
+        "posterior_kl": 2.1681091068267824
       }
     },
     {
@@ -1134,13 +1148,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 2202,
-        "agreement_count": 2355,
+        "surrogate_correct": 2200,
+        "agreement_count": 2353,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.2202,
-        "fidelity": 0.2355,
-        "posterior_kl_sum": 23326.832248687744,
-        "posterior_kl": 2.3326832248687746
+        "surrogate_acc": 0.22,
+        "fidelity": 0.2353,
+        "posterior_kl_sum": 23325.78148651123,
+        "posterior_kl": 2.3325781486511232
       }
     },
     {
@@ -1276,13 +1290,843 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 1926,
-        "agreement_count": 2120,
+        "surrogate_correct": 1934,
+        "agreement_count": 2121,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.1926,
-        "fidelity": 0.212,
-        "posterior_kl_sum": 24539.23783493042,
-        "posterior_kl": 2.453923783493042
+        "surrogate_acc": 0.1934,
+        "fidelity": 0.2121,
+        "posterior_kl_sum": 24537.523956298828,
+        "posterior_kl": 2.453752395629883
+      }
+    },
+    {
+      "case": "top_13",
+      "top_k": 13,
+      "new_weight": "layer4.0.conv2.weight",
+      "selected_weight_names": [
+        "layer1.1.conv1.weight",
+        "layer2.0.conv1.weight",
+        "last_linear.weight",
+        "layer1.0.conv1.weight",
+        "layer1.1.conv2.weight",
+        "layer2.0.conv2.weight",
+        "layer2.1.conv1.weight",
+        "layer1.0.conv2.weight",
+        "layer3.0.conv1.weight",
+        "layer2.1.conv2.weight",
+        "layer3.0.conv2.weight",
+        "layer4.0.conv1.weight",
+        "layer4.0.conv2.weight"
+      ],
+      "protection": {
+        "implementation_defense": "custom",
+        "defense": "custom",
+        "tensor_unit_count": 122,
+        "protected_unit_count": 14,
+        "protection_mask_sha256": "ee045330f9250b84eafea123f56127ce426826a7196a44a8e56a66bb07d0ad40",
+        "classifier_protected": true,
+        "head_mode": "replace",
+        "total_param_count": 11227812,
+        "protected_param_count": 5138532,
+        "protected_param_ratio": 0.4576610295932992,
+        "magnitude_eligible_count": null,
+        "magnitude_protected_count": null,
+        "selected_units": [
+          {
+            "rank": 1,
+            "index": 18,
+            "state_name": "layer1.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 2,
+            "index": 30,
+            "state_name": "layer2.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 73728
+          },
+          {
+            "rank": 3,
+            "index": 120,
+            "state_name": "last_linear.weight",
+            "state_kind": "parameter",
+            "numel": 51200
+          },
+          {
+            "rank": 4,
+            "index": 6,
+            "state_name": "layer1.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 5,
+            "index": 24,
+            "state_name": "layer1.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 6,
+            "index": 36,
+            "state_name": "layer2.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 7,
+            "index": 48,
+            "state_name": "layer2.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 8,
+            "index": 12,
+            "state_name": "layer1.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 9,
+            "index": 60,
+            "state_name": "layer3.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 294912
+          },
+          {
+            "rank": 10,
+            "index": 54,
+            "state_name": "layer2.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 11,
+            "index": 66,
+            "state_name": "layer3.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 589824
+          },
+          {
+            "rank": 12,
+            "index": 90,
+            "state_name": "layer4.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 1179648
+          },
+          {
+            "rank": 13,
+            "index": 96,
+            "state_name": "layer4.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 2359296
+          },
+          {
+            "rank": null,
+            "index": 121,
+            "state_name": "last_linear.bias",
+            "state_kind": "parameter",
+            "numel": 100
+          }
+        ],
+        "mask_path": "results/lab/04_tensorshield/top_13_mask.pt"
+      },
+      "primary": {
+        "evaluation": "end",
+        "epoch": 100
+      },
+      "end": {
+        "eval_count": 10000,
+        "victim_correct": 6182,
+        "surrogate_correct": 1862,
+        "agreement_count": 2048,
+        "victim_acc": 0.6182,
+        "surrogate_acc": 0.1862,
+        "fidelity": 0.2048,
+        "posterior_kl_sum": 25072.691539764404,
+        "posterior_kl": 2.5072691539764405
+      }
+    },
+    {
+      "case": "top_14",
+      "top_k": 14,
+      "new_weight": "layer4.1.conv1.weight",
+      "selected_weight_names": [
+        "layer1.1.conv1.weight",
+        "layer2.0.conv1.weight",
+        "last_linear.weight",
+        "layer1.0.conv1.weight",
+        "layer1.1.conv2.weight",
+        "layer2.0.conv2.weight",
+        "layer2.1.conv1.weight",
+        "layer1.0.conv2.weight",
+        "layer3.0.conv1.weight",
+        "layer2.1.conv2.weight",
+        "layer3.0.conv2.weight",
+        "layer4.0.conv1.weight",
+        "layer4.0.conv2.weight",
+        "layer4.1.conv1.weight"
+      ],
+      "protection": {
+        "implementation_defense": "custom",
+        "defense": "custom",
+        "tensor_unit_count": 122,
+        "protected_unit_count": 15,
+        "protection_mask_sha256": "ef454e7cfc423b563d75676d4dd62f5c1809494837ab993bbf67f35a6de80e72",
+        "classifier_protected": true,
+        "head_mode": "replace",
+        "total_param_count": 11227812,
+        "protected_param_count": 7497828,
+        "protected_param_ratio": 0.6677906612615174,
+        "magnitude_eligible_count": null,
+        "magnitude_protected_count": null,
+        "selected_units": [
+          {
+            "rank": 1,
+            "index": 18,
+            "state_name": "layer1.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 2,
+            "index": 30,
+            "state_name": "layer2.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 73728
+          },
+          {
+            "rank": 3,
+            "index": 120,
+            "state_name": "last_linear.weight",
+            "state_kind": "parameter",
+            "numel": 51200
+          },
+          {
+            "rank": 4,
+            "index": 6,
+            "state_name": "layer1.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 5,
+            "index": 24,
+            "state_name": "layer1.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 6,
+            "index": 36,
+            "state_name": "layer2.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 7,
+            "index": 48,
+            "state_name": "layer2.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 8,
+            "index": 12,
+            "state_name": "layer1.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 9,
+            "index": 60,
+            "state_name": "layer3.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 294912
+          },
+          {
+            "rank": 10,
+            "index": 54,
+            "state_name": "layer2.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 11,
+            "index": 66,
+            "state_name": "layer3.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 589824
+          },
+          {
+            "rank": 12,
+            "index": 90,
+            "state_name": "layer4.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 1179648
+          },
+          {
+            "rank": 13,
+            "index": 96,
+            "state_name": "layer4.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 2359296
+          },
+          {
+            "rank": 14,
+            "index": 108,
+            "state_name": "layer4.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 2359296
+          },
+          {
+            "rank": null,
+            "index": 121,
+            "state_name": "last_linear.bias",
+            "state_kind": "parameter",
+            "numel": 100
+          }
+        ],
+        "mask_path": "results/lab/04_tensorshield/top_14_mask.pt"
+      },
+      "primary": {
+        "evaluation": "end",
+        "epoch": 100
+      },
+      "end": {
+        "eval_count": 10000,
+        "victim_correct": 6182,
+        "surrogate_correct": 1835,
+        "agreement_count": 1982,
+        "victim_acc": 0.6182,
+        "surrogate_acc": 0.1835,
+        "fidelity": 0.1982,
+        "posterior_kl_sum": 25362.70810699463,
+        "posterior_kl": 2.5362708106994627
+      }
+    },
+    {
+      "case": "top_15",
+      "top_k": 15,
+      "new_weight": "layer4.1.conv2.weight",
+      "selected_weight_names": [
+        "layer1.1.conv1.weight",
+        "layer2.0.conv1.weight",
+        "last_linear.weight",
+        "layer1.0.conv1.weight",
+        "layer1.1.conv2.weight",
+        "layer2.0.conv2.weight",
+        "layer2.1.conv1.weight",
+        "layer1.0.conv2.weight",
+        "layer3.0.conv1.weight",
+        "layer2.1.conv2.weight",
+        "layer3.0.conv2.weight",
+        "layer4.0.conv1.weight",
+        "layer4.0.conv2.weight",
+        "layer4.1.conv1.weight",
+        "layer4.1.conv2.weight"
+      ],
+      "protection": {
+        "implementation_defense": "custom",
+        "defense": "custom",
+        "tensor_unit_count": 122,
+        "protected_unit_count": 16,
+        "protection_mask_sha256": "1a9d8dc21a4bf37fe8f3240d1ba57fadb3ee28fa84a08e8e4324cf951c5b6f4b",
+        "classifier_protected": true,
+        "head_mode": "replace",
+        "total_param_count": 11227812,
+        "protected_param_count": 9857124,
+        "protected_param_ratio": 0.8779202929297355,
+        "magnitude_eligible_count": null,
+        "magnitude_protected_count": null,
+        "selected_units": [
+          {
+            "rank": 1,
+            "index": 18,
+            "state_name": "layer1.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 2,
+            "index": 30,
+            "state_name": "layer2.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 73728
+          },
+          {
+            "rank": 3,
+            "index": 120,
+            "state_name": "last_linear.weight",
+            "state_kind": "parameter",
+            "numel": 51200
+          },
+          {
+            "rank": 4,
+            "index": 6,
+            "state_name": "layer1.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 5,
+            "index": 24,
+            "state_name": "layer1.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 6,
+            "index": 36,
+            "state_name": "layer2.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 7,
+            "index": 48,
+            "state_name": "layer2.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 8,
+            "index": 12,
+            "state_name": "layer1.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 9,
+            "index": 60,
+            "state_name": "layer3.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 294912
+          },
+          {
+            "rank": 10,
+            "index": 54,
+            "state_name": "layer2.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 11,
+            "index": 66,
+            "state_name": "layer3.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 589824
+          },
+          {
+            "rank": 12,
+            "index": 90,
+            "state_name": "layer4.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 1179648
+          },
+          {
+            "rank": 13,
+            "index": 96,
+            "state_name": "layer4.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 2359296
+          },
+          {
+            "rank": 14,
+            "index": 108,
+            "state_name": "layer4.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 2359296
+          },
+          {
+            "rank": 15,
+            "index": 114,
+            "state_name": "layer4.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 2359296
+          },
+          {
+            "rank": null,
+            "index": 121,
+            "state_name": "last_linear.bias",
+            "state_kind": "parameter",
+            "numel": 100
+          }
+        ],
+        "mask_path": "results/lab/04_tensorshield/top_15_mask.pt"
+      },
+      "primary": {
+        "evaluation": "end",
+        "epoch": 100
+      },
+      "end": {
+        "eval_count": 10000,
+        "victim_correct": 6182,
+        "surrogate_correct": 1835,
+        "agreement_count": 1983,
+        "victim_acc": 0.6182,
+        "surrogate_acc": 0.1835,
+        "fidelity": 0.1983,
+        "posterior_kl_sum": 25880.098808288574,
+        "posterior_kl": 2.5880098808288574
+      }
+    },
+    {
+      "case": "top_16",
+      "top_k": 16,
+      "new_weight": "layer3.1.conv2.weight",
+      "selected_weight_names": [
+        "layer1.1.conv1.weight",
+        "layer2.0.conv1.weight",
+        "last_linear.weight",
+        "layer1.0.conv1.weight",
+        "layer1.1.conv2.weight",
+        "layer2.0.conv2.weight",
+        "layer2.1.conv1.weight",
+        "layer1.0.conv2.weight",
+        "layer3.0.conv1.weight",
+        "layer2.1.conv2.weight",
+        "layer3.0.conv2.weight",
+        "layer4.0.conv1.weight",
+        "layer4.0.conv2.weight",
+        "layer4.1.conv1.weight",
+        "layer4.1.conv2.weight",
+        "layer3.1.conv2.weight"
+      ],
+      "protection": {
+        "implementation_defense": "custom",
+        "defense": "custom",
+        "tensor_unit_count": 122,
+        "protected_unit_count": 17,
+        "protection_mask_sha256": "91e405335f8c65ee49c1cf4d69a6d0fa4d6f97b96eee92ca2b1226b719ba34ef",
+        "classifier_protected": true,
+        "head_mode": "replace",
+        "total_param_count": 11227812,
+        "protected_param_count": 10446948,
+        "protected_param_ratio": 0.9304527008467901,
+        "magnitude_eligible_count": null,
+        "magnitude_protected_count": null,
+        "selected_units": [
+          {
+            "rank": 1,
+            "index": 18,
+            "state_name": "layer1.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 2,
+            "index": 30,
+            "state_name": "layer2.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 73728
+          },
+          {
+            "rank": 3,
+            "index": 120,
+            "state_name": "last_linear.weight",
+            "state_kind": "parameter",
+            "numel": 51200
+          },
+          {
+            "rank": 4,
+            "index": 6,
+            "state_name": "layer1.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 5,
+            "index": 24,
+            "state_name": "layer1.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 6,
+            "index": 36,
+            "state_name": "layer2.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 7,
+            "index": 48,
+            "state_name": "layer2.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 8,
+            "index": 12,
+            "state_name": "layer1.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 9,
+            "index": 60,
+            "state_name": "layer3.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 294912
+          },
+          {
+            "rank": 10,
+            "index": 54,
+            "state_name": "layer2.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 11,
+            "index": 66,
+            "state_name": "layer3.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 589824
+          },
+          {
+            "rank": 12,
+            "index": 90,
+            "state_name": "layer4.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 1179648
+          },
+          {
+            "rank": 13,
+            "index": 96,
+            "state_name": "layer4.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 2359296
+          },
+          {
+            "rank": 14,
+            "index": 108,
+            "state_name": "layer4.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 2359296
+          },
+          {
+            "rank": 15,
+            "index": 114,
+            "state_name": "layer4.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 2359296
+          },
+          {
+            "rank": 16,
+            "index": 84,
+            "state_name": "layer3.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 589824
+          },
+          {
+            "rank": null,
+            "index": 121,
+            "state_name": "last_linear.bias",
+            "state_kind": "parameter",
+            "numel": 100
+          }
+        ],
+        "mask_path": "results/lab/04_tensorshield/top_16_mask.pt"
+      },
+      "primary": {
+        "evaluation": "end",
+        "epoch": 100
+      },
+      "end": {
+        "eval_count": 10000,
+        "victim_correct": 6182,
+        "surrogate_correct": 1845,
+        "agreement_count": 2013,
+        "victim_acc": 0.6182,
+        "surrogate_acc": 0.1845,
+        "fidelity": 0.2013,
+        "posterior_kl_sum": 25779.243560791016,
+        "posterior_kl": 2.5779243560791016
+      }
+    },
+    {
+      "case": "top_17",
+      "top_k": 17,
+      "new_weight": "layer3.1.conv1.weight",
+      "selected_weight_names": [
+        "layer1.1.conv1.weight",
+        "layer2.0.conv1.weight",
+        "last_linear.weight",
+        "layer1.0.conv1.weight",
+        "layer1.1.conv2.weight",
+        "layer2.0.conv2.weight",
+        "layer2.1.conv1.weight",
+        "layer1.0.conv2.weight",
+        "layer3.0.conv1.weight",
+        "layer2.1.conv2.weight",
+        "layer3.0.conv2.weight",
+        "layer4.0.conv1.weight",
+        "layer4.0.conv2.weight",
+        "layer4.1.conv1.weight",
+        "layer4.1.conv2.weight",
+        "layer3.1.conv2.weight",
+        "layer3.1.conv1.weight"
+      ],
+      "protection": {
+        "implementation_defense": "custom",
+        "defense": "custom",
+        "tensor_unit_count": 122,
+        "protected_unit_count": 18,
+        "protection_mask_sha256": "3e58629468e7673a48eaaabb54f5aea2839c104c99bacd11a4013cc9d2178327",
+        "classifier_protected": true,
+        "head_mode": "replace",
+        "total_param_count": 11227812,
+        "protected_param_count": 11036772,
+        "protected_param_ratio": 0.9829851087638446,
+        "magnitude_eligible_count": null,
+        "magnitude_protected_count": null,
+        "selected_units": [
+          {
+            "rank": 1,
+            "index": 18,
+            "state_name": "layer1.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 2,
+            "index": 30,
+            "state_name": "layer2.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 73728
+          },
+          {
+            "rank": 3,
+            "index": 120,
+            "state_name": "last_linear.weight",
+            "state_kind": "parameter",
+            "numel": 51200
+          },
+          {
+            "rank": 4,
+            "index": 6,
+            "state_name": "layer1.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 5,
+            "index": 24,
+            "state_name": "layer1.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 6,
+            "index": 36,
+            "state_name": "layer2.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 7,
+            "index": 48,
+            "state_name": "layer2.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 8,
+            "index": 12,
+            "state_name": "layer1.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 9,
+            "index": 60,
+            "state_name": "layer3.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 294912
+          },
+          {
+            "rank": 10,
+            "index": 54,
+            "state_name": "layer2.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 11,
+            "index": 66,
+            "state_name": "layer3.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 589824
+          },
+          {
+            "rank": 12,
+            "index": 90,
+            "state_name": "layer4.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 1179648
+          },
+          {
+            "rank": 13,
+            "index": 96,
+            "state_name": "layer4.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 2359296
+          },
+          {
+            "rank": 14,
+            "index": 108,
+            "state_name": "layer4.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 2359296
+          },
+          {
+            "rank": 15,
+            "index": 114,
+            "state_name": "layer4.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 2359296
+          },
+          {
+            "rank": 16,
+            "index": 84,
+            "state_name": "layer3.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 589824
+          },
+          {
+            "rank": 17,
+            "index": 78,
+            "state_name": "layer3.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 589824
+          },
+          {
+            "rank": null,
+            "index": 121,
+            "state_name": "last_linear.bias",
+            "state_kind": "parameter",
+            "numel": 100
+          }
+        ],
+        "mask_path": "results/lab/04_tensorshield/top_17_mask.pt"
+      },
+      "primary": {
+        "evaluation": "end",
+        "epoch": 100
+      },
+      "end": {
+        "eval_count": 10000,
+        "victim_correct": 6182,
+        "surrogate_correct": 1804,
+        "agreement_count": 1959,
+        "victim_acc": 0.6182,
+        "surrogate_acc": 0.1804,
+        "fidelity": 0.1959,
+        "posterior_kl_sum": 25845.389572143555,
+        "posterior_kl": 2.5845389572143556
       }
     }
   ],
@@ -1349,7 +2193,11 @@
   "outputs": {
     "data": "results/lab/04_tensorshield/data.tsv",
     "history": "results/lab/04_tensorshield/history.tsv",
-    "plot": "results/lab/04_tensorshield/metrics.png"
+    "plots": {
+      "surrogate_acc": "results/lab/04_tensorshield/accuracy.png",
+      "fidelity": "results/lab/04_tensorshield/fidelity.png",
+      "posterior_kl": "results/lab/04_tensorshield/posterior_kl.png"
+    }
   },
-  "created_at": "2026-07-13T12:32:32.434842+00:00"
+  "created_at": "2026-07-16T08:28:21.250057+00:00"
 }

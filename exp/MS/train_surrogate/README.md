@@ -33,6 +33,8 @@ large_weight     按公开预训练权重绝对值保护全局大权重标量
 tensorshield     按作者确认 rank 构造 Figure 12 固定 tensor mask
 ```
 
+`hard_blackbox` 不是新的保护策略，而是 `full_protection` 在 label-only 查询接口下的独立输出能力对比 artifact。它沿用完整保护 mask，但使用不同的攻击协议和结果目录，不替换 posterior-visible `full_protection` 的主黑盒定义。
+
 ResNet18 以 `state_dict` 的稳定顺序定义 122 个基础 tensor unit，索引范围为 `0` 至 `121`。每个 unit 对应一个参数或缓冲区条目；后续所有完整层和细粒度策略均由这些 unit 聚合，不再另外定义底层保护单位。
 
 下表给出 ResNet18 官方 18 层与 unit 的归属关系，用于在需要完整层边界时选择 unit：`conv1` 为第 1 层，8 个 BasicBlock 中的 16 个主分支卷积为第 2 至 17 层，`last_linear` 为第 18 层。BatchNorm 状态归入前置卷积；三个 downsample 分支归入对应 stage 首个 BasicBlock 的 `conv1` 层；`maxpool` 关联第 1 层，`avgpool` 关联第 18 层。池化层没有 `state_dict` 条目，因此不会增加 unit 数量。训练入口只把明确指定的官方层映射为 unit，不会把比例隐式转换成 unit。
@@ -109,9 +111,49 @@ query 输入变换       与 posterior 生成一致的确定性 test transform
 诊断 checkpoint     best.pth，仅记录 eval_ms accuracy 最高点，不进入主结果汇总
 ```
 
-权重保护策略不改变查询接口。`no_protection`、partial protection 和 `full_protection` 均读取 `posteriors.pt`，不得因为保护位置不同而切换 hard/soft。hard label 只用于 `lab/` 中明确标注的输出能力消融，不进入当前正式 baseline。
+主保护策略不改变查询接口。`no_protection`、partial protection 和 `full_protection` 均读取 `posteriors.pt`，不得因为保护位置不同而切换 hard/soft。唯一例外是单独注册的 `hard_blackbox` 输出能力对比；它不参与 soft-posterior 保护策略排序，也不替换主黑盒下界。
 
 `no_protection` 是特殊恒等控制组：完整 victim 状态已经暴露，surrogate 在 epoch 0 直接评估并同时写出 `best.pth` 与 `end.pth`，不使用 query 更新参数。其余策略固定训练 100 epoch，使用 batch size 64、SGD、学习率 0.01、momentum 0.5、weight decay `5e-4`，并在第 60 个 epoch 后把学习率乘以 0.1；即 epoch 1-60 使用 `0.01`，epoch 61-100 使用 `0.001`。正式汇总统一读取 `end` 指标，不能从 `eval_ms` 选择 epoch 作为主结果。
+
+## Hard-label 黑盒输出能力对比
+
+`hard_blackbox` 使用独立协议 `hard_label_replace_finetune_v1`，当前只允许 `ResNet18+CIFAR-100 + full_protection`。它与 soft-posterior `full_protection` 使用同一个 victim、query 前缀、公开 ImageNet 初始化、随机分类头、全保护 mask、优化器和训练轮数；唯一变化是将 victim 输出改为 argmax hard pseudo label。为了隔离输出信息差异，hard query 同样使用确定性的 test transform，不启用随机裁剪或翻转。
+
+```text
+victim              weights/MS/victim/resnet18/c100/best.pth
+artifact_id         hard_blackbox
+comparison_scope    ordinary_fixed_victim_output_ablation
+保护策略            full_protection，122/122 unit
+攻击者可观测输出    victim argmax hard label
+query budget        500
+query transform     确定性的 test transform
+训练轮数            100
+优化器              SGD，lr=0.01，momentum=0.5，weight_decay=5e-4
+学习率调度          StepLR，step_size=60，gamma=0.1
+主要评估点          第 100 轮 end.pth
+诊断评估点          surrogate_acc 最高的 best.pth
+随机种子            42
+```
+
+正式运行前先 dry-run：
+
+```bash
+bash exp/MS/train_surrogate/run.sh resnet18 c100 \
+  --defense full_protection --budget 500 \
+  --training-mode finetune --label-mode hard --dry-run
+```
+
+正式运行：
+
+```bash
+bash exp/MS/train_surrogate/run.sh resnet18 c100 \
+  --defense full_protection --budget 500 \
+  --training-mode finetune --label-mode hard
+```
+
+产物固定写入 `weights/MS/surrogate/resnet18/c100/hard_blackbox/` 与 `results/MS/resnet18/c100/hard_blackbox/metrics.json`。`metrics.json` 记录独立的 `comparison_scope`，汇总索引通过 `artifact_id`、`attack_protocol` 和 `label_mode` 与 soft 主结果区分。其他保护策略、模型或数据集不得使用 `--label-mode hard`。
+
+当前固定终点结果为 `surrogate accuracy=0.1393`、`fidelity=0.1443`、`posterior KL=3.427757`。诊断 `best.pth` 位于第 88 轮，对应 `0.1407/0.1460/3.427400`，不用于主图或正式结论。
 
 ## 分类头保护控制组
 
@@ -131,9 +173,9 @@ bash exp/MS/train_surrogate/run.sh resnet18 c100 \
 
 分类头完整暴露时直接复制 victim 分类头，完整保护时使用直接映射到当前数据集类别数的随机初始化 `Linear`。逐标量策略允许分类头部分暴露，此时严格按 mask 复制所有可见 victim 标量，只对不可见位置保留随机初始化。Lab 02 的替换头结论适用于分类头整体不可见的情况，不能用于丢弃部分暴露的分类头标量。正式实验不再运行 adapter 或 frozen 分支，所有初始化方式仍统一全模型 finetune。
 
-正式入口只接受 `--training-mode finetune` 和 `--label-mode soft`。冻结机制仍作为底层验证代码保留，但不属于当前正式协议，也不得产生正式结果。
+正式入口只接受 `--training-mode finetune`。普通保护策略固定使用 `--label-mode soft`；`--label-mode hard` 只允许上述 `ResNet18+C100` 全保护输出能力对比。冻结机制仍作为底层验证代码保留，但不属于当前正式协议，也不得产生正式结果。
 
-所有策略使用相同的 `posteriors.pt`、确定性 query 输入和 soft cross-entropy。soft 模式不使用 RandomCrop、RandomHorizontalFlip 等随机增强；`full_protection` 仅表示所有 victim 权重不可见，不额外叠加 label-only 输出限制。
+所有主保护策略使用相同的 `posteriors.pt`、确定性 query 输入和 soft cross-entropy。soft 模式不使用 RandomCrop、RandomHorizontalFlip 等随机增强；`full_protection` 仍只表示所有 victim 权重不可见，不额外叠加 label-only 输出限制。`hard_blackbox` 则读取 `labels.tsv` 并使用 hard-label cross-entropy，但保持相同的确定性输入。
 
 ## 运行方式
 

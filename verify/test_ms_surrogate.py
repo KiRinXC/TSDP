@@ -43,7 +43,7 @@ from defense.base import DefenseOptions  # noqa: E402
 from defense.initialize import _copy_exposed_state  # noqa: E402
 from defense.magnitude import build_large_weight  # noqa: E402
 from models import resnet18  # noqa: E402
-from core.config import validate_attack_configuration  # noqa: E402
+from core.config import resolve_attack_protocol, validate_attack_configuration  # noqa: E402
 from core.artifacts import INDEX_FIELDS, make_artifact_id  # noqa: E402
 from core import data as surrogate_data  # noqa: E402
 from core.data import QueryDataset  # noqa: E402
@@ -145,13 +145,18 @@ class SurrogateProtectionTests(unittest.TestCase):
         ]
         self.assertEqual(len(hashes), len(set(hashes)))
 
-    def test_formal_protocol_only_accepts_soft_finetune(self):
-        validate_attack_configuration("full_protection", "finetune", "soft")
-        validate_attack_configuration("shallow", "finetune", "soft")
+    def test_formal_protocol_accepts_only_fixed_hard_blackbox(self):
+        validate_attack_configuration("full_protection", "finetune", "soft", "resnet18", "c100")
+        validate_attack_configuration("shallow", "finetune", "soft", "resnet18", "c100")
+        validate_attack_configuration("full_protection", "finetune", "hard", "resnet18", "c100")
+        self.assertEqual(resolve_attack_protocol("soft"), "posterior_replace_finetune_v2")
+        self.assertEqual(resolve_attack_protocol("hard"), "hard_label_replace_finetune_v1")
         with self.assertRaises(ValueError):
-            validate_attack_configuration("full_protection", "finetune", "hard")
+            validate_attack_configuration("shallow", "finetune", "hard", "resnet18", "c100")
         with self.assertRaises(ValueError):
-            validate_attack_configuration("shallow", "frozen", "soft")
+            validate_attack_configuration("full_protection", "finetune", "hard", "resnet50", "c100")
+        with self.assertRaises(ValueError):
+            validate_attack_configuration("shallow", "frozen", "soft", "resnet18", "c100")
 
     def test_planned_baseline_rejects_configuration_drift(self):
         config = resolve_plan_configuration(
@@ -320,7 +325,7 @@ class SurrogateProtectionTests(unittest.TestCase):
         self.assertEqual(label.item(), 7)
         self.assertEqual(len(dataset[0]), 2)
 
-    def test_soft_query_uses_test_transform_and_hard_uses_train_transform(self):
+    def test_query_transform_can_be_fixed_for_hard_blackbox(self):
         public_dataset = TensorDataset(torch.randn(1, 2), torch.zeros(1, dtype=torch.long))
         with (
             patch.object(surrogate_data, "build_transforms", return_value=("train", "test")),
@@ -347,6 +352,16 @@ class SurrogateProtectionTests(unittest.TestCase):
                 torch.tensor([1]),
             )
             self.assertEqual(build_dataset.call_args.args[-1], "train")
+
+            surrogate_data.build_query_dataset(
+                "c100",
+                Path("unused"),
+                [0],
+                None,
+                torch.tensor([1]),
+                input_transform="test",
+            )
+            self.assertEqual(build_dataset.call_args.args[-1], "test")
 
     def test_hard_loss_does_not_require_posteriors(self):
         logits = torch.tensor([[2.0, 0.0]], requires_grad=True)

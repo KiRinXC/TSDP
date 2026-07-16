@@ -12,11 +12,11 @@ import torch.nn as nn
 from torch.utils.data import DataLoader
 
 from .config import (
-    ATTACK_PROTOCOL_VERSION,
     MODEL_SPECS,
     NUM_CLASSES,
     REPO_ROOT,
     parse_args,
+    resolve_attack_protocol,
     resolve_device,
     validate_attack_configuration,
 )
@@ -47,13 +47,20 @@ from .planning import resolve_plan_configuration, validate_built_plan
 
 def main() -> int:
     args = parse_args()
-    validate_attack_configuration(args.defense, args.training_mode, args.label_mode)
     if args.epochs <= 0:
         raise ValueError("epochs 必须大于 0。")
     if args.batch_size <= 0 or args.eval_batch_size <= 0:
         raise ValueError("batch_size 和 eval_batch_size 必须大于 0。")
     dataset_name = resolve_dataset_name(args.dataset)
     model_name = args.model
+    validate_attack_configuration(
+        args.defense,
+        args.training_mode,
+        args.label_mode,
+        model_name,
+        dataset_name,
+    )
+    attack_protocol = resolve_attack_protocol(args.label_mode)
     num_classes = NUM_CLASSES[dataset_name]
     plan_config = resolve_plan_configuration(
         plan_id=args.plan_id,
@@ -110,6 +117,7 @@ def main() -> int:
         query_indices,
         query_posteriors,
         query_labels,
+        input_transform="test",
     )
     eval_dataset = build_eval_dataset(dataset_name, dataset_root, protocol_root, args.eval_subset)
 
@@ -117,8 +125,9 @@ def main() -> int:
     expected_sha256 = query_manifest.get("victim", {}).get("checkpoint_sha256")
     if expected_sha256 and expected_sha256 != victim_sha256:
         raise ValueError("当前 victim best.pth 与生成 query 标签时使用的 checkpoint 不一致。")
-    query_target_config = {"posterior_sha256": sha256_file(query_target_path)}
-    query_transform = "test" if args.label_mode == "soft" else "train"
+    query_target_name = "posterior" if args.label_mode == "soft" else "label"
+    query_target_config = {f"{query_target_name}_sha256": sha256_file(query_target_path)}
+    query_transform = "test"
     execution_mode = "identity" if args.defense == "no_protection" else "finetune"
     plan_run_config = (
         {
@@ -131,7 +140,7 @@ def main() -> int:
     )
     run_config = {
         "schema_version": 2,
-        "attack_protocol": ATTACK_PROTOCOL_VERSION,
+        "attack_protocol": attack_protocol,
         "dataset": dataset_name,
         "model": model_name,
         "victim_checkpoint_sha256": victim_sha256,
@@ -164,7 +173,11 @@ def main() -> int:
         "eval_subset": args.eval_subset,
     }
     run_id = make_run_id(run_config)
-    artifact_id = make_artifact_id(args.plan_id, args.defense, run_id)
+    artifact_id = (
+        "hard_blackbox"
+        if args.label_mode == "hard"
+        else make_artifact_id(args.plan_id, args.defense, run_id)
+    )
 
     print(f"[INFO] run_id: {run_id}")
     print(f"[INFO] artifact_id: {artifact_id}")
@@ -172,7 +185,7 @@ def main() -> int:
     print(f"[INFO] 保护策略: {args.defense}")
     print(f"[INFO] query budget: {args.budget}")
     print(f"[INFO] 标签模式: {args.label_mode}")
-    print(f"[INFO] 攻击协议: {ATTACK_PROTOCOL_VERSION}")
+    print(f"[INFO] 攻击协议: {attack_protocol}")
     print(f"[INFO] 训练模式: {execution_mode}")
     print(f"[INFO] 分类头模式: {protection_plan.head_mode}")
     if args.plan_id is not None:
@@ -251,7 +264,7 @@ def main() -> int:
         **protection_plan.to_metadata(),
         "mask_path": display_path(protection_mask_path),
     }
-    query_target_params = {"posterior_path": str(query_target_path)}
+    query_target_params = {f"{query_target_name}_path": str(query_target_path)}
     params = {
         **run_config,
         "artifact_id": artifact_id,
@@ -292,7 +305,7 @@ def main() -> int:
         write_history_row(history_path, row)
         save_checkpoint(
             weights_run / "best.pth", surrogate_model, None, None, 0,
-            model_name, dataset_name, run_id, ATTACK_PROTOCOL_VERSION, best_metrics,
+            model_name, dataset_name, run_id, attack_protocol, best_metrics,
         )
     else:
         for epoch in range(1, args.epochs + 1):
@@ -320,22 +333,27 @@ def main() -> int:
                 best_epoch = epoch
                 save_checkpoint(
                     weights_run / "best.pth", surrogate_model, optimizer, scheduler, epoch,
-                    model_name, dataset_name, run_id, ATTACK_PROTOCOL_VERSION, best_metrics,
+                    model_name, dataset_name, run_id, attack_protocol, best_metrics,
                 )
 
     assert best_metrics is not None and end_metrics is not None
     end_epoch = args.epochs if optimizer is not None else 0
     save_checkpoint(
         weights_run / "end.pth", surrogate_model, optimizer, scheduler, end_epoch,
-        model_name, dataset_name, run_id, ATTACK_PROTOCOL_VERSION, end_metrics,
+        model_name, dataset_name, run_id, attack_protocol, end_metrics,
     )
 
     metrics_payload = {
         "schema_version": 2,
         "protocol": "MS",
-        "attack_protocol": ATTACK_PROTOCOL_VERSION,
+        "attack_protocol": attack_protocol,
         "artifact_id": artifact_id,
         "run_id": run_id,
+        "comparison_scope": (
+            "ordinary_fixed_victim_output_ablation"
+            if args.label_mode == "hard"
+            else "ordinary_fixed_victim"
+        ),
         "dataset": dataset_name,
         "victim_model": model_name,
         "query_budget": args.budget,
@@ -356,7 +374,7 @@ def main() -> int:
         "artifact_id": artifact_id,
         "plan_id": args.plan_id or "",
         "run_id": run_id,
-        "attack_protocol": ATTACK_PROTOCOL_VERSION,
+        "attack_protocol": attack_protocol,
         "dataset": dataset_name,
         "victim_model": model_name,
         "defense": args.defense,

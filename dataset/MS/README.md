@@ -31,4 +31,4 @@ posteriors.pt                  softmax posterior 与 hard pseudo label
 
 `splits.tsv` 内的 `query_rank` 定义 query 的固定顺序。后续 surrogate 对任意预算都必须使用前 `budget` 条 query，且预算不得超过本数据集 `manifest.json` 的 `query.max_budget`。
 
-模型 posterior 使用确定性的 test transform 在原始 query 图像上生成。soft posterior 训练必须复用同一 transform，保证每个 posterior 始终绑定到实际被送入 surrogate 的同一图像；随机训练增强只允许用于明确采用 hard label 的 Lab 消融。
+模型 posterior 使用确定性的 test transform 在原始 query 图像上生成。soft posterior 训练必须复用同一 transform，保证每个 posterior 始终绑定到实际被送入 surrogate 的同一图像。正式 `hard_blackbox` 为隔离输出能力差异同样固定使用 test transform；随机训练增强只允许用于另行明确声明的 hard-label Lab 消融。

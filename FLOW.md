@@ -21,9 +21,12 @@ MS 随机重叠协议/
 │       ├── labels.tsv                hard pseudo label 与 confidence
 │       └── posteriors.pt             test transform 下固定顺序的 posterior
 └── exp/MS/train_surrogate/
-    ├── 读取 query_pool_ms 的预算前缀与 victim soft posterior
+    ├── 读取 query_pool_ms 的预算前缀与 victim posterior/hard label
     ├── posterior_replace_finetune_v2 统一确定性 query、mask 权威初始化、微调与 step60 协议
     │   └── 分类头完整暴露时复制、部分暴露时 mixed、完整保护时替换
+    ├── hard_label_replace_finetune_v1
+    │   ├── 仅 ResNet18+C100 全保护，确定性 test transform 与 500 条 hard query
+    │   └── <artifact_id=hard_blackbox> 只作输出能力对比，不替换 soft 主黑盒
     ├── plan.py
     │   ├── exp/MS/train_surrogate/baseline.json    固化 32 组 baseline 配置与保护统计
     │   └── weights/MS/surrogate/resnet18/c100/baseline.pt
@@ -108,9 +111,11 @@ Lab 验证实验/
 │       └── history.tsv               八组共 800 条逐 epoch 训练记录
 ├── lab/03_baseline/
 │   ├── 读取 results/MS/resnet18/c100/<artifact_id>/metrics.json
+│   ├── 读取正式 hard_blackbox/metrics.json 的 hard-label 辅助参考
 │   ├── 按实际 protected_param_ratio 汇总四种扫描曲线及 head_only/TensorShield 单点
 │   ├── TEESlice 只使用 standalone 黑盒 end 指标并以独立标记展示
-│   ├── 普通 victim 的 no_protection 与 full_protection 作为统一水平参考线
+│   ├── 普通 victim 的 no_protection 与 soft full_protection 作为主参考线
+│   ├── hard full_protection 只作输出能力消融参考线
 │   └── results/lab/03_baseline/
 │       ├── accuracy.png              保护比例与 surrogate accuracy
 │       ├── fidelity.png              保护比例与 fidelity
@@ -121,29 +126,32 @@ Lab 验证实验/
 ├── lab/04_tensorshield/
 │   ├── 读取 ResNet18+CIFAR-100 victim、500 条 soft posterior query 与 eval_ms
 │   ├── 从作者确认的 41-weight rank 派生 17-weight eligible rank
-│   ├── 分别构造 Top-1 至 Top-12 前缀 mask；Top-10 对应 Figure 12(d)
+│   ├── 分别构造 Top-1 至 Top-17 前缀 mask，每组固定加入 unit 121；Top-10 对应 Figure 12(d)
 │   ├── 每个 k 重置种子并微调 100 轮，只在 end 读取 eval_ms
-│   ├── 分别保护作者原始 41-weight rank 的 11-20 与 32-41 窗口，各训练一次
+│   ├── 从 16 个非分类头 eligible 候选取前 10 与后 10，两组均固定保护完整分类头
 │   └── results/lab/04_tensorshield/
-│       ├── metrics.json              作者 rank、12 组保护统计与 end 原始指标
-│       ├── history.tsv               12 组共 1,200 轮 query 训练记录
+│       ├── metrics.json              作者 rank、17 组保护统计与 end 原始指标
+│       ├── history.tsv               17 组共 1,700 轮 query 训练记录
 │       ├── data.tsv                  Top-k 曲线原始点
-│       ├── metrics.png               accuracy、fidelity 与 KL 三联曲线
-│       ├── top_<k>_mask.pt           12 组紧凑保护掩码
-│       ├── ablation.json/tsv/png     rank-5/rank-10 删除消融与对比图
-│       ├── ablation_history.tsv      两组新增消融共 200 轮 query 训练记录
-│       ├── drop_<rank>_mask.pt       两组新增删除集合的紧凑保护掩码
-│       ├── window.json/tsv/png       两个原始 rank 窗口的指标和保护成本对照
+│       ├── accuracy.png              参数占比断轴与 surrogate accuracy，放大 0–15% 区间
+│       ├── fidelity.png              参数占比断轴与 fidelity，放大 0–15% 区间
+│       ├── posterior_kl.png          参数占比断轴与 posterior KL，放大 0–15% 区间
+│       ├── top_<k>_mask.pt           17 组紧凑保护掩码
+│       ├── ablation.json/tsv/png     Top-12 内 rank-5/rank-10 删除消融、黑白盒边界与对比图
+│       ├── ablation_history.tsv      三组新增消融共 300 轮 query 训练记录
+│       ├── drop_<rank>_mask.pt       三组新增删除集合的紧凑保护掩码
+│       ├── window.json/tsv/png       两个 eligible 窗口的指标和参数占比三联直方图
 │       ├── window_history.tsv        两组窗口共 200 轮 query 训练记录
-│       └── rank_<range>_mask.pt      两个窗口的紧凑保护掩码
+│       └── <first|last>_10_mask.pt   两个窗口的紧凑保护掩码
 └── lab/05_state/
-    ├── 分别只保护 weight、bias 和三种 BN buffer，其余 victim 状态全部复制
-    ├── 使用统一 soft posterior 与 finetune 协议分别训练五个 surrogate
+    ├── 分别只保护五种完整 state 类型或十三种参数语义组，其余 victim 状态全部复制
+    ├── 语义组拆分主路径/Stem/downsample Conv、局部/全局 BN affine、分类头与完整分支
+    ├── 使用统一 soft posterior 与 finetune 协议分别训练十八个 surrogate
     ├── 以 protected_state_byte_ratio 为横坐标绘制独立散点
     └── results/lab/05_state/
-        ├── metrics.json              五种 state 类型的保护统计与原始指标
-        ├── history.tsv               五组各 100 轮训练和评估记录
+        ├── metrics.json              十八组保护统计与 end 原始指标
+        ├── history.tsv               十八组各 100 轮训练和评估记录
         ├── data.tsv                  绘图使用的 end 原始点
         ├── accuracy/fidelity/posterior_kl.png
-        └── <type>_mask.pt            五种类型的紧凑保护掩码
+        └── <group>_mask.pt           十八组紧凑保护掩码
 ```

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""消融 TensorShield Top-10 中 rank-5 与 rank-10 tensor。"""
+"""消融 TensorShield Top-12 中 rank-5 与 rank-10 tensor。"""
 
 from __future__ import annotations
 
@@ -16,16 +16,16 @@ from torch.utils.data import DataLoader
 import run as prefix
 
 
-PREFIX_METRICS_SHA256 = "f4afb5549e8f3ae395db3a75e3f4aefe2ed4dd8686ab539405c8d150f88b98ab"
+PREFIX_METRICS_SHA256 = "c05c7d158ff243878200ad40414c153630355d51a5de010e4ac12b570585c9a7"
 RANK_5 = "layer1.1.conv2.weight"
 RANK_10 = "layer2.1.conv2.weight"
 EXPECTED_STATS = {
-    "full_top10": (11, 1_009_764),
-    "drop_05": (10, 972_900),
-    "drop_10": (10, 862_308),
-    "drop_05_10": (9, 825_444),
+    "full_top12": (13, 2_779_236),
+    "drop_05": (12, 2_742_372),
+    "drop_10": (12, 2_631_780),
+    "drop_05_10": (11, 2_594_916),
 }
-TRAIN_CASES = {"drop_05", "drop_05_10"}
+TRAIN_CASES = {"drop_05", "drop_10", "drop_05_10"}
 DATA_FIELDS = (
     "case",
     "origin",
@@ -52,7 +52,7 @@ class AblationCase:
 
     @property
     def dropped_weights(self) -> tuple[str, ...]:
-        return tuple(prefix.EXPECTED_TOP12[rank - 1] for rank in self.dropped_ranks)
+        return tuple(prefix.EXPECTED_ELIGIBLE_RANK[rank - 1] for rank in self.dropped_ranks)
 
 
 def parse_args() -> argparse.Namespace:
@@ -69,16 +69,16 @@ def parse_args() -> argparse.Namespace:
 
 def build_ablation_cases(victim: torch.nn.Module) -> tuple[AblationCase, ...]:
     ranking, _ = prefix.build_cases(victim)
-    top10 = ranking[:10]
-    if top10[4] != RANK_5 or top10[9] != RANK_10:
-        raise ValueError(f"待消融 rank 已变化：rank5={top10[4]}，rank10={top10[9]}")
+    top12 = ranking[:12]
+    if top12[4] != RANK_5 or top12[9] != RANK_10:
+        raise ValueError(f"待消融 rank 已变化：rank5={top12[4]}，rank10={top12[9]}")
     return (
-        AblationCase("full_top10", top10, ()),
-        AblationCase("drop_05", tuple(name for name in top10 if name != RANK_5), (5,)),
-        AblationCase("drop_10", top10[:9], (10,)),
+        AblationCase("full_top12", top12, ()),
+        AblationCase("drop_05", tuple(name for name in top12 if name != RANK_5), (5,)),
+        AblationCase("drop_10", tuple(name for name in top12 if name != RANK_10), (10,)),
         AblationCase(
             "drop_05_10",
-            tuple(name for name in top10 if name not in {RANK_5, RANK_10}),
+            tuple(name for name in top12 if name not in {RANK_5, RANK_10}),
             (5, 10),
         ),
     )
@@ -119,7 +119,7 @@ def initialize_selection(
     selected_metadata = [
         {
             "rank": (
-                prefix.EXPECTED_TOP12.index(unit.state_name) + 1
+                prefix.EXPECTED_ELIGIBLE_RANK.index(unit.state_name) + 1
                 if unit.state_name != "last_linear.bias"
                 else None
             ),
@@ -158,7 +158,20 @@ def load_prefix_results(path: Path) -> tuple[dict[str, object], dict[int, dict[s
         raise ValueError("前缀结果没有固定每个 surrogate 的初始化 RNG。")
     by_k = {int(result["top_k"]): result for result in payload.get("results", [])}
     if set(by_k) != set(prefix.TOP_K_VALUES):
-        raise ValueError("前缀结果未完整包含 Top-1 至 Top-12。")
+        raise ValueError("前缀结果未完整包含 Top-1 至 Top-17。")
+    references = payload.get("references", {})
+    expected_references = {
+        "no_protection": "no_protection",
+        "full_protection": "full_protection",
+    }
+    for name, defense in expected_references.items():
+        reference = references.get(name, {})
+        if reference.get("protection", {}).get("defense") != defense:
+            raise ValueError(f"前缀结果缺少有效的 {name} 边界。")
+        if not {"surrogate_acc", "fidelity", "posterior_kl"} <= set(
+            reference.get("end", {})
+        ):
+            raise ValueError(f"前缀结果的 {name} 边界缺少 MS 指标。")
     return payload, by_k
 
 
@@ -275,7 +288,7 @@ def train_case(
 
 
 def add_deletion_deltas(results: list[dict[str, object]]) -> None:
-    full = next(result for result in results if result["case"] == "full_top10")["end"]
+    full = next(result for result in results if result["case"] == "full_top12")["end"]
     for result in results:
         end = result["end"]
         result["attack_gain_from_deletion"] = {
@@ -318,18 +331,44 @@ def write_data(path: Path, results: list[dict[str, object]]) -> None:
             )
 
 
-def plot_ablation(path: Path, results: list[dict[str, object]]) -> None:
+def plot_ablation(
+    path: Path,
+    results: list[dict[str, object]],
+    references: dict[str, dict[str, object]],
+) -> None:
     specifications = (
         ("surrogate_acc", "Surrogate accuracy", "#0072B2"),
         ("fidelity", "Fidelity", "#009E73"),
         ("posterior_kl", "Posterior KL", "#D55E00"),
     )
-    labels = ("Full Top-10", "Drop #5", "Drop #10", "Drop #5 & #10")
+    labels = ("Full Top-12", "Drop #5", "Drop #10", "Drop #5 & #10")
     figure, axes = prefix.plt.subplots(1, 3, figsize=(14.2, 4.2))
     for axis, (metric, title, color) in zip(axes, specifications):
         values = [float(result["end"][metric]) for result in results]
+        white_box = float(references["no_protection"]["end"][metric])
+        black_box = float(references["full_protection"]["end"][metric])
         bars = axis.bar(range(4), values, color=("#555555", color, color, color), width=0.7)
-        axis.axhline(values[0], color="#222222", linestyle="--", linewidth=1.1)
+        axis.axhline(
+            values[0],
+            color="#222222",
+            linestyle="-.",
+            linewidth=1.1,
+            label="Full Top-12",
+        )
+        axis.axhline(
+            white_box,
+            color="#333333",
+            linestyle="--",
+            linewidth=1.2,
+            label="White-box (no protection)",
+        )
+        axis.axhline(
+            black_box,
+            color="#777777",
+            linestyle=":",
+            linewidth=1.4,
+            label="Black-box (full protection)",
+        )
         for bar, value in zip(bars, values):
             axis.text(
                 bar.get_x() + bar.get_width() / 2,
@@ -346,8 +385,24 @@ def plot_ablation(path: Path, results: list[dict[str, object]]) -> None:
         axis.set_axisbelow(True)
         axis.spines["top"].set_visible(False)
         axis.spines["right"].set_visible(False)
-        prefix.set_y_limits(axis, values, bounded=metric != "posterior_kl")
-    figure.suptitle("TensorShield Top-10 redundancy ablation", y=1.02)
+        prefix.set_y_limits(
+            axis,
+            [*values, white_box, black_box],
+            bounded=False,
+        )
+        if metric != "posterior_kl":
+            lower, upper = axis.get_ylim()
+            axis.set_ylim(max(0.0, lower), min(1.05, upper))
+    handles, legend_labels = axes[0].get_legend_handles_labels()
+    figure.legend(
+        handles,
+        legend_labels,
+        loc="upper center",
+        bbox_to_anchor=(0.5, 1.04),
+        ncol=3,
+        frameon=False,
+    )
+    figure.suptitle("TensorShield Top-12 redundancy ablation", y=1.13)
     figure.tight_layout()
     figure.savefig(path, bbox_inches="tight", facecolor="white", dpi=240)
     prefix.plt.close(figure)
@@ -360,6 +415,7 @@ def clean_outputs(out_dir: Path) -> None:
         "ablation_history.tsv",
         "ablation.png",
         "drop_05_mask.pt",
+        "drop_10_mask.pt",
         "drop_05_10_mask.pt",
     ):
         (out_dir / filename).unlink(missing_ok=True)
@@ -457,10 +513,8 @@ def main() -> int:
         )
         history_writer.writeheader()
         for case in cases:
-            if case.name == "full_top10":
-                results.append(reused_result(case, prefix_by_k[10]))
-            elif case.name == "drop_10":
-                results.append(reused_result(case, prefix_by_k[9]))
+            if case.name == "full_top12":
+                results.append(reused_result(case, prefix_by_k[12]))
             else:
                 results.append(
                     train_case(
@@ -485,7 +539,7 @@ def main() -> int:
     payload = {
         "schema_version": 1,
         "experiment": prefix.EXPERIMENT,
-        "study": "rank_5_rank_10_redundancy",
+        "study": "rank_5_rank_10_redundancy_within_top12",
         "protocol": "MS",
         "attack_protocol": prefix.ATTACK_PROTOCOL_VERSION,
         "dataset": prefix.DATASET,
@@ -499,7 +553,7 @@ def main() -> int:
             "prefix_metrics": str(prefix_path.relative_to(prefix.ROOT)),
             "prefix_metrics_sha256": PREFIX_METRICS_SHA256,
             "author_rank_sha256": prefix_payload["source"]["author_rank_sha256"],
-            "full_top10": list(prefix.EXPECTED_TOP12[:10]),
+            "full_top12": list(prefix.EXPECTED_ELIGIBLE_RANK[:12]),
             "rank_5": RANK_5,
             "rank_10": RANK_10,
         },
@@ -513,10 +567,11 @@ def main() -> int:
         "training": {
             **prefix_payload["training"],
             "trained_cases": sorted(TRAIN_CASES),
-            "reused_cases": ["full_top10", "drop_10"],
+            "reused_cases": ["full_top12"],
         },
         "primary": {"evaluation": "end", "epoch": prefix.EPOCHS},
         "results": results,
+        "references": prefix_payload["references"],
         "outputs": {
             "data": str(data_path.relative_to(prefix.ROOT)),
             "history": str(history_path.relative_to(prefix.ROOT)),
@@ -529,7 +584,7 @@ def main() -> int:
         encoding="utf-8",
     )
     write_data(data_path, results)
-    plot_ablation(plot_path, results)
+    plot_ablation(plot_path, results, prefix_payload["references"])
     print(f"[INFO] 结果：{metrics_path.relative_to(prefix.ROOT)}")
     print(f"[INFO] 对比图：{plot_path.relative_to(prefix.ROOT)}")
     return 0

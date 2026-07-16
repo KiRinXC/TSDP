@@ -44,9 +44,9 @@ t200  1000
 
 - 普通 victim 使用 `weights/MS/victim/<model>/<dataset>/best.pth` 生成查询输出。
 - 权重文件统一命名为 `best.pth` 和 `end.pth`，不要恢复误导性的 `target.pth`。
-- 正式攻击者可以观察完整 softmax posterior。
-- 正式标签模式统一为 `soft`；hard label 只属于明确标注的 Lab 输出能力消融。
-- posterior 生成和 surrogate 读取 query 时都必须使用确定性的 test transform。
+- 正式主保护策略的攻击者可以观察完整 softmax posterior，标签模式统一为 `soft`。
+- `hard_blackbox` 是唯一正式 hard-label 输出能力对比，当前只允许 `ResNet18+C100 + full_protection`，不替换 soft 主黑盒下界。
+- posterior 生成、soft surrogate 和正式 hard_blackbox 读取 query 时都必须使用确定性的 test transform。
 - soft posterior 绝对不能与 `RandomCrop`、随机翻转等训练增强后的图像绑定，否则标签与输入错配。
 
 ### 2.3 surrogate 初始化与训练
@@ -103,8 +103,9 @@ TensorShield 图中的 L1-L7 只是论文展示分段，不是新的网络深度
 |---|---:|---:|---:|---:|
 | no protection | 0 | 0.6182 | 1.0000 | 1.1305e-9 |
 | full protection | 100 | 0.1545 | 0.1610 | 2.835290 |
+| hard blackbox（输出能力对比） | 100 | 0.1393 | 0.1443 | 3.427757 |
 
-当前 `full_protection` 表示所有 victim 参数不可见，但查询接口仍暴露 posterior。不要把它悄悄改回 label-only 黑盒；hard-label 全保护只在 Lab 中出现过。
+当前 `full_protection` 表示所有 victim 参数不可见，但查询接口仍暴露 posterior。不要把它悄悄改回 label-only 黑盒；label-only 使用独立的 `hard_blackbox` artifact 与 `hard_label_replace_finetune_v1` 协议，只作输出能力对比。其正式 run ID 为 `c9a62938cfcf`，主结果同样读取第 100 轮 `end.pth`。
 
 ### 4.3 三种完整层 baseline
 
@@ -216,9 +217,9 @@ TEESlice 结果只在 `results/MS/resnet18/c100/teeslice/` 保存，并标记为
 
 - `lab/01_kmeans`：预训练特征聚类验证。
 - `lab/02_head`：分类头 replace/adapter 与 frozen/finetune 消融；结论支持参数不可见时使用 replace，并统一对 surrogate 执行 finetune。暴露分类头仍按正式可见性规则复制。
-- `lab/03_baseline`：四种通用 baseline 曲线、分类头与 TensorShield 单点、TEESlice standalone 单点及普通 victim no/full 参考线的三指标总图。
-- `lab/04_tensorshield`：作者 rank 的前缀、冗余和窗口消融。
-- `lab/05_state`：不同 state 类型保护的 MS 对比。
+- `lab/03_baseline`：四种通用 baseline 曲线、分类头与 TensorShield 单点、TEESlice standalone 单点、普通 victim 的 soft no/full 主参考线，以及 hard-label 全保护辅助参考线的三指标总图。
+- `lab/04_tensorshield`：作者 eligible rank 的 Top-1 至 Top-17 前缀曲线、Top-12 内 rank-5/rank-10 删除消融，以及排除分类头后前 10/后 10 候选窗口对照；每组均固定保护分类头 bias，窗口对照固定保护完整分类头。
+- `lab/05_state`：五种完整 state 类型与十三种参数语义组的独立保护对比。结果表明主路径 Conv 不能单独解释近黑盒效果，后续通道块候选还需覆盖 Stem、downsample、BN affine 和分类头 weight；BN buffer 只作为执行状态记录，不能解释为独立长期安全来源。
 
 Lab 结果不能混入正式主实验索引，但也不能以“清理历史”为由删除仍承担独立结论的 Lab。
 
@@ -279,7 +280,7 @@ TEESlice standalone point
 2. **不要把 surrogate 和 victim 的 best/end 混淆。** query 用 victim `best.pth`，正式攻击结果用 surrogate `end.pth`。
 3. **不要恢复 `target.pth`。** 权重统一只有 `best.pth` 和 `end.pth`。
 4. **不要让 soft posterior 对应随机增强后的图像。** soft 模式只能使用确定性 test transform。
-5. **不要为不同保护位置随意切换 hard/soft。** 当前正式普通 baseline 全部 posterior-visible soft；hard 只属于 Lab。
+5. **不要为不同保护位置随意切换 hard/soft。** 正式主保护策略全部 posterior-visible soft；hard 只允许独立的 `ResNet18+C100` 全保护 `hard_blackbox` 输出能力对比。
 6. **不要按测试集最优结果选择 frozen/finetune 或 replace/adapter。** 当前正式协议已固定为全模型 finetune；分类头按可见性使用 exposed、mixed 或 replace，不再逐实验选择。
 7. **不要在分类头部分保护时丢弃整个头。** 必须逐标量混合复制，否则保护成本被低估。
 8. **不要重新计算 TensorShield rank。** 只使用作者给出的 `ResNet18+C100` 固定列表；不要恢复已删除的 importance 公式代码。

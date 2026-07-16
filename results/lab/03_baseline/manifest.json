@@ -63,6 +63,15 @@
     "no_protection",
     "full_protection"
   ],
+  "auxiliary_references": {
+    "hard_blackbox": {
+      "artifact_id": "hard_blackbox",
+      "label_mode": "hard",
+      "comparison_scope": "ordinary_fixed_victim_output_ablation",
+      "path": "results/MS/resnet18/c100/hard_blackbox/metrics.json",
+      "sha256": "8fb5b9808e31752cd82c51a08dc8ff1d2b513e15f966e837c2e213d63e4a71ad"
+    }
+  },
   "outputs": [
     "metrics.png",
     "accuracy.png",

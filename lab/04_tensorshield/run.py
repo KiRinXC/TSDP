@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""测量 TensorShield 作者 rank 的 Top-1 至 Top-12 MS 前缀曲线。"""
+"""测量 TensorShield 作者 eligible rank 的 Top-1 至 Top-17 MS 前缀曲线。"""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import csv
 import hashlib
 import json
 import sys
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -55,6 +55,9 @@ from exp.MS.train_surrogate.defense import (  # noqa: E402
     initialize_surrogate,
     save_protection_mask,
 )
+from exp.MS.train_surrogate.defense.mask import (  # noqa: E402
+    protection_mask_sha256,
+)
 from exp.MS.train_surrogate.selector import (  # noqa: E402
     AUTHOR_RESNET18_C100_ELIGIBLE_RANK,
     AUTHOR_RESNET18_C100_RANK,
@@ -68,7 +71,7 @@ MODEL = "resnet18"
 DATASET = "c100"
 NUM_CLASSES = 100
 BUDGET = 500
-TOP_K_VALUES = tuple(range(1, 13))
+TOP_K_VALUES = tuple(range(1, 18))
 EPOCHS = 100
 BATCH_SIZE = 64
 EVAL_BATCH_SIZE = 128
@@ -78,7 +81,7 @@ WEIGHT_DECAY = 5e-4
 LR_STEP = 60
 LR_GAMMA = 0.1
 SEED = 42
-EXPECTED_TOP12 = (
+EXPECTED_ELIGIBLE_RANK = (
     "layer1.1.conv1.weight",
     "layer2.0.conv1.weight",
     "last_linear.weight",
@@ -91,10 +94,15 @@ EXPECTED_TOP12 = (
     "layer2.1.conv2.weight",
     "layer3.0.conv2.weight",
     "layer4.0.conv1.weight",
+    "layer4.0.conv2.weight",
+    "layer4.1.conv1.weight",
+    "layer4.1.conv2.weight",
+    "layer3.1.conv2.weight",
+    "layer3.1.conv1.weight",
 )
 EXPECTED_CASE_STATS = {
-    1: (1, 36_864, False, "exposed"),
-    2: (2, 110_592, False, "exposed"),
+    1: (2, 36_964, True, "mixed"),
+    2: (3, 110_692, True, "mixed"),
     3: (4, 161_892, True, "replace"),
     4: (5, 198_756, True, "replace"),
     5: (6, 235_620, True, "replace"),
@@ -105,6 +113,11 @@ EXPECTED_CASE_STATS = {
     10: (11, 1_009_764, True, "replace"),
     11: (12, 1_599_588, True, "replace"),
     12: (13, 2_779_236, True, "replace"),
+    13: (14, 5_138_532, True, "replace"),
+    14: (15, 7_497_828, True, "replace"),
+    15: (16, 9_857_124, True, "replace"),
+    16: (17, 10_446_948, True, "replace"),
+    17: (18, 11_036_772, True, "replace"),
 }
 HISTORY_FIELDS = (
     "case",
@@ -154,7 +167,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--dry-run",
         action="store_true",
-        help="只验证作者 rank、12 个 mask 和输入协议，不训练或写结果。",
+        help="只验证作者 rank、17 个 mask 和输入协议，不训练或写结果。",
     )
     return parser.parse_args()
 
@@ -170,8 +183,8 @@ def build_cases(victim: torch.nn.Module) -> tuple[tuple[str, ...], tuple[CaseSpe
     missing = set(ranking) - set(victim.state_dict())
     if missing:
         raise ValueError(f"作者 eligible rank 包含未知 state：{sorted(missing)}")
-    if ranking[:12] != EXPECTED_TOP12:
-        raise ValueError(f"作者 eligible Top-12 已变化：{ranking[:12]}")
+    if ranking != EXPECTED_ELIGIBLE_RANK:
+        raise ValueError(f"作者 eligible rank 已变化：{ranking}")
     if set(ranking[:10]) != set(PUBLISHED_RESNET18_C100_WEIGHTS):
         raise ValueError("作者 eligible Top-10 与 Figure 12(d) 发布集合不一致。")
     cases = tuple(
@@ -182,10 +195,30 @@ def build_cases(victim: torch.nn.Module) -> tuple[tuple[str, ...], tuple[CaseSpe
 
 
 def selected_state_names(case: CaseSpec) -> tuple[str, ...]:
-    names = list(case.selected_weights)
-    if "last_linear.weight" in names:
-        names.append("last_linear.bias")
-    return tuple(names)
+    return (*case.selected_weights, "last_linear.bias")
+
+
+def _adjust_bias_only_head(
+    surrogate: torch.nn.Module,
+    victim: torch.nn.Module,
+    plan,
+    masks: dict[str, torch.Tensor],
+):
+    """把 Lab04 的 Top-1/2 从临时完整分类头改成仅隐藏 bias。"""
+    with torch.no_grad():
+        surrogate.last_linear.weight.copy_(victim.last_linear.weight)
+    masks["last_linear.weight"].zero_()
+    protected_params = sum(
+        int(masks[name].sum().item()) for name, _ in victim.named_parameters()
+    )
+    return replace(
+        plan,
+        protected_unit_count=sum(bool(mask.any()) for mask in masks.values()),
+        protection_mask_sha256=protection_mask_sha256(masks),
+        classifier_protected=True,
+        head_mode="mixed",
+        protected_param_count=protected_params,
+    )
 
 
 def initialize_case(
@@ -202,7 +235,12 @@ def initialize_case(
     if missing:
         raise ValueError(f"{case.name} 包含未知 state：{sorted(missing)}")
     selected_units = [unit_by_name[name] for name in names]
-    unit_spec = ",".join(str(unit.index) for unit in selected_units)
+    initializer_names = list(names)
+    bias_only_head = "last_linear.weight" not in initializer_names
+    if bias_only_head:
+        initializer_names.append("last_linear.weight")
+    initializer_units = [unit_by_name[name] for name in initializer_names]
+    unit_spec = ",".join(str(unit.index) for unit in initializer_units)
     surrogate, plan, _, masks = initialize_surrogate(
         factory=imagenet_models.resnet18,
         factory_name=MODEL,
@@ -214,6 +252,8 @@ def initialize_case(
         protected_layers=None,
         protected_scalars=None,
     )
+    if bias_only_head:
+        plan = _adjust_bias_only_head(surrogate, victim, plan, masks)
     expected_units, expected_params, expected_head, expected_mode = EXPECTED_CASE_STATS[
         case.top_k
     ]
@@ -312,7 +352,7 @@ def set_y_limits(axis: plt.Axes, values: list[float], bounded: bool) -> None:
 
 
 def plot_metrics(
-    path: Path,
+    paths: dict[str, Path],
     results: list[dict[str, object]],
     references: dict[str, dict[str, object]],
 ) -> None:
@@ -332,39 +372,59 @@ def plot_metrics(
             "savefig.dpi": 240,
         }
     )
-    figure, axes = plt.subplots(1, 3, figsize=(14.4, 4.2), sharex=True)
-    x_values = [int(result["top_k"]) for result in results]
-    for axis, (metric, title, color) in zip(axes, specifications):
+    x_values = [
+        100.0 * float(result["protection"]["protected_param_ratio"])
+        for result in results
+    ]
+    top_k_values = [int(result["top_k"]) for result in results]
+    top10_x = x_values[top_k_values.index(10)]
+    for metric, title, color in specifications:
+        figure, (left_axis, right_axis) = plt.subplots(
+            1,
+            2,
+            figsize=(8.8, 5.1),
+            sharey=True,
+            gridspec_kw={"width_ratios": (1.7, 1.0), "wspace": 0.05},
+        )
         y_values = [float(result["end"][metric]) for result in results]
         no_value = float(references["no_protection"]["end"][metric])
         full_value = float(references["full_protection"]["end"][metric])
-        axis.plot(
-            x_values,
-            y_values,
-            color=color,
-            marker="o",
-            linewidth=2.0,
-            markersize=4.8,
-            label="Author-rank prefix",
+        for index, axis in enumerate((left_axis, right_axis)):
+            axis.plot(
+                x_values,
+                y_values,
+                color=color,
+                marker="o",
+                linewidth=2.0,
+                markersize=4.8,
+                label="Author-rank prefix" if index == 0 else None,
+            )
+            axis.axhline(
+                no_value,
+                color="#333333",
+                linestyle="--",
+                linewidth=1.2,
+                label="No protection" if index == 0 else None,
+            )
+            axis.axhline(
+                full_value,
+                color="#777777",
+                linestyle=":",
+                linewidth=1.4,
+                label="Full protection" if index == 0 else None,
+            )
+            axis.grid(True, color="#D9D9D9", linewidth=0.7, alpha=0.75)
+            axis.set_axisbelow(True)
+            axis.spines["top"].set_visible(False)
+        left_axis.axvline(
+            top10_x,
+            color="#555555",
+            linestyle="-.",
+            linewidth=1.0,
         )
-        axis.axhline(
-            no_value,
-            color="#333333",
-            linestyle="--",
-            linewidth=1.2,
-            label="No protection",
-        )
-        axis.axhline(
-            full_value,
-            color="#777777",
-            linestyle=":",
-            linewidth=1.4,
-            label="Full protection",
-        )
-        axis.axvline(10, color="#555555", linestyle="-.", linewidth=1.0)
-        axis.scatter(
-            [10],
-            [y_values[9]],
+        left_axis.scatter(
+            [top10_x],
+            [y_values[top_k_values.index(10)]],
             s=58,
             facecolors="white",
             edgecolors=color,
@@ -372,34 +432,83 @@ def plot_metrics(
             zorder=4,
             label="Figure 12(d), k=10",
         )
+        for index, (x_value, y_value, top_k) in enumerate(
+            zip(x_values, y_values, top_k_values)
+        ):
+            annotation_axis = left_axis if x_value <= 15.0 else right_axis
+            annotation_axis.annotate(
+                f"T{top_k}",
+                (x_value, y_value),
+                xytext=(0, 7 if index % 2 == 0 else -11),
+                textcoords="offset points",
+                ha="center",
+                va="bottom" if index % 2 == 0 else "top",
+                fontsize=6.5,
+                color="#333333",
+            )
         set_y_limits(
-            axis,
+            left_axis,
             [*y_values, no_value, full_value],
             bounded=metric != "posterior_kl",
         )
-        axis.yaxis.set_major_locator(MaxNLocator(nbins=6))
-        axis.set_title(title)
-        axis.set_xlabel("Protected Top-k")
-        axis.set_ylabel(title)
-        axis.set_xticks(TOP_K_VALUES)
-        axis.set_xlim(0.7, 12.3)
-        axis.grid(True, color="#D9D9D9", linewidth=0.7, alpha=0.75)
-        axis.set_axisbelow(True)
-        axis.spines["top"].set_visible(False)
-        axis.spines["right"].set_visible(False)
-    handles, labels = axes[0].get_legend_handles_labels()
-    figure.legend(
-        handles,
-        labels,
-        loc="upper center",
-        bbox_to_anchor=(0.5, 1.04),
-        ncol=4,
-        frameon=False,
-    )
-    figure.suptitle("TensorShield author-rank prefixes on ResNet18 + CIFAR-100", y=1.12)
-    figure.tight_layout()
-    figure.savefig(path, bbox_inches="tight", facecolor="white")
-    plt.close(figure)
+        left_axis.yaxis.set_major_locator(MaxNLocator(nbins=6))
+        left_axis.set_xlim(0.0, 15.5)
+        right_axis.set_xlim(15.0, 100.0)
+        left_axis.set_xticks((0, 3, 6, 9, 12, 15))
+        right_axis.set_xticks((30, 45, 60, 75, 90, 100))
+        left_axis.set_ylabel(title)
+        left_axis.spines["right"].set_visible(False)
+        right_axis.spines["left"].set_visible(False)
+        right_axis.spines["right"].set_visible(False)
+        right_axis.tick_params(
+            axis="y",
+            which="both",
+            left=False,
+            labelleft=False,
+        )
+
+        break_size = 0.012
+        break_style = {
+            "color": "#333333",
+            "clip_on": False,
+            "linewidth": 0.9,
+        }
+        left_axis.plot(
+            (1 - break_size, 1 + break_size),
+            (-break_size, break_size),
+            transform=left_axis.transAxes,
+            **break_style,
+        )
+        right_axis.plot(
+            (-break_size, break_size),
+            (-break_size, break_size),
+            transform=right_axis.transAxes,
+            **break_style,
+        )
+
+        handles, labels = left_axis.get_legend_handles_labels()
+        figure.suptitle(
+            f"TensorShield eligible-rank prefixes: {title}",
+            y=0.98,
+        )
+        figure.legend(
+            handles,
+            labels,
+            loc="upper center",
+            bbox_to_anchor=(0.5, 0.88),
+            ncol=4,
+            frameon=False,
+        )
+        figure.supxlabel("Protected parameters (%)", y=0.04)
+        figure.subplots_adjust(
+            left=0.10,
+            right=0.98,
+            bottom=0.14,
+            top=0.76,
+            wspace=0.05,
+        )
+        figure.savefig(paths[metric], bbox_inches="tight", facecolor="white")
+        plt.close(figure)
 
 
 def clean_replaced_outputs(out_dir: Path) -> None:
@@ -408,6 +517,9 @@ def clean_replaced_outputs(out_dir: Path) -> None:
         "history.tsv",
         "data.tsv",
         "metrics.png",
+        "accuracy.png",
+        "fidelity.png",
+        "posterior_kl.png",
         "protection_mask.pt",
     ):
         (out_dir / filename).unlink(missing_ok=True)
@@ -451,7 +563,7 @@ def main() -> int:
 
     if args.dry_run:
         print(f"[INFO] author rank SHA256：{rank_sha256(AUTHOR_RESNET18_C100_RANK)}")
-        print(f"[INFO] eligible Top-12：{','.join(EXPECTED_TOP12)}")
+        print(f"[INFO] eligible Top-17：{','.join(EXPECTED_ELIGIBLE_RANK)}")
         print("[INFO] dry-run 完成，未写入实验产物。")
         return 0
 
@@ -572,7 +684,11 @@ def main() -> int:
     }
     metrics_path = out_dir / "metrics.json"
     data_path = out_dir / "data.tsv"
-    plot_path = out_dir / "metrics.png"
+    plot_paths = {
+        "surrogate_acc": out_dir / "accuracy.png",
+        "fidelity": out_dir / "fidelity.png",
+        "posterior_kl": out_dir / "posterior_kl.png",
+    }
     payload = {
         "schema_version": 2,
         "experiment": EXPERIMENT,
@@ -628,7 +744,10 @@ def main() -> int:
         "outputs": {
             "data": str(data_path.relative_to(ROOT)),
             "history": str(history_path.relative_to(ROOT)),
-            "plot": str(plot_path.relative_to(ROOT)),
+            "plots": {
+                metric: str(path.relative_to(ROOT))
+                for metric, path in plot_paths.items()
+            },
         },
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
@@ -637,9 +756,10 @@ def main() -> int:
         encoding="utf-8",
     )
     write_data(data_path, results)
-    plot_metrics(plot_path, results, references)
+    plot_metrics(plot_paths, results, references)
     print(f"[INFO] 结果：{metrics_path.relative_to(ROOT)}")
-    print(f"[INFO] 曲线：{plot_path.relative_to(ROOT)}")
+    for plot_path in plot_paths.values():
+        print(f"[INFO] 曲线：{plot_path.relative_to(ROOT)}")
     return 0
 
 

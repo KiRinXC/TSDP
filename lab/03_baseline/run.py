@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 from pathlib import Path
 
@@ -17,6 +18,7 @@ from matplotlib.ticker import MaxNLocator  # noqa: E402
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 ATTACK_PROTOCOL = "posterior_replace_finetune_v2"
+HARD_BLACKBOX_PROTOCOL = "hard_label_replace_finetune_v1"
 CURVE_STRATEGIES = {
     "shallow": {"label": "Shallow layers", "color": "#0072B2", "marker": "o"},
     "middle": {"label": "Middle layers", "color": "#009E73", "marker": "s"},
@@ -35,10 +37,16 @@ BOUNDS = {
         "linestyle": "--",
     },
     "full_protection": {
-        "label": "Full protection (ordinary victim)",
+        "label": "Soft-label black box",
         "color": "#777777",
         "linestyle": ":",
     },
+}
+HARD_BLACKBOX = {
+    "defense": "hard_blackbox",
+    "label": "Hard-label black box",
+    "color": "#A6761D",
+    "linestyle": "-.",
 }
 METRICS = {
     "surrogate_acc": {"filename": "accuracy.png", "ylabel": "Surrogate accuracy"},
@@ -55,6 +63,8 @@ DATA_FIELDS = [
     "protected_scalar_count",
     "protected_param_ratio",
     "head_mode",
+    "label_mode",
+    "source_path",
     "run_id",
     "surrogate_acc",
     "fidelity",
@@ -74,7 +84,28 @@ def parse_args() -> argparse.Namespace:
         default=str(REPO_ROOT / "results" / "lab" / "03_baseline"),
         help="Lab 绘图输出目录。",
     )
+    parser.add_argument(
+        "--hard-blackbox",
+        default=str(
+            REPO_ROOT
+            / "results"
+            / "MS"
+            / "resnet18"
+            / "c100"
+            / "hard_blackbox"
+            / "metrics.json"
+        ),
+        help="正式 hard-label 全保护黑盒实验指标。",
+    )
     return parser.parse_args()
+
+
+def sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as reader:
+        for chunk in iter(lambda: reader.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 def load_rows(input_dir: Path) -> list[dict[str, object]]:
@@ -84,6 +115,8 @@ def load_rows(input_dir: Path) -> list[dict[str, object]]:
         artifact_id = payload.get("artifact_id")
         if artifact_id != path.parent.name:
             raise ValueError(f"artifact_id 与目录名不一致：{path}")
+        if artifact_id == "hard_blackbox":
+            continue
         if payload.get("attack_protocol") != ATTACK_PROTOCOL:
             raise ValueError(f"攻击协议不一致：{path}")
         if payload.get("victim_model") != "resnet18" or payload.get("dataset") != "c100":
@@ -124,6 +157,8 @@ def load_rows(input_dir: Path) -> list[dict[str, object]]:
                 "protected_scalar_count": protection.get("magnitude_protected_count"),
                 "protected_param_ratio": protection["protected_param_ratio"],
                 "head_mode": protection["head_mode"],
+                "label_mode": payload["label_mode"],
+                "source_path": str(path.relative_to(REPO_ROOT)),
                 "run_id": payload["run_id"],
                 "surrogate_acc": end["surrogate_acc"],
                 "fidelity": end["fidelity"],
@@ -150,11 +185,72 @@ def load_rows(input_dir: Path) -> list[dict[str, object]]:
     return rows
 
 
+def load_hard_blackbox(path: Path) -> dict[str, object]:
+    if not path.is_file():
+        raise FileNotFoundError(f"找不到 hard-label 黑盒结果：{path}")
+    payload = json.loads(path.read_text(encoding="utf-8"))
+    expected = {
+        "schema_version": 2,
+        "protocol": "MS",
+        "attack_protocol": HARD_BLACKBOX_PROTOCOL,
+        "artifact_id": "hard_blackbox",
+        "dataset": "c100",
+        "victim_model": "resnet18",
+        "query_budget": 500,
+        "label_mode": "hard",
+        "query_transform": "test",
+        "training_mode": "finetune",
+        "comparison_scope": "ordinary_fixed_victim_output_ablation",
+    }
+    for field, value in expected.items():
+        if payload.get(field) != value:
+            raise ValueError(f"hard-label 黑盒字段 {field} 不符合预期：{path}")
+    if payload.get("primary") != {"checkpoint": "end.pth", "epoch": 100}:
+        raise ValueError(f"hard-label 黑盒主要 checkpoint 不是 end.pth：{path}")
+
+    protection = payload.get("protection", {})
+    if (
+        protection.get("protected_unit_count") != protection.get("tensor_unit_count")
+        or protection.get("protected_param_ratio") != 1.0
+        or not protection.get("classifier_protected")
+        or protection.get("defense") != "full_protection"
+        or protection.get("protection_mask_sha256")
+        != "7e96847f0f89f6d4552091505464c9f18f4dd5ab49b3fb6a1a51195e275c1fa7"
+    ):
+        raise ValueError(f"hard-label 黑盒不是完整参数保护：{path}")
+    end = payload.get("end", {})
+    if end.get("eval_count") != 10_000:
+        raise ValueError(f"hard-label 黑盒 eval_count 不正确：{path}")
+
+    if end.get("victim_acc") != 0.6182:
+        raise ValueError(f"hard-label 黑盒与当前普通 victim 不一致：{path}")
+
+    return {
+        "artifact_id": "hard_blackbox",
+        "role": "auxiliary_bound",
+        "comparison_scope": "ordinary_fixed_victim_output_ablation",
+        "defense": HARD_BLACKBOX["defense"],
+        "protected_layer_count": None,
+        "source_ratio": None,
+        "protected_scalar_count": None,
+        "protected_param_ratio": protection["protected_param_ratio"],
+        "head_mode": protection["head_mode"],
+        "label_mode": payload["label_mode"],
+        "source_path": str(path.relative_to(REPO_ROOT)),
+        "run_id": payload["run_id"],
+        "surrogate_acc": end["surrogate_acc"],
+        "fidelity": end["fidelity"],
+        "posterior_kl": end["posterior_kl"],
+    }
+
+
 def write_data(path: Path, rows: list[dict[str, object]]) -> None:
-    role_order = {"curve": 0, "point": 1, "standalone": 2, "bound": 3}
+    role_order = {"curve": 0, "point": 1, "standalone": 2, "bound": 3, "auxiliary_bound": 4}
     defense_order = {
         defense: index
-        for index, defense in enumerate((*CURVE_STRATEGIES, *POINT_STRATEGIES, *BOUNDS))
+        for index, defense in enumerate(
+            (*CURVE_STRATEGIES, *POINT_STRATEGIES, *BOUNDS, HARD_BLACKBOX["defense"])
+        )
     }
     ordered = sorted(
         rows,
@@ -235,6 +331,17 @@ def draw_metric(
             linewidth=1.5,
         )
 
+    hard_row = next(row for row in rows if row["defense"] == HARD_BLACKBOX["defense"])
+    hard_value = float(hard_row[metric_name])
+    plotted_values.append(hard_value)
+    ax.axhline(
+        hard_value,
+        label=HARD_BLACKBOX["label"],
+        color=HARD_BLACKBOX["color"],
+        linestyle=HARD_BLACKBOX["linestyle"],
+        linewidth=1.6,
+    )
+
     ax.set_xlim(0.0, 100.0)
     ax.set_xticks((0, 20, 40, 60, 80, 100))
     set_y_limits(ax, plotted_values, bounded=metric_name in {"surrogate_acc", "fidelity"})
@@ -298,10 +405,12 @@ def plot_combined(out_path: Path, rows: list[dict[str, object]]) -> None:
 def main() -> int:
     args = parse_args()
     input_dir = Path(args.input_dir).expanduser().resolve()
+    hard_blackbox_path = Path(args.hard_blackbox).expanduser().resolve()
     out_dir = Path(args.out_dir).expanduser().resolve()
     if not input_dir.is_dir():
         raise FileNotFoundError(f"找不到正式 MS 结果目录：{input_dir}")
     rows = load_rows(input_dir)
+    rows.append(load_hard_blackbox(hard_blackbox_path))
     out_dir.mkdir(parents=True, exist_ok=True)
     write_data(out_dir / "data.tsv", rows)
     configure_plot_style()
@@ -343,6 +452,15 @@ def main() -> int:
         },
         "standalone_artifacts": ["teeslice"],
         "reference_artifacts": ["no_protection", "full_protection"],
+        "auxiliary_references": {
+            "hard_blackbox": {
+                "artifact_id": "hard_blackbox",
+                "label_mode": "hard",
+                "comparison_scope": "ordinary_fixed_victim_output_ablation",
+                "path": str(hard_blackbox_path.relative_to(REPO_ROOT)),
+                "sha256": sha256_file(hard_blackbox_path),
+            }
+        },
         "outputs": [
             "metrics.png",
             "accuracy.png",

@@ -22,6 +22,7 @@ from defense import DEFENSES  # noqa: E402
 
 NUM_CLASSES = {"c10": 10, "c100": 100, "s10": 10, "t200": 200}
 ATTACK_PROTOCOL_VERSION = "posterior_replace_finetune_v2"
+HARD_BLACKBOX_ATTACK_PROTOCOL_VERSION = "hard_label_replace_finetune_v1"
 MODEL_SPECS = {
     "resnet18": ("resnet18", "resnet18-5c106cde.pth"),
     "resnet50": ("resnet50", "resnet50-19c8e357.pth"),
@@ -61,9 +62,9 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument(
         "--label-mode",
-        choices=("soft",),
+        choices=("soft", "hard"),
         default="soft",
-        help="正式协议固定使用 victim posterior。",
+        help="普通 baseline 使用 soft；hard 只允许 ResNet18+C100 全保护输出能力对比。",
     )
     parser.add_argument("--dataset-root", default=str(REPO_ROOT / "dataset" / "public"), help="公开数据集根目录。")
     parser.add_argument("--protocol-root", default=str(REPO_ROOT / "dataset" / "MS"), help="MS 协议根目录。")
@@ -98,12 +99,31 @@ def parse_args() -> argparse.Namespace:
     return parser.parse_args()
 
 
-def validate_attack_configuration(defense: str, training_mode: str, label_mode: str) -> None:
-    del defense
+def resolve_attack_protocol(label_mode: str) -> str:
+    if label_mode == "soft":
+        return ATTACK_PROTOCOL_VERSION
+    if label_mode == "hard":
+        return HARD_BLACKBOX_ATTACK_PROTOCOL_VERSION
+    raise ValueError(f"未知 label mode：{label_mode}")
+
+
+def validate_attack_configuration(
+    defense: str,
+    training_mode: str,
+    label_mode: str,
+    model_name: str,
+    dataset_name: str,
+) -> None:
     if training_mode != "finetune":
         raise ValueError("正式 MS 协议只允许 --training-mode finetune。")
-    if label_mode != "soft":
-        raise ValueError("正式 MS 协议只允许 --label-mode soft。")
+    if label_mode == "soft":
+        return
+    if label_mode != "hard":
+        raise ValueError(f"未知 label mode：{label_mode}")
+    if defense != "full_protection":
+        raise ValueError("hard-label 正式对比只允许 --defense full_protection。")
+    if model_name != "resnet18" or dataset_name != "c100":
+        raise ValueError("hard-label 正式对比当前只固化 ResNet18+C100。")
 
 
 def resolve_device(value: str) -> torch.device:

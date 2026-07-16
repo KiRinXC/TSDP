@@ -10,15 +10,18 @@ results/MS/<model>/<dataset>/
 
 `artifact_id` 是便于定位的语义名称；planned baseline 直接使用 `plan_id`，上下界使用策略名。完整配置哈希保存在 `run_id` 字段中。
 
-当前正式攻击协议为 `posterior_replace_finetune_v2`：soft posterior 与 surrogate query 均使用确定性 test transform，训练配置使用 `lr_step=60`，主结果固定读取 `end.pth`。本 README 只记录当前协议的有效结果。
+正式主保护策略使用 `posterior_replace_finetune_v2`：soft posterior 与 surrogate query 均使用确定性 test transform，训练配置使用 `lr_step=60`，主结果固定读取 `end.pth`。另保留 `ResNet18+C100` 全保护下的 `hard_label_replace_finetune_v1` 输出能力对比；它只改变 victim 的可观测输出，不替换 soft-posterior 主黑盒下界。本 README 只记录当前有效结果。
 
 ## ResNet18+CIFAR-100 上下界
 
 ```text
-保护策略         训练方式  分类头   artifact_id       end epoch  accuracy  fidelity  posterior KL
-no_protection    identity  exposed  no_protection    0          0.6182    1.0000    0.0000000011
-full_protection  finetune  replace  full_protection  100        0.1545    0.1610    2.835290
+保护策略         查询输出       训练方式  分类头   artifact_id       end epoch  accuracy  fidelity  posterior KL
+no_protection    soft posterior  identity  exposed  no_protection    0          0.6182    1.0000    0.0000000011
+full_protection  soft posterior  finetune  replace  full_protection  100        0.1545    0.1610    2.835290
+full_protection  hard label      finetune  replace  hard_blackbox    100        0.1393    0.1443    3.427757
 ```
+
+`hard_blackbox` 的 run ID 为 `c9a62938cfcf`，`comparison_scope` 为 `ordinary_fixed_victim_output_ablation`。它与 soft `full_protection` 使用相同 victim、500 条 query、完整保护 mask、初始化和训练超参数，只将 posterior 改为 argmax hard label；正式结果读取第 100 轮 `end.pth`，第 88 轮 `best.pth` 仅作诊断。
 
 ## ResNet18+CIFAR-100 仅分类头保护结果
 
@@ -35,7 +38,7 @@ full_protection  finetune  replace  full_protection  100        0.1545    0.1610
 
 TEESlice 改变了 victim 结构与训练过程，因此按 `standalone_reproduction` 独立保存，不写入固定普通 victim 的主 `metrics.tsv`。本次剪枝模型在 `eval_ms` 上的 accuracy 为 `0.7578`；已知最终剪枝拓扑的黑盒攻击使用 500 条 soft posterior query，在固定第 100 轮得到 accuracy `0.1619`、fidelity `0.1784`、posterior KL `3.251131`。完整状态白盒的实际评估为 accuracy `0.7578`、fidelity `1.0000`、posterior KL `4.814928395546758e-10`。四阶段效用、剪枝成本和详细指标见 `results/MS/resnet18/c100/teeslice/README.md`。
 
-当前总图同时展示 `head_only`、TensorShield、TEESlice、浅层/中间层/深层/大权重四类策略，以及普通预训练模型的 no/full 参考界。TEESlice 点必须保留 `standalone_reproduction` 标记，只用于呈现其自身攻击区间，不参与固定普通 victim 下的同条件策略排序。
+当前总图同时展示 `head_only`、TensorShield、TEESlice、浅层/中间层/深层/大权重四类策略，以及普通预训练模型的 no/full 主参考界和 hard-label 全保护辅助参考线。TEESlice 点必须保留 `standalone_reproduction` 标记，只用于呈现其自身攻击区间，不参与固定普通 victim 下的同条件策略排序；hard-label 参考线也不参与 soft 主保护策略排序。
 
 ## ResNet18+CIFAR-100 TensorShield 结果
 

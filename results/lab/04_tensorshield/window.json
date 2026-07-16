@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "experiment": "04_tensorshield",
-  "study": "author_raw_rank_windows",
+  "study": "eligible_rank_head_control_windows",
   "protocol": "MS",
   "attack_protocol": "posterior_replace_finetune_v2",
   "dataset": "c100",
@@ -13,82 +13,80 @@
   "randomization": {
     "reset_before_each_surrogate_initialization": true,
     "query_sampler_seed": 42,
-    "purpose": "controlled_raw_rank_window_comparison"
+    "purpose": "controlled_eligible_rank_window_comparison"
   },
   "source": {
     "method": "TensorShield",
     "rank_provenance": "author_confirmed_final_rank",
-    "rank_scope": "unfiltered_41_weight_rank",
-    "author_rank": [
-      "layer1.0.bn2.weight",
-      "bn1.weight",
-      "layer1.1.bn2.weight",
-      "layer2.0.bn2.weight",
-      "layer1.1.bn1.weight",
-      "layer2.1.bn1.weight",
-      "layer2.1.bn2.weight",
-      "layer1.0.bn1.weight",
-      "layer2.0.downsample.1.weight",
-      "layer2.0.bn1.weight",
-      "layer3.0.bn1.weight",
-      "layer3.0.bn2.weight",
-      "layer3.0.downsample.1.weight",
-      "conv1.weight",
-      "layer2.0.downsample.0.weight",
-      "layer4.0.bn1.weight",
+    "rank_scope": "eligible_16_non_head_weight_rank",
+    "eligible_rank": [
       "layer1.1.conv1.weight",
       "layer2.0.conv1.weight",
       "last_linear.weight",
       "layer1.0.conv1.weight",
       "layer1.1.conv2.weight",
-      "layer4.0.downsample.1.weight",
       "layer2.0.conv2.weight",
       "layer2.1.conv1.weight",
       "layer1.0.conv2.weight",
       "layer3.0.conv1.weight",
       "layer2.1.conv2.weight",
-      "layer4.0.bn2.weight",
-      "layer4.1.bn1.weight",
-      "layer3.0.downsample.0.weight",
-      "layer4.0.downsample.0.weight",
       "layer3.0.conv2.weight",
-      "layer3.1.bn2.weight",
-      "layer4.1.bn2.weight",
       "layer4.0.conv1.weight",
-      "layer3.1.bn1.weight",
       "layer4.0.conv2.weight",
       "layer4.1.conv1.weight",
       "layer4.1.conv2.weight",
       "layer3.1.conv2.weight",
       "layer3.1.conv1.weight"
     ],
-    "author_rank_sha256": "86304f95210a12ed118cefcaca7b10775716780cd7f1836ca3c3f4b8b3f37b1a",
+    "eligible_rank_sha256": "da056dbbb30aca812dbeb4285c78eb385ad63206963ddc0c61d295dac8987252",
+    "non_head_candidate_rank": [
+      "layer1.1.conv1.weight",
+      "layer2.0.conv1.weight",
+      "layer1.0.conv1.weight",
+      "layer1.1.conv2.weight",
+      "layer2.0.conv2.weight",
+      "layer2.1.conv1.weight",
+      "layer1.0.conv2.weight",
+      "layer3.0.conv1.weight",
+      "layer2.1.conv2.weight",
+      "layer3.0.conv2.weight",
+      "layer4.0.conv1.weight",
+      "layer4.0.conv2.weight",
+      "layer4.1.conv1.weight",
+      "layer4.1.conv2.weight",
+      "layer3.1.conv2.weight",
+      "layer3.1.conv1.weight"
+    ],
+    "fixed_head_states": [
+      "last_linear.weight",
+      "last_linear.bias"
+    ],
     "windows": {
-      "rank_11_20": {
-        "rank_start": 11,
-        "rank_end": 20,
+      "first_10": {
+        "candidate_start": 1,
+        "candidate_end": 10,
         "selected_weight_names": [
-          "layer3.0.bn1.weight",
-          "layer3.0.bn2.weight",
-          "layer3.0.downsample.1.weight",
-          "conv1.weight",
-          "layer2.0.downsample.0.weight",
-          "layer4.0.bn1.weight",
           "layer1.1.conv1.weight",
           "layer2.0.conv1.weight",
-          "last_linear.weight",
-          "layer1.0.conv1.weight"
+          "layer1.0.conv1.weight",
+          "layer1.1.conv2.weight",
+          "layer2.0.conv2.weight",
+          "layer2.1.conv1.weight",
+          "layer1.0.conv2.weight",
+          "layer3.0.conv1.weight",
+          "layer2.1.conv2.weight",
+          "layer3.0.conv2.weight"
         ]
       },
-      "rank_32_41": {
-        "rank_start": 32,
-        "rank_end": 41,
+      "last_10": {
+        "candidate_start": 7,
+        "candidate_end": 16,
         "selected_weight_names": [
+          "layer1.0.conv2.weight",
+          "layer3.0.conv1.weight",
+          "layer2.1.conv2.weight",
           "layer3.0.conv2.weight",
-          "layer3.1.bn2.weight",
-          "layer4.1.bn2.weight",
           "layer4.0.conv1.weight",
-          "layer3.1.bn1.weight",
           "layer4.0.conv2.weight",
           "layer4.1.conv1.weight",
           "layer4.1.conv2.weight",
@@ -97,7 +95,7 @@
         ]
       }
     },
-    "comparison_scope": "same_ranked_weight_count_not_same_param_cost_or_head_mode"
+    "comparison_scope": "same_non_head_candidate_count_and_same_head_control_not_same_param_cost"
   },
   "victim_checkpoint": "weights/MS/victim/resnet18/c100/best.pth",
   "victim_checkpoint_sha256": "f6233c9361ed958846cdbccc8f96c9b3425c139d961cb25410409fb47179f8d4",
@@ -120,8 +118,8 @@
     "lr_gamma": 0.1,
     "evaluation_schedule": "end_only",
     "trained_cases": [
-      "rank_11_20",
-      "rank_32_41"
+      "first_10",
+      "last_10"
     ]
   },
   "primary": {
@@ -130,105 +128,112 @@
   },
   "results": [
     {
-      "case": "rank_11_20",
-      "origin": "trained_rank_window",
-      "rank_start": 11,
-      "rank_end": 20,
+      "case": "first_10",
+      "origin": "trained_eligible_window",
+      "candidate_start": 1,
+      "candidate_end": 10,
       "selected_weight_names": [
-        "layer3.0.bn1.weight",
-        "layer3.0.bn2.weight",
-        "layer3.0.downsample.1.weight",
-        "conv1.weight",
-        "layer2.0.downsample.0.weight",
-        "layer4.0.bn1.weight",
         "layer1.1.conv1.weight",
         "layer2.0.conv1.weight",
-        "last_linear.weight",
-        "layer1.0.conv1.weight"
+        "layer1.0.conv1.weight",
+        "layer1.1.conv2.weight",
+        "layer2.0.conv2.weight",
+        "layer2.1.conv1.weight",
+        "layer1.0.conv2.weight",
+        "layer3.0.conv1.weight",
+        "layer2.1.conv2.weight",
+        "layer3.0.conv2.weight"
       ],
       "protection": {
         "implementation_defense": "custom",
         "defense": "custom",
         "tensor_unit_count": 122,
-        "protected_unit_count": 11,
-        "protection_mask_sha256": "ca3fad52f526719b0d9f4409808683808ea331606dcaf8525f173a75a70e999c",
+        "protected_unit_count": 12,
+        "protection_mask_sha256": "9e79aefea1812c20f1a9d9685c72df04b97ec9bbe755ca20e84517929802afc8",
         "classifier_protected": true,
         "head_mode": "replace",
         "total_param_count": 11227812,
-        "protected_param_count": 217636,
-        "protected_param_ratio": 0.01938365195284709,
+        "protected_param_count": 1599588,
+        "protected_param_ratio": 0.14246658209097196,
         "magnitude_eligible_count": null,
         "magnitude_protected_count": null,
         "selected_units": [
           {
-            "rank": 11,
-            "index": 61,
-            "state_name": "layer3.0.bn1.weight",
-            "state_kind": "parameter",
-            "numel": 256
-          },
-          {
-            "rank": 12,
-            "index": 67,
-            "state_name": "layer3.0.bn2.weight",
-            "state_kind": "parameter",
-            "numel": 256
-          },
-          {
-            "rank": 13,
-            "index": 73,
-            "state_name": "layer3.0.downsample.1.weight",
-            "state_kind": "parameter",
-            "numel": 256
-          },
-          {
-            "rank": 14,
-            "index": 0,
-            "state_name": "conv1.weight",
-            "state_kind": "parameter",
-            "numel": 9408
-          },
-          {
-            "rank": 15,
-            "index": 42,
-            "state_name": "layer2.0.downsample.0.weight",
-            "state_kind": "parameter",
-            "numel": 8192
-          },
-          {
-            "rank": 16,
-            "index": 91,
-            "state_name": "layer4.0.bn1.weight",
-            "state_kind": "parameter",
-            "numel": 512
-          },
-          {
-            "rank": 17,
+            "rank": 1,
             "index": 18,
             "state_name": "layer1.1.conv1.weight",
             "state_kind": "parameter",
             "numel": 36864
           },
           {
-            "rank": 18,
+            "rank": 2,
             "index": 30,
             "state_name": "layer2.0.conv1.weight",
             "state_kind": "parameter",
             "numel": 73728
           },
           {
-            "rank": 19,
-            "index": 120,
-            "state_name": "last_linear.weight",
-            "state_kind": "parameter",
-            "numel": 51200
-          },
-          {
-            "rank": 20,
+            "rank": 4,
             "index": 6,
             "state_name": "layer1.0.conv1.weight",
             "state_kind": "parameter",
             "numel": 36864
+          },
+          {
+            "rank": 5,
+            "index": 24,
+            "state_name": "layer1.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 6,
+            "index": 36,
+            "state_name": "layer2.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 7,
+            "index": 48,
+            "state_name": "layer2.1.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 8,
+            "index": 12,
+            "state_name": "layer1.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 9,
+            "index": 60,
+            "state_name": "layer3.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 294912
+          },
+          {
+            "rank": 10,
+            "index": 54,
+            "state_name": "layer2.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 11,
+            "index": 66,
+            "state_name": "layer3.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 589824
+          },
+          {
+            "rank": 3,
+            "index": 120,
+            "state_name": "last_linear.weight",
+            "state_kind": "parameter",
+            "numel": 51200
           },
           {
             "rank": null,
@@ -238,7 +243,7 @@
             "numel": 100
           }
         ],
-        "mask_path": "results/lab/04_tensorshield/rank_11_20_mask.pt"
+        "mask_path": "results/lab/04_tensorshield/first_10_mask.pt"
       },
       "primary": {
         "evaluation": "end",
@@ -247,26 +252,26 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 3337,
-        "agreement_count": 3731,
+        "surrogate_correct": 2200,
+        "agreement_count": 2353,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.3337,
-        "fidelity": 0.3731,
-        "posterior_kl_sum": 18026.597618103027,
-        "posterior_kl": 1.8026597618103026
+        "surrogate_acc": 0.22,
+        "fidelity": 0.2353,
+        "posterior_kl_sum": 23325.78148651123,
+        "posterior_kl": 2.3325781486511232
       }
     },
     {
-      "case": "rank_32_41",
-      "origin": "trained_rank_window",
-      "rank_start": 32,
-      "rank_end": 41,
+      "case": "last_10",
+      "origin": "trained_eligible_window",
+      "candidate_start": 7,
+      "candidate_end": 16,
       "selected_weight_names": [
+        "layer1.0.conv2.weight",
+        "layer3.0.conv1.weight",
+        "layer2.1.conv2.weight",
         "layer3.0.conv2.weight",
-        "layer3.1.bn2.weight",
-        "layer4.1.bn2.weight",
         "layer4.0.conv1.weight",
-        "layer3.1.bn1.weight",
         "layer4.0.conv2.weight",
         "layer4.1.conv1.weight",
         "layer4.1.conv2.weight",
@@ -277,88 +282,102 @@
         "implementation_defense": "custom",
         "defense": "custom",
         "tensor_unit_count": 122,
-        "protected_unit_count": 10,
-        "protection_mask_sha256": "f0fb48728a39f509d99fa27df09f10cae3f6ed9f2822c72906d71682ad1a1603",
-        "classifier_protected": false,
-        "head_mode": "exposed",
+        "protected_unit_count": 12,
+        "protection_mask_sha256": "07ce2edcf655ae6a8920ac031212b40d7ed8e7feedc423eaea2784c01604dc84",
+        "classifier_protected": true,
+        "head_mode": "replace",
         "total_param_count": 11227812,
-        "protected_param_count": 10028032,
-        "protected_param_ratio": 0.8931421366870055,
+        "protected_param_count": 10557540,
+        "protected_param_ratio": 0.9403025273312379,
         "magnitude_eligible_count": null,
         "magnitude_protected_count": null,
         "selected_units": [
           {
-            "rank": 32,
+            "rank": 8,
+            "index": 12,
+            "state_name": "layer1.0.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 36864
+          },
+          {
+            "rank": 9,
+            "index": 60,
+            "state_name": "layer3.0.conv1.weight",
+            "state_kind": "parameter",
+            "numel": 294912
+          },
+          {
+            "rank": 10,
+            "index": 54,
+            "state_name": "layer2.1.conv2.weight",
+            "state_kind": "parameter",
+            "numel": 147456
+          },
+          {
+            "rank": 11,
             "index": 66,
             "state_name": "layer3.0.conv2.weight",
             "state_kind": "parameter",
             "numel": 589824
           },
           {
-            "rank": 33,
-            "index": 85,
-            "state_name": "layer3.1.bn2.weight",
-            "state_kind": "parameter",
-            "numel": 256
-          },
-          {
-            "rank": 34,
-            "index": 115,
-            "state_name": "layer4.1.bn2.weight",
-            "state_kind": "parameter",
-            "numel": 512
-          },
-          {
-            "rank": 35,
+            "rank": 12,
             "index": 90,
             "state_name": "layer4.0.conv1.weight",
             "state_kind": "parameter",
             "numel": 1179648
           },
           {
-            "rank": 36,
-            "index": 79,
-            "state_name": "layer3.1.bn1.weight",
-            "state_kind": "parameter",
-            "numel": 256
-          },
-          {
-            "rank": 37,
+            "rank": 13,
             "index": 96,
             "state_name": "layer4.0.conv2.weight",
             "state_kind": "parameter",
             "numel": 2359296
           },
           {
-            "rank": 38,
+            "rank": 14,
             "index": 108,
             "state_name": "layer4.1.conv1.weight",
             "state_kind": "parameter",
             "numel": 2359296
           },
           {
-            "rank": 39,
+            "rank": 15,
             "index": 114,
             "state_name": "layer4.1.conv2.weight",
             "state_kind": "parameter",
             "numel": 2359296
           },
           {
-            "rank": 40,
+            "rank": 16,
             "index": 84,
             "state_name": "layer3.1.conv2.weight",
             "state_kind": "parameter",
             "numel": 589824
           },
           {
-            "rank": 41,
+            "rank": 17,
             "index": 78,
             "state_name": "layer3.1.conv1.weight",
             "state_kind": "parameter",
             "numel": 589824
+          },
+          {
+            "rank": 3,
+            "index": 120,
+            "state_name": "last_linear.weight",
+            "state_kind": "parameter",
+            "numel": 51200
+          },
+          {
+            "rank": null,
+            "index": 121,
+            "state_name": "last_linear.bias",
+            "state_kind": "parameter",
+            "numel": 100
           }
         ],
-        "mask_path": "results/lab/04_tensorshield/rank_32_41_mask.pt"
+        "mask_path": "results/lab/04_tensorshield/last_10_mask.pt"
       },
       "primary": {
         "evaluation": "end",
@@ -367,13 +386,13 @@
       "end": {
         "eval_count": 10000,
         "victim_correct": 6182,
-        "surrogate_correct": 3133,
-        "agreement_count": 3384,
+        "surrogate_correct": 2324,
+        "agreement_count": 2514,
         "victim_acc": 0.6182,
-        "surrogate_acc": 0.3133,
-        "fidelity": 0.3384,
-        "posterior_kl_sum": 18607.269018173218,
-        "posterior_kl": 1.8607269018173218
+        "surrogate_acc": 0.2324,
+        "fidelity": 0.2514,
+        "posterior_kl_sum": 23059.418907165527,
+        "posterior_kl": 2.3059418907165528
       }
     }
   ],
@@ -442,5 +461,5 @@
     "history": "results/lab/04_tensorshield/window_history.tsv",
     "plot": "results/lab/04_tensorshield/window.png"
   },
-  "created_at": "2026-07-13T13:55:09.886698+00:00"
+  "created_at": "2026-07-16T08:29:43.638661+00:00"
 }

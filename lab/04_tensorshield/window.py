@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""保护 TensorShield 作者原始 rank 的 11-20 与 32-41 窗口。"""
+"""比较 TensorShield eligible 非分类头候选的前 10 与后 10。"""
 
 from __future__ import annotations
 
@@ -17,24 +17,24 @@ import run as prefix
 
 
 EXPECTED_WINDOWS = {
-    "rank_11_20": (
-        "layer3.0.bn1.weight",
-        "layer3.0.bn2.weight",
-        "layer3.0.downsample.1.weight",
-        "conv1.weight",
-        "layer2.0.downsample.0.weight",
-        "layer4.0.bn1.weight",
+    "first_10": (
         "layer1.1.conv1.weight",
         "layer2.0.conv1.weight",
-        "last_linear.weight",
         "layer1.0.conv1.weight",
-    ),
-    "rank_32_41": (
+        "layer1.1.conv2.weight",
+        "layer2.0.conv2.weight",
+        "layer2.1.conv1.weight",
+        "layer1.0.conv2.weight",
+        "layer3.0.conv1.weight",
+        "layer2.1.conv2.weight",
         "layer3.0.conv2.weight",
-        "layer3.1.bn2.weight",
-        "layer4.1.bn2.weight",
+    ),
+    "last_10": (
+        "layer1.0.conv2.weight",
+        "layer3.0.conv1.weight",
+        "layer2.1.conv2.weight",
+        "layer3.0.conv2.weight",
         "layer4.0.conv1.weight",
-        "layer3.1.bn1.weight",
         "layer4.0.conv2.weight",
         "layer4.1.conv1.weight",
         "layer4.1.conv2.weight",
@@ -43,13 +43,13 @@ EXPECTED_WINDOWS = {
     ),
 }
 EXPECTED_STATS = {
-    "rank_11_20": (11, 217_636, True, "replace"),
-    "rank_32_41": (10, 10_028_032, False, "exposed"),
+    "first_10": (12, 1_599_588, True, "replace"),
+    "last_10": (12, 10_557_540, True, "replace"),
 }
 DATA_FIELDS = (
     "case",
-    "rank_start",
-    "rank_end",
+    "candidate_start",
+    "candidate_end",
     "selected_weight_names",
     "protected_ranked_weight_count",
     "protected_unit_count",
@@ -66,8 +66,8 @@ DATA_FIELDS = (
 @dataclass(frozen=True)
 class WindowCase:
     name: str
-    rank_start: int
-    rank_end: int
+    candidate_start: int
+    candidate_end: int
     selected_weights: tuple[str, ...]
 
 
@@ -84,15 +84,17 @@ def parse_args() -> argparse.Namespace:
 
 
 def build_cases() -> tuple[WindowCase, ...]:
-    author_rank = tuple(prefix.AUTHOR_RESNET18_C100_RANK)
-    if len(author_rank) != 41 or len(author_rank) != len(set(author_rank)):
-        raise ValueError(
-            f"作者原始 rank 应有 41 个唯一 weight，实际为 {len(author_rank)}。"
-        )
-    definitions = (("rank_11_20", 11, 20), ("rank_32_41", 32, 41))
-    cases = tuple(
-        WindowCase(name, start, end, author_rank[start - 1 : end])
-        for name, start, end in definitions
+    eligible_rank = tuple(prefix.AUTHOR_RESNET18_C100_ELIGIBLE_RANK)
+    if eligible_rank != prefix.EXPECTED_ELIGIBLE_RANK:
+        raise ValueError(f"作者 eligible rank 已变化：{eligible_rank}")
+    candidates = tuple(
+        name for name in eligible_rank if name != "last_linear.weight"
+    )
+    if len(candidates) != 16 or len(candidates) != len(set(candidates)):
+        raise ValueError(f"排除分类头后应有 16 个候选，实际为 {len(candidates)}。")
+    cases = (
+        WindowCase("first_10", 1, 10, candidates[:10]),
+        WindowCase("last_10", 7, 16, candidates[-10:]),
     )
     for case in cases:
         if case.selected_weights != EXPECTED_WINDOWS[case.name]:
@@ -104,10 +106,7 @@ def build_cases() -> tuple[WindowCase, ...]:
 
 
 def protected_state_names(case: WindowCase) -> tuple[str, ...]:
-    names = list(case.selected_weights)
-    if "last_linear.weight" in names:
-        names.append("last_linear.bias")
-    return tuple(names)
+    return (*case.selected_weights, "last_linear.weight", "last_linear.bias")
 
 
 def initialize_case(
@@ -145,12 +144,12 @@ def initialize_case(
     expected = EXPECTED_STATS[case.name]
     if actual != expected:
         raise RuntimeError(f"{case.name} 保护统计为 {actual}，期望 {expected}。")
-    author_rank = tuple(prefix.AUTHOR_RESNET18_C100_RANK)
+    eligible_rank = tuple(prefix.AUTHOR_RESNET18_C100_ELIGIBLE_RANK)
     selected_metadata = [
         {
             "rank": (
-                author_rank.index(unit.state_name) + 1
-                if unit.state_name in author_rank
+                eligible_rank.index(unit.state_name) + 1
+                if unit.state_name in eligible_rank
                 else None
             ),
             "index": unit.index,
@@ -235,9 +234,9 @@ def train_case(
         torch.cuda.empty_cache()
     return {
         "case": case.name,
-        "origin": "trained_rank_window",
-        "rank_start": case.rank_start,
-        "rank_end": case.rank_end,
+        "origin": "trained_eligible_window",
+        "candidate_start": case.candidate_start,
+        "candidate_end": case.candidate_end,
         "selected_weight_names": list(case.selected_weights),
         "protection": {
             "implementation_defense": "custom",
@@ -265,8 +264,8 @@ def write_data(path: Path, results: list[dict[str, object]]) -> None:
             writer.writerow(
                 {
                     "case": result["case"],
-                    "rank_start": result["rank_start"],
-                    "rank_end": result["rank_end"],
+                    "candidate_start": result["candidate_start"],
+                    "candidate_end": result["candidate_end"],
                     "selected_weight_names": ",".join(result["selected_weight_names"]),
                     "protected_ranked_weight_count": len(result["selected_weight_names"]),
                     "protected_unit_count": protection["protected_unit_count"],
@@ -291,16 +290,24 @@ def plot_windows(
         ("fidelity", "Fidelity", "#009E73"),
         ("posterior_kl", "Posterior KL", "#D55E00"),
     )
-    labels = [
-        f"Rank 11-20\n{100 * float(results[0]['protection']['protected_param_ratio']):.2f}% params",
-        f"Rank 32-41\n{100 * float(results[1]['protection']['protected_param_ratio']):.2f}% params",
+    x_values = [
+        100.0 * float(result["protection"]["protected_param_ratio"])
+        for result in results
     ]
+    labels = ("First-10 + head", "Last-10 + head")
+    positions = range(len(results))
+    tick_labels = [f"{value:.2f}%" for value in x_values]
     figure, axes = prefix.plt.subplots(1, 3, figsize=(13.8, 4.2))
     for axis, (metric, title, color) in zip(axes, specifications):
         values = [float(result["end"][metric]) for result in results]
         no_value = float(references["no_protection"]["end"][metric])
         full_value = float(references["full_protection"]["end"][metric])
-        bars = axis.bar(range(2), values, color=("#555555", color), width=0.62)
+        bars = axis.bar(
+            positions,
+            values,
+            color=("#555555", color),
+            width=0.62,
+        )
         axis.axhline(
             no_value,
             color="#222222",
@@ -315,18 +322,20 @@ def plot_windows(
             linewidth=1.3,
             label="Full protection",
         )
-        for bar, value in zip(bars, values):
-            axis.text(
-                bar.get_x() + bar.get_width() / 2,
-                value,
-                f"{value:.4f}",
+        for bar, value, label in zip(bars, values, labels):
+            axis.annotate(
+                f"{label}\n{value:.4f}",
+                (bar.get_x() + bar.get_width() / 2, value),
+                xytext=(0, 7),
+                textcoords="offset points",
                 ha="center",
                 va="bottom",
-                fontsize=8,
+                fontsize=7.5,
             )
-        axis.set_xticks(range(2), labels)
         axis.set_title(title)
+        axis.set_xlabel("Protected parameters (%)")
         axis.set_ylabel(title)
+        axis.set_xticks(positions, tick_labels)
         axis.grid(axis="y", color="#D9D9D9", linewidth=0.7, alpha=0.75)
         axis.set_axisbelow(True)
         axis.spines["top"].set_visible(False)
@@ -345,7 +354,7 @@ def plot_windows(
         ncol=2,
         frameon=False,
     )
-    figure.suptitle("TensorShield raw-rank window ablation", y=1.10)
+    figure.suptitle("TensorShield eligible-rank window ablation", y=1.10)
     figure.tight_layout()
     figure.savefig(path, bbox_inches="tight", facecolor="white", dpi=240)
     prefix.plt.close(figure)
@@ -357,6 +366,8 @@ def clean_outputs(out_dir: Path) -> None:
         "window.tsv",
         "window_history.tsv",
         "window.png",
+        "first_10_mask.pt",
+        "last_10_mask.pt",
         "rank_11_20_mask.pt",
         "rank_32_41_mask.pt",
     ):
@@ -407,7 +418,7 @@ def main() -> int:
         prefix.configure_reproducibility(prefix.SEED, deterministic=True)
         surrogate, plan, _, _ = initialize_case(case, victim, official_weight)
         print(
-            f"[MASK/{case.name}] ranks={case.rank_start}-{case.rank_end} "
+            f"[MASK/{case.name}] candidates={case.candidate_start}-{case.candidate_end} "
             f"weights={len(case.selected_weights)} units={plan.protected_unit_count}/122 "
             f"params={plan.protected_param_count}/{plan.total_param_count} "
             f"ratio={plan.protected_param_ratio:.6f} "
@@ -416,8 +427,8 @@ def main() -> int:
         del surrogate
     if args.dry_run:
         print(
-            f"[INFO] author rank SHA256："
-            f"{prefix.rank_sha256(tuple(prefix.AUTHOR_RESNET18_C100_RANK))}"
+            f"[INFO] eligible rank SHA256："
+            f"{prefix.rank_sha256(tuple(prefix.AUTHOR_RESNET18_C100_ELIGIBLE_RANK))}"
         )
         print("[INFO] dry-run 完成，未写入 rank 窗口消融产物。")
         return 0
@@ -492,7 +503,7 @@ def main() -> int:
     payload = {
         "schema_version": 1,
         "experiment": prefix.EXPERIMENT,
-        "study": "author_raw_rank_windows",
+        "study": "eligible_rank_head_control_windows",
         "protocol": "MS",
         "attack_protocol": prefix.ATTACK_PROTOCOL_VERSION,
         "dataset": prefix.DATASET,
@@ -504,25 +515,31 @@ def main() -> int:
         "randomization": {
             "reset_before_each_surrogate_initialization": True,
             "query_sampler_seed": prefix.SEED,
-            "purpose": "controlled_raw_rank_window_comparison",
+            "purpose": "controlled_eligible_rank_window_comparison",
         },
         "source": {
             "method": "TensorShield",
             "rank_provenance": "author_confirmed_final_rank",
-            "rank_scope": "unfiltered_41_weight_rank",
-            "author_rank": list(prefix.AUTHOR_RESNET18_C100_RANK),
-            "author_rank_sha256": prefix.rank_sha256(
-                tuple(prefix.AUTHOR_RESNET18_C100_RANK)
+            "rank_scope": "eligible_16_non_head_weight_rank",
+            "eligible_rank": list(prefix.AUTHOR_RESNET18_C100_ELIGIBLE_RANK),
+            "eligible_rank_sha256": prefix.rank_sha256(
+                tuple(prefix.AUTHOR_RESNET18_C100_ELIGIBLE_RANK)
             ),
+            "non_head_candidate_rank": [
+                name
+                for name in prefix.AUTHOR_RESNET18_C100_ELIGIBLE_RANK
+                if name != "last_linear.weight"
+            ],
+            "fixed_head_states": ["last_linear.weight", "last_linear.bias"],
             "windows": {
                 case.name: {
-                    "rank_start": case.rank_start,
-                    "rank_end": case.rank_end,
+                    "candidate_start": case.candidate_start,
+                    "candidate_end": case.candidate_end,
                     "selected_weight_names": list(case.selected_weights),
                 }
                 for case in cases
             },
-            "comparison_scope": "same_ranked_weight_count_not_same_param_cost_or_head_mode",
+            "comparison_scope": "same_non_head_candidate_count_and_same_head_control_not_same_param_cost",
         },
         "victim_checkpoint": str(victim_checkpoint.relative_to(prefix.ROOT)),
         "victim_checkpoint_sha256": victim_sha256,

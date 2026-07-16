@@ -1,14 +1,14 @@
 # 实验 03 结果
 
-本目录汇总当前正式协议下 `ResNet18+CIFAR-100` 的 MS 结果。绘图读取四种 baseline 的 32 个扫描点、`head_only` 与 TensorShield 两个普通 victim 单点、TEESlice standalone 单点，以及普通 victim 的 no/full 两个参考点，共 37 个输入点。
+本目录汇总当前正式协议下 `ResNet18+CIFAR-100` 的 MS 结果。绘图读取四种 baseline 的 32 个扫描点、`head_only` 与 TensorShield 两个普通 victim 单点、TEESlice standalone 单点、普通 victim 的 no/full 两个正式参考点，以及 hard-label 全保护辅助参考点，共 38 个输入点。
 
 ```text
 metrics.png        accuracy、fidelity 与 posterior KL 三联总图
 accuracy.png       surrogate accuracy 曲线
 fidelity.png       fidelity 曲线
 posterior_kl.png   posterior KL 曲线
-data.tsv           37 个输入点及其比较范围、artifact_id、run_id 和原始指标
-manifest.json      输入协议、策略 artifact 与输出清单
+data.tsv           38 个输入点及其比较范围、label mode、来源和原始指标
+manifest.json      输入协议、策略 artifact、hard-label 输入哈希与输出清单
 ```
 
 ## 结果观察
@@ -24,3 +24,5 @@ manifest.json      输入协议、策略 artifact 与输出清单
 `large_08` 在约 `95%` 参数保护下达到 `0.1533` accuracy 和 `0.1600` fidelity，已经接近全保护的 `0.1545/0.1610`。partial 点略低于全保护参考线属于固定种子训练波动；上下界参考线不是逐点必须满足的数学约束。
 
 图中的 no/full 水平线只使用普通先训练后分区 victim。TEESlice 因 victim 结构与训练过程不同，以独立星形单点和 `standalone_reproduction` 范围展示，不与普通 victim 策略连线，也不参与同条件排序。
+
+新增的 hard-label 黑盒参考线读取正式 `results/MS/resnet18/c100/hard_blackbox/metrics.json`，其指标为 `0.1393/0.1443/3.427757`，对应 accuracy、fidelity 和 posterior KL；soft-posterior 主黑盒参考线为 `0.1545/0.1610/2.835290`。Hard label 在 query 上最终完全拟合，但测试集 MS 泛化更弱。该线属于输出能力消融，不替换当前 soft-posterior 主黑盒下界。

@@ -1,14 +1,27 @@
 # 实验 05 结果
 
-本目录保存 `ResNet18+CIFAR-100` 下五种 `state_dict` 条目类型的独立保护结果。主要结果使用第 100 轮 `end` 指标，横坐标比例按原始 tensor payload 字节数计算。
+本目录保存 `ResNet18+CIFAR-100` 下五种完整 `state_dict` 类型与十三种参数语义组的独立保护结果。主要结果统一读取第 100 轮 `end`。
 
 ```text
-保护类型                  state 存储比例  参数比例    accuracy  fidelity  posterior KL
-weight                       99.870611%   99.956358%    0.1582    0.1670       2.785335
-bias                          0.043604%    0.043642%    0.5771    0.7636       0.288129
-running_mean                  0.042714%    0.000000%    0.6107    0.8802       0.076649
-running_var                   0.042714%    0.000000%    0.6107    0.8802       0.076649
-num_batches_tracked           0.000356%    0.000000%    0.6107    0.8802       0.076649
+保护组                    参数比例   state 存储比例  accuracy  fidelity  posterior KL
+weight                  99.956358%      99.870611%    0.1582    0.1670       2.785335
+bias                     0.043642%       0.043604%    0.5771    0.7636       0.288129
+running_mean             0.000000%       0.042714%    0.6107    0.8802       0.076649
+running_var              0.000000%       0.042714%    0.6107    0.8802       0.076649
+num_batches_tracked      0.000000%       0.000356%    0.6107    0.8802       0.076649
+main_conv               97.841610%      97.757677%    0.2390    0.2601       2.133624
+downsample_conv          1.532195%       1.530881%    0.5508    0.6876       0.482493
+bn_gamma                 0.042751%       0.042714%    0.4948    0.5899       0.843716
+bn_beta                  0.042751%       0.042714%    0.5773    0.7625       0.288342
+bn_affine                0.085502%       0.085429%    0.4715    0.5603       0.945171
+head_weight              0.456010%       0.455619%    0.4756    0.5670       1.138210
+head_bias                0.000891%       0.000890%    0.6114    0.8805       0.076426
+downsample_branch        1.548156%       1.562828%    0.5475    0.6891       0.531090
+stem_branch              0.084932%       0.086016%    0.5503    0.7022       0.451142
+stem_conv                0.083792%       0.083720%    0.5611    0.7203       0.403427
+stem_bn_affine           0.001140%       0.001139%    0.5967    0.8224       0.158504
+downsample_bn_affine     0.015960%       0.015946%    0.5894    0.7985       0.233450
+head                     0.456901%       0.456509%    0.4751    0.5673       1.138192
 ```
 
 当前正式参考点为：
@@ -19,24 +32,28 @@ num_batches_tracked           0.000356%    0.000000%    0.6107    0.8802       0
 全保护          0.1545    0.1610       2.835290
 ```
 
+所有 Lab05 保护组统一额外微调 100 轮，因此分析语义组的边际影响时，使用 `num_batches_tracked` 的 `0.6107/0.8802/0.076649` 作为同训练轨迹的近似空操作对照，不把未经额外微调的正式无保护点直接当作差值基准。
+
 ## 结论
 
-只保护 `weight` 时，攻击 accuracy 为 `15.82%`，仅比全保护高 `0.37` 个百分点；fidelity 仅高 `0.60` 个百分点。即使 bias 和全部 BN buffer 仍然暴露，攻击效果也已经接近纯黑盒。这说明当前 ResNet18 的模型能力泄露主要来自 weight。
+`main_conv` 占全部参数的 `97.8416%`，但其攻击 accuracy 为 `23.90%`，比 `weight` 组高 `8.08` 个百分点。Stem Conv、downsample Conv、BN gamma 和分类头 weight 合计体量很小，却共同填补了主路径 Conv 与近黑盒结果之间的明显缺口。后续不能只在 16 个主路径 Conv 中寻找通道块。
 
-只保护 `bias` 时，攻击 accuracy 仍有 `57.71%`。与暴露全部状态并执行相同训练过程的 `num_batches_tracked` 对照相比，accuracy 只降低 `3.36` 个百分点，但 fidelity 降低 `11.66` 个百分点。bias 对类别能力的保护有限，对输出行为一致性的影响更明显。
+BN gamma 只有 `4,800` 个参数，单独保护已把攻击 accuracy 从同训练对照的 `61.07%` 降到 `49.48%`；BN beta 单独保护降到 `57.73%`。二者合并为 `bn_affine` 后进一步降到 `47.15%`，说明 gamma 是主要贡献，beta 具有较小但不可忽略的组合效应。通道块应携带对应 gamma 和 beta，不能把 BN affine 排除在节点状态之外。
 
-`running_mean`、`running_var` 和 `num_batches_tracked` 三组的 end 指标完全一致。当前 BatchNorm 使用固定 momentum，batch counter 不影响推理或 running statistics 的更新比例，因此 `num_batches_tracked` 组可作为统一 finetune 的近似空操作对照。100 轮训练后，公开初始化的 running mean/variance 已被相同 query 流程覆盖；单独隐藏这些 BN buffer 没有留下可测的额外保护效果。
+`bias` 与 `bn_beta` 的三项指标几乎完全一致，而 `head_bias` 与近似空操作对照几乎一致，说明原 `bias` 组的可测作用来自 BN beta，不是分类头的 100 个 bias。同一初始化轨迹下，`head_weight` 的 accuracy/fidelity 为 `0.4756/0.5670`，同时保护 weight 与 bias 的 `head` 为 `0.4751/0.5673`，没有一致的额外收益。因此正式 `head_only` 与本实验 `head_weight` 的数值差异不能归因于分类头 bias，而与两套实验不同的随机分类头初始化轨迹混杂。分类头 bias 仍可因只有 100 个参数而随 weight 固定保护，但当前没有证据把它计为独立安全贡献。
 
-无保护正式参考点不执行额外训练，而五个类型实验统一执行 100 轮 finetune。因此 BN buffer 三组相对无保护出现的 `0.75` 个百分点 accuracy 差异主要是训练漂移，不能解释为 buffer 本身提供了保护。
+单独保护 downsample Conv 后攻击 accuracy 为 `55.08%`；只保护 downsample BN affine 为 `58.94%`；保护完整 downsample 分支为 `54.75%`。完整分支相对 Conv-only 的 accuracy 仅再降低 `0.33` 个百分点，且 fidelity 没有同步降低。当前没有证据表明三个 downsample 分支的全部 BN 状态必须整体保护，但 downsample Conv 和对应 BN affine 都是可测的攻击信息来源，不能在候选图中删除。
 
-作为补充，新实验 04 在每个 k 使用相同初始化轨迹：TensorShield Top-10 保护 `8.9934%` 参数时，攻击 accuracy 为 `25.69%`；Top-12 保护 `24.7531%` 参数时进一步降至 `19.26%`。这说明关键 weight 前缀能够持续抑制攻击，但 Top-10 尚未达到当前全保护下界。
+Stem Conv 单独保护时 accuracy/fidelity 为 `0.5611/0.7203`，首个 BN affine 单独保护为 `0.5967/0.8224`，完整 Stem 为 `0.5503/0.7022`。Stem 的主要贡献来自 Conv，首个 BN affine 作用较弱但与 Conv 组合后仍有增益。完整 Stem 只占 `0.0849%` 参数，足以否定“Stem 可以未经验证直接排除”的假设。
+
+三种 BN buffer 单独保护的 end 指标完全一致。100 轮微调后，公开初始化的 running mean/variance 已被相同 query 流程覆盖；buffer 应作为通道块执行状态记录，但不能被解释为独立的长期安全来源。
 
 ```text
-metrics.json                    五种类型的协议、保护统计、best/end 和正式参考指标
-history.tsv                    五组共 500 轮训练和评估记录
-data.tsv                       三张图使用的 end 原始点
+metrics.json                    十八组协议、保护统计、best/end 和正式参考指标
+history.tsv                    十八组共 1,800 轮训练与评估记录
+data.tsv                       三张图使用的十八个 end 原始点
 accuracy.png                   保护存储比例与 accuracy
 fidelity.png                   保护存储比例与 fidelity
-posterior_kl.png               保护存储比例与 posterior KL
-<type>_mask.pt                 五种类型各自的紧凑保护掩码
+posterior_kl.png                保护存储比例与 posterior KL
+<group>_mask.pt                十八组各自的紧凑保护掩码
 ```

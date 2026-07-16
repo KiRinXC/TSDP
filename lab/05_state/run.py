@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""比较 ResNet18 中五种 state_dict 条目类型的独立保护效果。"""
+"""比较 ResNet18 中完整 state 类型与参数语义组的独立保护效果。"""
 
 from __future__ import annotations
 
@@ -53,6 +53,7 @@ from exp.MS.train_surrogate.core.engine import (  # noqa: E402
 )
 from exp.MS.train_surrogate.defense import (  # noqa: E402
     build_resnet18_tensor_units,
+    load_protection_mask,
     protection_mask_sha256,
     save_protection_mask,
 )
@@ -74,7 +75,7 @@ WEIGHT_DECAY = 5e-4
 LR_STEP = 60
 LR_GAMMA = 0.1
 SEED = 42
-STATE_TYPES = {
+PROTECTION_GROUPS = {
     "weight": {"label": "Weight", "color": "#0072B2", "marker": "o"},
     "bias": {"label": "Bias", "color": "#D55E00", "marker": "s"},
     "running_mean": {"label": "BN running mean", "color": "#009E73", "marker": "^"},
@@ -86,13 +87,57 @@ STATE_TYPES = {
         "size": 82,
     },
     "num_batches_tracked": {"label": "BN batch counter", "color": "#E69F00", "marker": "P"},
+    "main_conv": {"label": "Main-path Conv", "color": "#005AB5", "marker": "v"},
+    "downsample_conv": {
+        "label": "Downsample Conv",
+        "color": "#DC3220",
+        "marker": "<",
+    },
+    "bn_gamma": {"label": "BN gamma", "color": "#1B9E77", "marker": ">"},
+    "bn_beta": {"label": "BN beta", "color": "#E66101", "marker": "h"},
+    "bn_affine": {"label": "BN affine", "color": "#5E3C99", "marker": "H"},
+    "head_weight": {"label": "Head weight", "color": "#CA0020", "marker": "*", "size": 105},
+    "head_bias": {"label": "Head bias", "color": "#F4A582", "marker": "X"},
+    "downsample_branch": {
+        "label": "Complete downsample",
+        "color": "#8C510A",
+        "marker": "d",
+    },
+    "stem_branch": {"label": "Complete stem", "color": "#01665E", "marker": "8"},
+    "stem_conv": {"label": "Stem Conv", "color": "#35978F", "marker": "p"},
+    "stem_bn_affine": {
+        "label": "Stem BN affine",
+        "color": "#80CDC1",
+        "marker": "D",
+        "size": 92,
+    },
+    "downsample_bn_affine": {
+        "label": "Downsample BN affine",
+        "color": "#BF812D",
+        "marker": "o",
+        "size": 92,
+    },
+    "head": {"label": "Complete head", "color": "#67001F", "marker": "P", "size": 100},
 }
-EXPECTED_STATE_COUNTS = {
+EXPECTED_GROUP_COUNTS = {
     "weight": (41, 11_222_912),
     "bias": (21, 4_900),
     "running_mean": (20, 4_800),
     "running_var": (20, 4_800),
     "num_batches_tracked": (20, 20),
+    "main_conv": (16, 10_985_472),
+    "downsample_conv": (3, 172_032),
+    "bn_gamma": (20, 4_800),
+    "bn_beta": (20, 4_800),
+    "bn_affine": (40, 9_600),
+    "head_weight": (1, 51_200),
+    "head_bias": (1, 100),
+    "downsample_branch": (18, 175_619),
+    "stem_branch": (6, 9_665),
+    "stem_conv": (1, 9_408),
+    "stem_bn_affine": (2, 128),
+    "downsample_bn_affine": (6, 1_792),
+    "head": (2, 51_300),
 }
 METRICS = {
     "surrogate_acc": {"filename": "accuracy.png", "ylabel": "Surrogate accuracy"},
@@ -100,7 +145,7 @@ METRICS = {
     "posterior_kl": {"filename": "posterior_kl.png", "ylabel": "Posterior KL"},
 }
 DATA_FIELDS = [
-    "state_type",
+    "protection_group",
     "protected_unit_count",
     "protected_unit_ratio",
     "protected_param_count",
@@ -121,6 +166,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--device", default="auto", help="auto / cpu / cuda / cuda:0。")
     parser.add_argument("--num-workers", type=int, default=4, help="DataLoader worker 数。")
+    parser.add_argument(
+        "--reuse-existing",
+        action="store_true",
+        help="复用协议、mask 和历史均完全一致的已完成保护组，只训练缺失组。",
+    )
     return parser.parse_args()
 
 
@@ -131,13 +181,61 @@ def build_public_model(weight_path: Path) -> nn.Module:
     return model
 
 
-def build_type_masks(
-    victim_state: dict[str, torch.Tensor], state_type: str
+def is_bn_state(name: str) -> bool:
+    return (
+        name.startswith("bn1.")
+        or ".bn1." in name
+        or ".bn2." in name
+        or ".downsample.1." in name
+    )
+
+
+def matches_group(name: str, group_name: str) -> bool:
+    suffix = name.rsplit(".", 1)[-1]
+    if group_name in {
+        "weight",
+        "bias",
+        "running_mean",
+        "running_var",
+        "num_batches_tracked",
+    }:
+        return suffix == group_name
+    if group_name == "main_conv":
+        return name.startswith("layer") and name.endswith((".conv1.weight", ".conv2.weight"))
+    if group_name == "downsample_conv":
+        return name.endswith(".downsample.0.weight")
+    if group_name == "bn_gamma":
+        return is_bn_state(name) and suffix == "weight"
+    if group_name == "bn_beta":
+        return is_bn_state(name) and suffix == "bias"
+    if group_name == "bn_affine":
+        return is_bn_state(name) and suffix in {"weight", "bias"}
+    if group_name == "head_weight":
+        return name == "last_linear.weight"
+    if group_name == "head_bias":
+        return name == "last_linear.bias"
+    if group_name == "head":
+        return name in {"last_linear.weight", "last_linear.bias"}
+    if group_name == "stem_conv":
+        return name == "conv1.weight"
+    if group_name == "stem_bn_affine":
+        return name.startswith("bn1.") and suffix in {"weight", "bias"}
+    if group_name == "downsample_bn_affine":
+        return ".downsample.1." in name and suffix in {"weight", "bias"}
+    if group_name == "downsample_branch":
+        return ".downsample." in name
+    if group_name == "stem_branch":
+        return name == "conv1.weight" or name.startswith("bn1.")
+    raise ValueError(f"未知保护组：{group_name}")
+
+
+def build_group_masks(
+    victim_state: dict[str, torch.Tensor], group_name: str
 ) -> dict[str, torch.Tensor]:
     return {
         name: torch.full_like(
             value,
-            fill_value=name.rsplit(".", 1)[-1] == state_type,
+            fill_value=matches_group(name, group_name),
             dtype=torch.bool,
             device="cpu",
         )
@@ -166,7 +264,7 @@ def compose_surrogate(
 def protection_metadata(
     victim: nn.Module,
     masks: dict[str, torch.Tensor],
-    state_type: str,
+    group_name: str,
     mask_path: Path,
 ) -> dict[str, object]:
     units = build_resnet18_tensor_units(victim)
@@ -182,11 +280,11 @@ def protection_metadata(
     for unit in units:
         mask = masks[unit.state_name]
         selected = bool(mask.all())
-        if selected != (unit.state_name.rsplit(".", 1)[-1] == state_type):
-            raise RuntimeError(f"{state_type} mask 与 unit {unit.index} 类型不一致。")
+        if selected != matches_group(unit.state_name, group_name):
+            raise RuntimeError(f"{group_name} mask 与 unit {unit.index} 语义不一致。")
         if not selected:
             if bool(mask.any()):
-                raise RuntimeError("state 类型实验不允许部分标量 mask。")
+                raise RuntimeError("参数语义实验不允许部分标量 mask。")
             continue
         value = state[unit.state_name]
         protected_state_elements += value.numel()
@@ -203,17 +301,17 @@ def protection_metadata(
             }
         )
 
-    expected_units, expected_elements = EXPECTED_STATE_COUNTS[state_type]
+    expected_units, expected_elements = EXPECTED_GROUP_COUNTS[group_name]
     if len(selected_units) != expected_units or protected_state_elements != expected_elements:
         raise RuntimeError(
-            f"{state_type} 统计不一致：units={len(selected_units)}，"
+            f"{group_name} 统计不一致：units={len(selected_units)}，"
             f"elements={protected_state_elements}。"
         )
     head_weight = bool(masks["last_linear.weight"].all())
     head_bias = bool(masks["last_linear.bias"].all())
     head_mode = "replace" if head_weight and head_bias else "mixed" if head_weight != head_bias else "exposed"
     return {
-        "state_type": state_type,
+        "protection_group": group_name,
         "tensor_unit_count": len(units),
         "protected_unit_count": len(selected_units),
         "protected_unit_ratio": len(selected_units) / len(units),
@@ -264,7 +362,7 @@ def write_history(path: Path, rows: list[dict[str, object]]) -> None:
     with path.open("w", newline="", encoding="utf-8") as writer_file:
         writer = csv.DictWriter(
             writer_file,
-            fieldnames=["state_type", *HISTORY_FIELDS],
+            fieldnames=["protection_group", *HISTORY_FIELDS],
             delimiter="\t",
             lineterminator="\n",
         )
@@ -283,13 +381,87 @@ def write_data(path: Path, results: list[dict[str, object]]) -> None:
             end = result["end"]
             writer.writerow(
                 {
-                    "state_type": result["state_type"],
+                    "protection_group": result["protection_group"],
                     **{name: protection[name] for name in DATA_FIELDS[1:11]},
                     "surrogate_acc": end["surrogate_acc"],
                     "fidelity": end["fidelity"],
                     "posterior_kl": end["posterior_kl"],
                 }
             )
+
+
+def read_history(path: Path) -> list[dict[str, object]]:
+    if not path.is_file():
+        raise FileNotFoundError(f"缺少可复用历史：{path}")
+    rows: list[dict[str, object]] = []
+    with path.open("r", newline="", encoding="utf-8") as reader_file:
+        for raw in csv.DictReader(reader_file, delimiter="\t"):
+            group_name = raw.pop("protection_group", None) or raw.pop("state_type", None)
+            if group_name is None:
+                raise ValueError(f"历史文件缺少保护组字段：{path}")
+            rows.append({"protection_group": group_name, **raw})
+    return rows
+
+
+def normalize_existing_result(raw: dict[str, object]) -> dict[str, object]:
+    result = dict(raw)
+    group_name = result.pop("state_type", None) or result.get("protection_group")
+    if not isinstance(group_name, str):
+        raise ValueError("已有 Lab05 结果缺少保护组名称。")
+    result["protection_group"] = group_name
+    protection = dict(result["protection"])
+    protection.pop("state_type", None)
+    protection["protection_group"] = group_name
+    result["protection"] = protection
+    return result
+
+
+def validate_reusable_group(
+    group_name: str,
+    result: dict[str, object],
+    expected_protection: dict[str, object],
+    history: list[dict[str, object]],
+    mask_path: Path,
+) -> None:
+    protection = result["protection"]
+    if not isinstance(protection, dict):
+        raise ValueError(f"{group_name} 已有 protection 不是字典。")
+    checked_fields = (
+        "protected_unit_count",
+        "protected_param_count",
+        "protected_state_element_count",
+        "protected_state_byte_count",
+        "classifier_weight_protected",
+        "classifier_bias_protected",
+        "head_mode",
+        "protection_mask_sha256",
+    )
+    for field in checked_fields:
+        if protection.get(field) != expected_protection[field]:
+            raise ValueError(
+                f"{group_name} 已有 {field}={protection.get(field)!r}，"
+                f"当前定义要求 {expected_protection[field]!r}，拒绝复用。"
+            )
+    primary = result.get("primary")
+    if not isinstance(primary, dict) or primary.get("evaluation") != "end" or primary.get("epoch") != EPOCHS:
+        raise ValueError(f"{group_name} 已有结果不是第 {EPOCHS} 轮 end 主结果。")
+    if not mask_path.is_file():
+        raise FileNotFoundError(f"{group_name} 缺少可复用 mask：{mask_path}")
+    saved_masks = load_protection_mask(mask_path)
+    saved_digest = protection_mask_sha256(saved_masks)
+    if saved_digest != expected_protection["protection_mask_sha256"]:
+        raise ValueError(f"{group_name} 已有 mask 内容与当前定义不一致。")
+
+    group_history = [row for row in history if row["protection_group"] == group_name]
+    epochs = [int(row["epoch"]) for row in group_history]
+    if epochs != list(range(1, EPOCHS + 1)):
+        raise ValueError(f"{group_name} 已有历史不是完整的 1-{EPOCHS} 轮。")
+    end = result.get("end")
+    if not isinstance(end, dict):
+        raise ValueError(f"{group_name} 已有结果缺少 end 指标。")
+    for metric in ("surrogate_acc", "fidelity", "posterior_kl"):
+        if abs(float(group_history[-1][metric]) - float(end[metric])) > 1e-12:
+            raise ValueError(f"{group_name} 的 history 与 end.{metric} 不一致。")
 
 
 def plot_metric(
@@ -310,12 +482,12 @@ def plot_metric(
             "savefig.dpi": 240,
         }
     )
-    figure, ax = plt.subplots(figsize=(8.6, 4.8))
+    figure, ax = plt.subplots(figsize=(9.6, 5.4))
     values = []
     x_values = []
     for result in results:
-        state_type = str(result["state_type"])
-        style = STATE_TYPES[state_type]
+        group_name = str(result["protection_group"])
+        style = PROTECTION_GROUPS[group_name]
         x_value = float(result["protection"]["protected_state_byte_ratio"]) * 100.0
         y_value = float(result["end"][metric])
         x_values.append(x_value)
@@ -357,12 +529,21 @@ def plot_metric(
     ax.yaxis.set_major_locator(MaxNLocator(nbins=7))
     ax.set_xlabel("Protected state storage (%)")
     ax.set_ylabel(ylabel)
-    ax.set_title(f"ResNet18 + CIFAR-100: state-type {ylabel}")
+    ax.set_title(f"ResNet18 + CIFAR-100: semantic-group {ylabel}")
     ax.grid(True, which="both", color="#D9D9D9", linewidth=0.8, alpha=0.75)
     ax.set_axisbelow(True)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    ax.legend(loc="upper left", bbox_to_anchor=(1.02, 1.0), frameon=False)
+    ax.legend(
+        loc="upper left",
+        bbox_to_anchor=(1.01, 1.0),
+        frameon=False,
+        ncol=2,
+        fontsize=8,
+        labelspacing=0.65,
+        columnspacing=1.0,
+        handletextpad=0.55,
+    )
     figure.tight_layout()
     figure.savefig(path, bbox_inches="tight", facecolor="white")
     plt.close(figure)
@@ -379,15 +560,25 @@ def main() -> int:
     official_weight = ROOT / "weights" / "pre_train" / "resnet18-5c106cde.pth"
     out_dir = ROOT / "results" / "lab" / EXPERIMENT
     out_dir.mkdir(parents=True, exist_ok=True)
+    existing_payload: dict[str, object] | None = None
+    existing_history: list[dict[str, object]] = []
+    if args.reuse_existing:
+        metrics_path = out_dir / "metrics.json"
+        if not metrics_path.is_file():
+            raise FileNotFoundError(f"--reuse-existing 要求已有结果：{metrics_path}")
+        existing_payload = json.loads(metrics_path.read_text(encoding="utf-8"))
+        existing_history = read_history(out_dir / "history.tsv")
+
     outputs = [
         out_dir / "metrics.json",
         out_dir / "history.tsv",
         out_dir / "data.tsv",
         *(out_dir / specification["filename"] for specification in METRICS.values()),
-        *(out_dir / f"{state_type}_mask.pt" for state_type in STATE_TYPES),
+        *(out_dir / f"{group_name}_mask.pt" for group_name in PROTECTION_GROUPS),
     ]
-    for path in outputs:
-        path.unlink(missing_ok=True)
+    if not args.reuse_existing:
+        for path in outputs:
+            path.unlink(missing_ok=True)
 
     configure_reproducibility(SEED, deterministic=True)
     query_indices, query_posteriors, query_labels, posterior_path, query_manifest = load_query_targets(
@@ -410,20 +601,157 @@ def main() -> int:
     victim, victim_metadata = build_victim(MODEL, NUM_CLASSES, victim_checkpoint)
     victim_state = {name: value.detach().cpu().clone() for name, value in victim.state_dict().items()}
     victim_sha256 = sha256_file(victim_checkpoint)
+    official_weight_sha256 = sha256_file(official_weight)
+    posterior_sha256 = sha256_file(posterior_path)
     expected_victim_sha256 = query_manifest.get("victim", {}).get("checkpoint_sha256")
     if expected_victim_sha256 and expected_victim_sha256 != victim_sha256:
         raise ValueError("victim best.pth 与生成 soft posterior 时使用的 checkpoint 不一致。")
     victim = victim.to(device)
     reference = collect_eval_reference(victim, eval_loader, device)
 
-    results: list[dict[str, object]] = []
+    training_protocol = {
+        "mode": "finetune",
+        "epochs": EPOCHS,
+        "batch_size": BATCH_SIZE,
+        "eval_batch_size": EVAL_BATCH_SIZE,
+        "optimizer": "SGD",
+        "learning_rate": LEARNING_RATE,
+        "momentum": MOMENTUM,
+        "weight_decay": WEIGHT_DECAY,
+        "lr_scheduler": "StepLR",
+        "lr_step": LR_STEP,
+        "lr_gamma": LR_GAMMA,
+    }
+    existing_results: dict[str, dict[str, object]] = {}
+    if existing_payload is not None:
+        expected_existing = {
+            "experiment": EXPERIMENT,
+            "protocol": "MS",
+            "attack_protocol": ATTACK_PROTOCOL_VERSION,
+            "dataset": DATASET,
+            "victim_model": MODEL,
+            "query_budget": BUDGET,
+            "label_mode": "soft",
+            "query_transform": "test",
+            "seed": SEED,
+            "victim_checkpoint": str(victim_checkpoint.relative_to(ROOT)),
+            "victim_checkpoint_sha256": victim_sha256,
+            "official_weight": str(official_weight.relative_to(ROOT)),
+            "official_weight_sha256": official_weight_sha256,
+            "posterior_path": str(posterior_path.relative_to(ROOT)),
+            "posterior_sha256": posterior_sha256,
+            "training": training_protocol,
+            "x_axis": "protected_state_byte_ratio",
+        }
+        for field, expected_value in expected_existing.items():
+            if existing_payload.get(field) != expected_value:
+                raise ValueError(
+                    f"已有 Lab05 {field}={existing_payload.get(field)!r}，"
+                    f"当前协议要求 {expected_value!r}，拒绝复用。"
+                )
+        raw_results = existing_payload.get("results")
+        if not isinstance(raw_results, list):
+            raise ValueError("已有 Lab05 metrics.json 缺少 results 列表。")
+        for raw_result in raw_results:
+            if not isinstance(raw_result, dict):
+                raise ValueError("已有 Lab05 result 不是字典。")
+            result = normalize_existing_result(raw_result)
+            group_name = str(result["protection_group"])
+            if group_name not in PROTECTION_GROUPS:
+                raise ValueError(f"已有 Lab05 包含未知保护组：{group_name}")
+            if group_name in existing_results:
+                raise ValueError(f"已有 Lab05 保护组重复：{group_name}")
+            existing_results[group_name] = result
+
+    bounds_root = ROOT / "results" / "MS" / MODEL / DATASET
+    references = {
+        "no_protection": load_bound(
+            bounds_root / "no_protection" / "metrics.json", "no_protection"
+        ),
+        "full_protection": load_bound(
+            bounds_root / "full_protection" / "metrics.json", "full_protection"
+        ),
+    }
+
+    results_by_group: dict[str, dict[str, object]] = {}
     all_history: list[dict[str, object]] = []
-    for state_type in STATE_TYPES:
+
+    def persist_results() -> None:
+        group_order = {name: index for index, name in enumerate(PROTECTION_GROUPS)}
+        results = [
+            results_by_group[name]
+            for name in PROTECTION_GROUPS
+            if name in results_by_group
+        ]
+        ordered_history = sorted(
+            all_history,
+            key=lambda row: (
+                group_order[str(row["protection_group"])],
+                int(row["epoch"]),
+            ),
+        )
+        payload = {
+            "schema_version": 2,
+            "experiment": EXPERIMENT,
+            "protocol": "MS",
+            "attack_protocol": ATTACK_PROTOCOL_VERSION,
+            "dataset": DATASET,
+            "victim_model": MODEL,
+            "query_budget": BUDGET,
+            "label_mode": "soft",
+            "query_transform": "test",
+            "seed": SEED,
+            "victim_checkpoint": str(victim_checkpoint.relative_to(ROOT)),
+            "victim_checkpoint_sha256": victim_sha256,
+            "victim_checkpoint_epoch": victim_metadata.get("epoch"),
+            "official_weight": str(official_weight.relative_to(ROOT)),
+            "official_weight_sha256": official_weight_sha256,
+            "posterior_path": str(posterior_path.relative_to(ROOT)),
+            "posterior_sha256": posterior_sha256,
+            "training": training_protocol,
+            "x_axis": "protected_state_byte_ratio",
+            "protection_groups": list(PROTECTION_GROUPS),
+            "results": results,
+            "references": references,
+            "created_at": datetime.now(timezone.utc).isoformat(),
+        }
+        (out_dir / "metrics.json").write_text(
+            json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
+        )
+        write_history(out_dir / "history.tsv", ordered_history)
+        write_data(out_dir / "data.tsv", results)
+        for metric, specification in METRICS.items():
+            plot_metric(
+                out_dir / specification["filename"],
+                results,
+                references,
+                metric,
+                specification["ylabel"],
+            )
+
+    for group_name in PROTECTION_GROUPS:
         configure_reproducibility(SEED, deterministic=True)
-        masks = build_type_masks(victim_state, state_type)
-        mask_path = out_dir / f"{state_type}_mask.pt"
+        masks = build_group_masks(victim_state, group_name)
+        mask_path = out_dir / f"{group_name}_mask.pt"
+        protection = protection_metadata(victim, masks, group_name, mask_path)
+        if group_name in existing_results:
+            result = existing_results[group_name]
+            validate_reusable_group(
+                group_name,
+                result,
+                protection,
+                existing_history,
+                mask_path,
+            )
+            result["protection"] = protection
+            results_by_group[group_name] = result
+            all_history.extend(
+                row for row in existing_history if row["protection_group"] == group_name
+            )
+            print(f"[REUSE/{group_name}] 已核对 100 轮历史、mask 和 end 指标。")
+            continue
+
         save_protection_mask(mask_path, masks)
-        protection = protection_metadata(victim, masks, state_type, mask_path)
         surrogate = compose_surrogate(official_weight, victim_state, masks).to(device)
         query_loader = DataLoader(
             query_dataset,
@@ -461,7 +789,7 @@ def main() -> int:
             end_metrics = evaluate_surrogate(surrogate, eval_loader, reference, device)
             scheduler.step()
             row = {
-                "state_type": state_type,
+                "protection_group": group_name,
                 "epoch": epoch,
                 "learning_rate": learning_rate,
                 **train_metrics,
@@ -469,7 +797,7 @@ def main() -> int:
             }
             all_history.append(row)
             print(
-                f"[EVAL/{state_type}] epoch={epoch:03d} "
+                f"[EVAL/{group_name}] epoch={epoch:03d} "
                 f"surrogate_acc={end_metrics['surrogate_acc']:.6f} "
                 f"fidelity={end_metrics['fidelity']:.6f} "
                 f"posterior_kl={end_metrics['posterior_kl']:.6f}"
@@ -479,81 +807,23 @@ def main() -> int:
                 best_metrics = dict(end_metrics)
 
         assert best_metrics is not None and end_metrics is not None
-        results.append(
-            {
-                "state_type": state_type,
-                "protection": protection,
-                "primary": {"evaluation": "end", "epoch": EPOCHS},
-                "diagnostic_best": {
-                    "metric": "surrogate_acc",
-                    "epoch": best_epoch,
-                    "metrics": best_metrics,
-                },
-                "end": end_metrics,
-            }
-        )
-        write_history(out_dir / "history.tsv", all_history)
+        results_by_group[group_name] = {
+            "protection_group": group_name,
+            "protection": protection,
+            "primary": {"evaluation": "end", "epoch": EPOCHS},
+            "diagnostic_best": {
+                "metric": "surrogate_acc",
+                "epoch": best_epoch,
+                "metrics": best_metrics,
+            },
+            "end": end_metrics,
+        }
+        persist_results()
         del surrogate, optimizer, scheduler
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
-    bounds_root = ROOT / "results" / "MS" / MODEL / DATASET
-    references = {
-        "no_protection": load_bound(
-            bounds_root / "no_protection" / "metrics.json", "no_protection"
-        ),
-        "full_protection": load_bound(
-            bounds_root / "full_protection" / "metrics.json", "full_protection"
-        ),
-    }
-    payload = {
-        "schema_version": 1,
-        "experiment": EXPERIMENT,
-        "protocol": "MS",
-        "attack_protocol": ATTACK_PROTOCOL_VERSION,
-        "dataset": DATASET,
-        "victim_model": MODEL,
-        "query_budget": BUDGET,
-        "label_mode": "soft",
-        "query_transform": "test",
-        "seed": SEED,
-        "victim_checkpoint": str(victim_checkpoint.relative_to(ROOT)),
-        "victim_checkpoint_sha256": victim_sha256,
-        "victim_checkpoint_epoch": victim_metadata.get("epoch"),
-        "official_weight": str(official_weight.relative_to(ROOT)),
-        "official_weight_sha256": sha256_file(official_weight),
-        "posterior_path": str(posterior_path.relative_to(ROOT)),
-        "posterior_sha256": sha256_file(posterior_path),
-        "training": {
-            "mode": "finetune",
-            "epochs": EPOCHS,
-            "batch_size": BATCH_SIZE,
-            "eval_batch_size": EVAL_BATCH_SIZE,
-            "optimizer": "SGD",
-            "learning_rate": LEARNING_RATE,
-            "momentum": MOMENTUM,
-            "weight_decay": WEIGHT_DECAY,
-            "lr_scheduler": "StepLR",
-            "lr_step": LR_STEP,
-            "lr_gamma": LR_GAMMA,
-        },
-        "x_axis": "protected_state_byte_ratio",
-        "results": results,
-        "references": references,
-        "created_at": datetime.now(timezone.utc).isoformat(),
-    }
-    (out_dir / "metrics.json").write_text(
-        json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8"
-    )
-    write_data(out_dir / "data.tsv", results)
-    for metric, specification in METRICS.items():
-        plot_metric(
-            out_dir / specification["filename"],
-            results,
-            references,
-            metric,
-            specification["ylabel"],
-        )
+    persist_results()
     print(f"[INFO] 结果：{(out_dir / 'metrics.json').relative_to(ROOT)}")
     return 0
 
