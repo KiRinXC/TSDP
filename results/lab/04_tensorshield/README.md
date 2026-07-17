@@ -1,6 +1,6 @@
 # 实验 04 结果
 
-本目录保存 TensorShield 作者确认 eligible rank 的 Top-1 至 Top-17 MS 前缀曲线，以及 rank-5/rank-10 冗余消融和 eligible rank 位置集合对照。三个实验均使用 `formal_victim_then_public_v1`、seed 42，并在每个独立 surrogate 初始化前重置随机状态。
+本目录保存 TensorShield 作者确认 eligible rank 的 Top-1 至 Top-17 MS 前缀曲线、Top-12 完整 leave-one-out 与联合删除消融，以及 eligible rank 位置集合对照。三个实验均使用 `formal_victim_then_public_v1`、seed 42，并在每个独立 surrogate 初始化前重置随机状态。
 
 ## Top-1 至 Top-17 前缀曲线
 
@@ -49,9 +49,12 @@ top_01_mask.pt    Top-1 紧凑保护掩码
 top_17_mask.pt    Top-17 紧凑保护掩码
 ```
 
-## Top-12 内 Rank-5/Rank-10 冗余消融
+## Top-12 完整 Leave-one-out 与联合删除消融
 
 该消融使用统一的先训练后分区边界：`no_protection` 为白盒边界，`full_protection` 为黑盒边界。
+所有 case 都固定保护 unit 121 `last_linear.bias`。rank-3 是 `last_linear.weight`，
+因此 `drop_03` 只暴露分类头 weight，分类头模式为 `mixed`；其余 case 的分类头模式
+为 `replace`。
 
 ```text
 边界                    accuracy  fidelity  posterior KL
@@ -60,27 +63,101 @@ top_17_mask.pt    Top-17 紧凑保护掩码
 ```
 
 ```text
-方案          保护参数比例  accuracy  fidelity  posterior KL
-完整 Top-12      24.7531%     0.1655    0.1757       2.690443
-删除 rank-5      24.4248%     0.1635    0.1745       2.714643
-删除 rank-10     23.4398%     0.1623    0.1753       2.704415
-同时删除 5/10    23.1115%     0.1579    0.1705       2.718431
+方案              删除的 weight                   保护比例  head     accuracy  fidelity  posterior KL
+完整 Top-12       -                                24.7531%  replace    0.1655    0.1757       2.690443
+删除 rank-1       layer1.1.conv1.weight            24.4248%  replace    0.1698    0.1811       2.661706
+删除 rank-2       layer2.0.conv1.weight            24.0965%  replace    0.1718    0.1842       2.641335
+删除 rank-3       last_linear.weight               24.2971%  mixed      0.2320    0.2589       2.250162
+删除 rank-4       layer1.0.conv1.weight            24.4248%  replace    0.1692    0.1832       2.673958
+删除 rank-5       layer1.1.conv2.weight            24.4248%  replace    0.1635    0.1745       2.714643
+删除 rank-6       layer2.0.conv2.weight            23.4398%  replace    0.1627    0.1786       2.677902
+删除 rank-7       layer2.1.conv1.weight            23.4398%  replace    0.1622    0.1746       2.683795
+删除 rank-8       layer1.0.conv2.weight            24.4248%  replace    0.1638    0.1784       2.705771
+删除 rank-9       layer3.0.conv1.weight            22.1265%  replace    0.1739    0.1891       2.608790
+删除 rank-10      layer2.1.conv2.weight            23.4398%  replace    0.1623    0.1753       2.704415
+删除 rank-11      layer3.0.conv2.weight            19.4999%  replace    0.1710    0.1830       2.646769
+删除 rank-12      layer4.0.conv1.weight            14.2467%  replace    0.1757    0.1910       2.607458
+同时删除 5/10    两项                             23.1115%  replace    0.1579    0.1705       2.718431
+同时删除 5/8/10  三项                             22.7832%  replace    0.1624    0.1740       2.725131
+同时删除 5/6/8/10  四项                           21.4699%  replace    0.1623    0.1743       2.704000
+同时删除 5/7/8/10  四项                           21.4699%  replace    0.1678    0.1841       2.666556
+同时删除 5/6/7/8/10  五项                         20.1566%  replace    0.1762    0.1936       2.608998
 ```
 
-删除 rank-5 `layer1.1.conv2.weight` 后，accuracy 和 fidelity 分别降低 `0.20`、`0.12` 个百分点，KL 增加 `0.024200`。删除 rank-10 `layer2.1.conv2.weight` 后，accuracy 和 fidelity 分别降低 `0.32`、`0.04` 个百分点，KL 增加 `0.013972`。三个指标均指向删除任一项后当前 MS 攻击反而变弱。
+各 unit 的条件贡献并不相同。删除 rank-3 分类头 weight 后，accuracy 和 fidelity
+分别反弹 `6.65` 和 `8.32` 个百分点，KL 降低 `0.440281`，是三项指标中影响最大的
+单项；但该项同时把分类头从 `replace` 改成 `mixed`，不能与卷积项视为完全同类的
+结构比较。
 
-同时删除两项后，accuracy 和 fidelity 分别降低 `0.76`、`0.52` 个百分点，KL 增加 `0.027988`；保护参数减少 `184,320`，相当于完整 Top-12 保护参数的 `6.63%`。因此该实验不能把 rank-5/rank-10 解释为当前 Top-12 集合中的正向安全贡献。更准确的结论是：在固定初始化和当前 finetune 攻击器下，保护范围与经验 MS 指标不保证单调；攻击者的优化路径会随公开/随机状态组合改变。
+在 11 个卷积 weight 中，删除 rank-12 和 rank-9 产生最大的三指标一致反弹：
+rank-12 使 accuracy/fidelity 分别提高 `1.02`/`1.53` 个百分点、KL 降低
+`0.082985`；rank-9 分别提高 `0.84`/`1.34` 个百分点、KL 降低 `0.081653`。
+rank-1、rank-2、rank-4 和 rank-11 也表现为三指标一致的正向保护贡献，但幅度更小。
 
-完整 Top-12 距黑盒仍差 `1.10` 个百分点 accuracy、`1.47` 个百分点 fidelity 和 `0.144847` KL；同时删除两项后对应差距为 `0.34`、`0.95` 个百分点和 `0.116859` KL。四组均未严格达到黑盒边界，且这里观察到的是单次固定攻击训练的经验非单调性，不能推出“少保护在信息论上更安全”。
+rank-5 和 rank-10 则相反：单独删除任一项都会让 accuracy/fidelity 降低且 KL
+增加，即当前攻击在三项指标上都变弱。rank-6、rank-7、rank-8 的三项指标方向
+不一致，不能归为稳定正贡献或稳定负贡献。由此可见，作者 eligible rank 的 Top-12
+顺序不等于本实验中的条件边际贡献顺序；尤其 rank-9/rank-12 的作用明显大于若干
+更早进入前缀的项。
+
+联合删除结果继续显示非加性：删除 5/10 在 accuracy 和 fidelity 上最接近黑盒，
+差距分别为 `0.34` 和 `0.95` 个百分点；删除 5/8/10 在 KL 上最接近黑盒，差距
+为 `0.110159`，但其 accuracy/fidelity 不优于删除 5/10。
+
+以删除 5/8/10 为共同基准，对 rank-6 的 unit 36 `layer2.0.conv2.weight` 和
+rank-7 的 unit 48 `layer2.1.conv1.weight` 补齐了完整 2×2：
 
 ```text
-ablation.json          四组集合、黑白盒边界、相对完整 Top-12 的差值与输入哈希
-ablation.tsv           可直接绘图和统计的原始指标
-ablation_history.tsv   三组删除实验共 300 轮 query 训练记录
-ablation.png           accuracy、fidelity、posterior KL 与黑白盒边界三联柱状图
-drop_05_mask.pt        删除 rank-5 的紧凑保护掩码
-drop_10_mask.pt        删除 rank-10 的紧凑保护掩码
-drop_05_10_mask.pt     同时删除 rank-5/rank-10 的紧凑保护掩码
+unit 36  unit 48  accuracy  fidelity  posterior KL
+保护     保护       0.1624    0.1740       2.725131
+暴露     保护       0.1623    0.1743       2.704000
+保护     暴露       0.1678    0.1841       2.666556
+暴露     暴露       0.1762    0.1936       2.608998
+```
+
+当 unit 48 仍受保护时，只暴露 unit 36 的 accuracy/fidelity 变化仅为
+`-0.01`/`+0.03` 个百分点；当 unit 36 仍受保护时，只暴露 unit 48 已使二者反弹
+`0.54`/`1.01` 个百分点，并使 KL 降低 `0.058576`。当 unit 48 已暴露后，再暴露
+unit 36 又使 accuracy/fidelity 反弹 `0.84`/`0.95` 个百分点、KL 降低
+`0.057558`。按
+`I=y(36暴露,48暴露)-y(36暴露,48保护)-y(36保护,48暴露)+y(36保护,48保护)`
+计算，交互项为 accuracy `+0.85` 个百分点、fidelity `+0.92` 个百分点和 KL
+`-0.036426`，三项方向一致地表明同时暴露二者产生了额外攻击收益。
+
+在 ResNet 计算图中，unit 36 位于 `layer2.0` 主分支末端，经过 BN、与 downsample
+shortcut 相加和 ReLU 后进入下游 unit 48。当前结果呈现非对称的串行割点模式：
+保护下游 unit 48 时，上游 unit 36 的暴露几乎不能转化为 accuracy/fidelity 收益；
+一旦下游 unit 48 暴露，上游 unit 36 才表现出明显条件贡献。unit 48 因而是这对
+候选中的主要下游安全割点，unit 36 是在该割点失守后才增强攻击的上游条件节点。
+这比独立 unit 分数更支持沿真实计算图寻找攻击依赖路径或最小割，但仍只是当前模型、
+攻击协议和单一 seed 下的局部因果证据；BN 与 downsample 状态尚未纳入这组
+TensorShield eligible unit，不能把两点直接宣称为完整闭合路径。
+
+五项联合删除把保护比例降至 `20.1566%`，但相对删除 5/8/10，accuracy/fidelity
+分别反弹 `1.38`/`1.96` 个百分点，KL 降低 `0.116134`。因此 rank-6/7 不能随
+rank-5/8/10 一并视为可安全删除项。18 组均未严格达到黑盒三项边界。
+
+该结果说明 TensorShield Top-12 中存在明显不均匀和条件冗余，但不能据此直接断言
+某个 unit 完全不被攻击者依赖：leave-one-out 测到的是其余 Top-12 已保护时的条件
+贡献，可能受冗余路径、tensor 大小和 surrogate 优化轨迹影响。结果仍来自单一固定
+种子，后续若据此重新选择保护集合，需要用独立规则选集合并以多种子 MS 验证，不能
+直接把本次 MS 反馈当作正式选择器。
+
+```text
+ablation.json              18 组集合、固定 bias、黑白盒边界、2×2 设计与输入哈希
+ablation.tsv               可直接绘图和统计的原始指标
+ablation_history.tsv       17 组删除实验共 1,700 轮 query 训练记录
+ablation_accuracy.png      accuracy 独立断轴柱状图
+ablation_fidelity.png      fidelity 独立断轴柱状图
+ablation_posterior_kl.png  posterior KL 独立断轴柱状图
+drop_01_mask.pt            删除 rank-1 并固定保护分类头 bias 的紧凑掩码
+...
+drop_12_mask.pt            删除 rank-12 并固定保护分类头 bias 的紧凑掩码
+drop_05_10_mask.pt         同时删除 rank-5/rank-10 的紧凑保护掩码
+drop_05_08_10_mask.pt      同时删除 rank-5/rank-8/rank-10 的紧凑保护掩码
+drop_05_06_08_10_mask.pt   在 2×2 基准上额外删除 rank-6 的紧凑保护掩码
+drop_05_07_08_10_mask.pt   在 2×2 基准上额外删除 rank-7 的紧凑保护掩码
+drop_05_06_07_08_10_mask.pt  同时删除 rank-5/6/7/8/10 的紧凑保护掩码
 ```
 
 ## Eligible rank 位置集合消融

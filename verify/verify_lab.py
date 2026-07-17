@@ -311,7 +311,7 @@ def main() -> int:
     expected_counts = {
         "Lab02": 8,
         "Lab04": 17,
-        "Lab04 ablation": 4,
+        "Lab04 ablation": 18,
         "Lab04 window": 3,
         "Lab05": 18,
         "Lab06": 48,
@@ -446,6 +446,42 @@ def main() -> int:
     window_by_case = {row["case"]: row for row in window["results"]}
     lab05_by_group = {row["protection_group"]: row for row in lab05["results"]}
     lab06_by_case = {row["case"]: row for row in lab06["results"]}
+    expected_ablation_cases = {
+        "full_top12",
+        *(f"drop_{rank:02d}" for rank in range(1, 13)),
+        "drop_05_10",
+        "drop_05_08_10",
+        "drop_05_06_08_10",
+        "drop_05_07_08_10",
+        "drop_05_06_07_08_10",
+    }
+    if set(ablation_by_case) != expected_ablation_cases:
+        raise ValueError("Lab04 ablation 不是完整 Top-12 leave-one-out 与联合删除集合。")
+    if ablation.get("source", {}).get("fixed_protected_states") != [
+        "last_linear.bias"
+    ]:
+        raise ValueError("Lab04 ablation 没有声明固定保护分类头 bias。")
+    expected_interaction = {
+        "base_dropped_ranks": [5, 8, 10],
+        "factor_ranks": [6, 7],
+        "cells": [
+            "drop_05_08_10",
+            "drop_05_06_08_10",
+            "drop_05_07_08_10",
+            "drop_05_06_07_08_10",
+        ],
+    }
+    if ablation.get("source", {}).get("interaction_2x2") != expected_interaction:
+        raise ValueError("Lab04 ablation 的 rank-6/rank-7 2×2 设计声明不完整。")
+    for case, result in ablation_by_case.items():
+        masks = load_protection_mask(ROOT / result["protection"]["mask_path"])
+        if not bool(masks["last_linear.bias"].all()):
+            raise ValueError(f"Lab04 ablation {case} 没有固定保护分类头 bias。")
+        expected_head = "mixed" if case == "drop_03" else "replace"
+        if result["protection"]["head_mode"] != expected_head:
+            raise ValueError(
+                f"Lab04 ablation {case} head_mode 不是 {expected_head}。"
+            )
     if metric_values(ablation_by_case["full_top12"]) != metric_values(by_k[12]):
         raise ValueError("Lab04 ablation full_top12 与主曲线 Top-12 不一致。")
     if metric_values(window_by_case["first_10"]) != metric_values(by_k[11]):
@@ -484,7 +520,9 @@ def main() -> int:
         "results/lab/04_tensorshield/accuracy.png",
         "results/lab/04_tensorshield/fidelity.png",
         "results/lab/04_tensorshield/posterior_kl.png",
-        "results/lab/04_tensorshield/ablation.png",
+        "results/lab/04_tensorshield/ablation_accuracy.png",
+        "results/lab/04_tensorshield/ablation_fidelity.png",
+        "results/lab/04_tensorshield/ablation_posterior_kl.png",
         "results/lab/04_tensorshield/window.png",
         "results/lab/05_state/accuracy.png",
         "results/lab/05_state/fidelity.png",
@@ -527,7 +565,7 @@ def main() -> int:
 
     print(
         "Lab 结果一致性验证通过："
-        "8/17/4/3/18/48 组结果、8900 条 Lab 训练记录及 200 条 temp 记录、"
+        "8/17/18/3/18/48 组结果、10300 条 Lab 训练记录及 200 条 temp 记录、"
         f"{checked_inputs} 个本地输入哈希、全部 mask/TSV/PNG/README 均一致。"
     )
     return 0

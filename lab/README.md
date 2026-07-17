@@ -22,7 +22,7 @@ run.py
   汇总四种正式 MS baseline，绘制保护参数比例与 accuracy、fidelity、posterior KL 的关系。
 
 04_tensorshield
-  在 ResNet18+CIFAR-100 上绘制作者 eligible rank 的 Top-1 至 Top-17 前缀曲线，消融 Top-12 中的 rank-5/rank-10，并比较排除分类头后的前 10、后 10 与分散 10 项。
+  在 ResNet18+CIFAR-100 上绘制作者 eligible rank 的 Top-1 至 Top-17 前缀曲线，对 Top-12 执行完整 leave-one-out 与联合删除消融，并比较排除分类头后的前 10、后 10 与分散 10 项。
 
 05_state
   分别保护 ResNet18 的完整 state 类型和参数语义组，比较保护存储比例与 MS 原始指标。

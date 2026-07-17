@@ -140,9 +140,10 @@ Lab 验证实验/
 │       ├── fidelity.png              参数占比断轴与 fidelity，放大 0–15% 区间
 │       ├── posterior_kl.png          参数占比断轴与 posterior KL，放大 0–15% 区间
 │       ├── top_<k>_mask.pt           17 组紧凑保护掩码
-│       ├── ablation.json/tsv/png     Top-12 内 rank-5/rank-10 删除消融、黑白盒边界与对比图
-│       ├── ablation_history.tsv      三组新增消融共 300 轮 query 训练记录
-│       ├── drop_<rank>_mask.pt       三组新增删除集合的紧凑保护掩码
+│       ├── ablation.json/tsv         Top-12 完整 leave-one-out、五组联合删除与黑白盒边界
+│       ├── ablation_history.tsv      十七组删除消融共 1,700 轮 query 训练记录
+│       ├── ablation_<metric>.png     accuracy、fidelity 与 posterior KL 三张独立消融图
+│       ├── drop_<rank>_mask.pt       十二组单删与五组联合删除集合的紧凑保护掩码
 │       ├── window.json/tsv/png       三个候选位置集合的指标和参数占比三联直方图
 │       ├── window_history.tsv        三组集合共 300 轮 query 训练记录
 │       └── <first|spread|last>_10_mask.pt  三个集合的紧凑保护掩码

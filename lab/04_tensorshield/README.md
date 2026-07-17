@@ -89,28 +89,33 @@ results/lab/04_tensorshield/top_01_mask.pt      Top-1 紧凑保护掩码
 results/lab/04_tensorshield/top_17_mask.pt      Top-17 紧凑保护掩码
 ```
 
-## Top-12 内 Rank-5/Rank-10 冗余消融
+## Top-12 完整 Leave-one-out 与联合删除消融
 
-Top-12 已取得较好的 MS 防护效果；为判断 rank-5 `layer1.1.conv2.weight` 和 rank-10 `layer2.1.conv2.weight` 在该集合中是否仍有独立保护作用，使用以下四组集合消融：
+为比较完整 Top-12 中每个 eligible weight 对当前 MS 攻击的条件贡献，固定其余保护项不变，分别删除 rank-1 至 rank-12。另保留五组联合删除，用于观察单项贡献之外的交互作用。其中以 `drop_05_08_10` 为共同基准，对 rank-6 和 rank-7 构造完整 2×2 设计：
 
 ```text
-full_top12   作者 eligible rank 的完整 Top-12
-drop_05      从完整 Top-12 删除 rank-5
-drop_10      从完整 Top-12 删除 rank-10
-drop_05_10   从完整 Top-12 同时删除 rank-5 和 rank-10
+full_top12      作者 eligible rank 的完整 Top-12
+drop_01..12     分别从完整 Top-12 只删除对应的一个 rank
+drop_05_10      从完整 Top-12 同时删除 rank-5 和 rank-10
+drop_05_08_10   从完整 Top-12 同时删除 rank-5、rank-8 和 rank-10
+drop_05_06_08_10  在上述共同基准上额外删除 rank-6
+drop_05_07_08_10  在上述共同基准上额外删除 rank-7
+drop_05_06_07_08_10  从完整 Top-12 同时删除 rank-5、rank-6、rank-7、rank-8 和 rank-10
 ```
 
-四组均保留 rank-3 分类头 weight，并同步保护 bias，因此分类头模式全部为 `replace`。`full_top12` 直接读取当前 `metrics.json` 中使用相同初始化协议得到的 Top-12；删除 rank-5、删除 rank-10 和同时删除两者三组重新训练。每组在 surrogate 初始化前重置相同随机状态，并使用与前缀曲线一致的 query 顺序、优化器、100 轮训练和 end-only 评估。图中同时显示统一的白盒 `no_protection` 与黑盒 `full_protection` 边界。
+2×2 的两个因素分别是是否额外删除 unit 36 `layer2.0.conv2.weight`（rank-6）和 unit 48 `layer2.1.conv1.weight`（rank-7）。四格共享已经删除的 rank-5/8/10，其余 Top-12 状态完全相同。该设计用于区分 rank-6、rank-7 的条件主效应与二者同时删除产生的交互效应。
 
-该消融比较的是从完整 Top-12 删除 tensor 后的条件贡献。若删除后 accuracy/fidelity 基本不升、KL 基本不降，只能说明该 tensor 在当前集合和攻击协议下存在功能冗余；不能推导它在其他 k、模型或数据集上始终无用。
+所有集合都固定保护 unit 121 `last_linear.bias`。rank-3 是 `last_linear.weight`，因此 `drop_03` 会暴露分类头 weight、仅保护 bias，分类头模式为 `mixed`；其余删除集合仍同时保护分类头 weight 与 bias，模式为 `replace`。`full_top12` 直接读取当前 `metrics.json` 中使用相同初始化协议得到的 Top-12；其余 17 组均重新训练。每组在 surrogate 初始化前重置相同随机状态，并使用与前缀曲线一致的 query 顺序、优化器、100 轮训练和 end-only 评估。
 
-先验证四组集合、mask 和复用输入：
+该消融比较的是从完整 Top-12 删除 tensor 后的条件贡献。若删除后 accuracy/fidelity 基本不升、KL 基本不降，只能说明该 tensor 在当前集合和攻击协议下存在条件冗余；不能直接推导攻击者完全不依赖它，也不能推导它在其他 k、模型或数据集上始终无用。`drop_03` 还同时改变分类头可见性语义，解释时必须与 11 个卷积 weight 单删项区分。
+
+先验证 18 组集合、mask、参数量、分类头模式和复用输入：
 
 ```bash
 "$HOME/venvs/dl-py310-torch210-cu121/bin/python" lab/04_tensorshield/ablate.py --dry-run
 ```
 
-运行三组新增训练并覆盖同语义消融结果：
+运行 17 组删除训练并覆盖同语义消融结果：
 
 ```bash
 "$HOME/venvs/dl-py310-torch210-cu121/bin/python" lab/04_tensorshield/ablate.py
@@ -119,13 +124,20 @@ drop_05_10   从完整 Top-12 同时删除 rank-5 和 rank-10
 新增输出为：
 
 ```text
-results/lab/04_tensorshield/ablation.json          四组集合、黑白盒边界、保护统计与 end 指标
-results/lab/04_tensorshield/ablation.tsv           相对完整 Top-12 的原始差值
-results/lab/04_tensorshield/ablation_history.tsv   三组新增训练共 300 轮 query 记录
-results/lab/04_tensorshield/ablation.png           三项 MS 指标及黑白盒边界的集合消融对比
-results/lab/04_tensorshield/drop_05_mask.pt         删除 rank-5 的 mask
-results/lab/04_tensorshield/drop_10_mask.pt         删除 rank-10 的 mask
+results/lab/04_tensorshield/ablation.json           18 组集合、黑白盒边界、保护统计与 end 指标
+results/lab/04_tensorshield/ablation.tsv            相对完整 Top-12 的原始差值
+results/lab/04_tensorshield/ablation_history.tsv    17 组删除训练共 1,700 轮 query 记录
+results/lab/04_tensorshield/ablation_accuracy.png   accuracy 单图及黑白盒边界
+results/lab/04_tensorshield/ablation_fidelity.png   fidelity 单图及黑白盒边界
+results/lab/04_tensorshield/ablation_posterior_kl.png  posterior KL 单图及黑白盒边界
+results/lab/04_tensorshield/drop_01_mask.pt         删除 rank-1 的 mask
+...
+results/lab/04_tensorshield/drop_12_mask.pt         删除 rank-12 的 mask
 results/lab/04_tensorshield/drop_05_10_mask.pt      同时删除 rank-5/rank-10 的 mask
+results/lab/04_tensorshield/drop_05_08_10_mask.pt   同时删除 rank-5/rank-8/rank-10 的 mask
+results/lab/04_tensorshield/drop_05_06_08_10_mask.pt  在 2×2 基准上额外删除 rank-6 的 mask
+results/lab/04_tensorshield/drop_05_07_08_10_mask.pt  在 2×2 基准上额外删除 rank-7 的 mask
+results/lab/04_tensorshield/drop_05_06_07_08_10_mask.pt  同时删除 rank-5/6/7/8/10 的 mask
 ```
 
 ## Eligible rank 位置集合消融

@@ -41,17 +41,17 @@ EXPECTED_MASK_SHA256 = "1e3aa38124f084dd39eab42a4d3f1ddf1ca86807812796c66a8318c0
 LAB04_ROOT = ROOT / "lab" / "04_tensorshield"
 
 
-def load_lab04_window_module():
-    """隔离加载 Lab04 window，避免通用模块名 `run` 污染其他测试。"""
-    module_name = "_tsdp_lab04_tensorshield_window_test"
+def load_lab04_module(script_name: str):
+    """隔离加载 Lab04 脚本，避免通用模块名 `run` 污染其他测试。"""
+    module_name = f"_tsdp_lab04_tensorshield_{script_name}_test"
     loaded = sys.modules.get(module_name)
     if loaded is not None:
         return loaded
     specification = importlib.util.spec_from_file_location(
-        module_name, LAB04_ROOT / "window.py"
+        module_name, LAB04_ROOT / f"{script_name}.py"
     )
     if specification is None or specification.loader is None:
-        raise RuntimeError("无法加载 Lab04 window.py。")
+        raise RuntimeError(f"无法加载 Lab04 {script_name}.py。")
     module = importlib.util.module_from_spec(specification)
     previous_run = sys.modules.pop("run", None)
     sys.path.insert(0, str(LAB04_ROOT))
@@ -67,6 +67,14 @@ def load_lab04_window_module():
         if previous_run is not None:
             sys.modules["run"] = previous_run
     return module
+
+
+def load_lab04_window_module():
+    return load_lab04_module("window")
+
+
+def load_lab04_ablation_module():
+    return load_lab04_module("ablate")
 
 
 class TensorShieldRankTests(unittest.TestCase):
@@ -141,6 +149,97 @@ class TensorShieldRankTests(unittest.TestCase):
                     protected_scalars=None,
                 ),
             )
+
+
+class TensorShieldAblationTests(unittest.TestCase):
+    def test_top12_leave_one_out_cases_keep_classifier_bias_fixed(self):
+        ablation = load_lab04_ablation_module()
+        model = imagenet_models.resnet18(num_classes=100)
+        cases = {
+            case.name: case for case in ablation.build_ablation_cases(model)
+        }
+        self.assertEqual(
+            tuple(cases),
+            (
+                "full_top12",
+                "drop_01",
+                "drop_02",
+                "drop_03",
+                "drop_04",
+                "drop_05",
+                "drop_06",
+                "drop_07",
+                "drop_08",
+                "drop_09",
+                "drop_10",
+                "drop_11",
+                "drop_12",
+                "drop_05_10",
+                "drop_05_08_10",
+                "drop_05_06_08_10",
+                "drop_05_07_08_10",
+                "drop_05_06_07_08_10",
+            ),
+        )
+        for rank in range(1, 13):
+            case = cases[f"drop_{rank:02d}"]
+            self.assertEqual(case.dropped_ranks, (rank,))
+            self.assertNotIn(
+                AUTHOR_RESNET18_C100_ELIGIBLE_RANK[rank - 1],
+                case.selected_weights,
+            )
+            self.assertEqual(len(case.selected_weights), 11)
+        self.assertEqual(cases["drop_08"].dropped_ranks, (8,))
+        self.assertEqual(cases["drop_05_08_10"].dropped_ranks, (5, 8, 10))
+        self.assertEqual(
+            cases["drop_05_06_08_10"].dropped_ranks,
+            (5, 6, 8, 10),
+        )
+        self.assertEqual(
+            cases["drop_05_07_08_10"].dropped_ranks,
+            (5, 7, 8, 10),
+        )
+        self.assertEqual(
+            cases["drop_05_06_07_08_10"].dropped_ranks,
+            (5, 6, 7, 8, 10),
+        )
+        self.assertEqual(
+            cases["drop_05_08_10"].dropped_weights,
+            (
+                "layer1.1.conv2.weight",
+                "layer1.0.conv2.weight",
+                "layer2.1.conv2.weight",
+            ),
+        )
+
+        units = {
+            unit.state_name: unit for unit in build_resnet18_tensor_units(model)
+        }
+        expected_hashes = {
+            "drop_03": "5e2da3d1822c8da43e0b50d8618c0220336a85ccd35ec5a34ff3c58f49b9034b",
+            "drop_08": "4268b57d0be7dc84c2fb3870b9d6d4a32e978a76bba0e800e4fbc7c68006d2ba",
+            "drop_05_08_10": "5cc5a3c03fef3409b1f948b30b15b13df235ef7d5e50da8f7ab93c2b2a4062ef",
+            "drop_05_06_08_10": "2f6c8b4385de64c13a686328f5e0526cfd77f67876fff57bfe486f622a16b758",
+            "drop_05_07_08_10": "92fc7ee4d9e13cdbd1e073d89196de2f27bb4ed25cc2cdaec99c45f2cf9462e3",
+            "drop_05_06_07_08_10": "e05b4753b4aaccb52bee6399f57c0464b376405bf678339414c8648df20f8482",
+        }
+        for case_name, case in cases.items():
+            state_names = (*cases[case_name].selected_weights, "last_linear.bias")
+            self.assertIn("last_linear.bias", state_names)
+            selected_indices = tuple(units[name].index for name in state_names)
+            masks = build_unit_masks(model, selected_indices)
+            expected_unit_count, expected_param_count = ablation.EXPECTED_STATS[
+                case_name
+            ]
+            self.assertEqual(len(selected_indices), expected_unit_count)
+            self.assertEqual(
+                sum(units[name].numel for name in state_names),
+                expected_param_count,
+            )
+            self.assertTrue(bool(masks["last_linear.bias"].all()))
+            expected_hash = expected_hashes.get(case_name)
+            if expected_hash is not None:
+                self.assertEqual(protection_mask_sha256(masks), expected_hash)
 
 
 class TensorShieldWindowTests(unittest.TestCase):
