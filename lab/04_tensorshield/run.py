@@ -14,7 +14,6 @@ from pathlib import Path
 
 import matplotlib
 import torch
-from torch.utils.data import DataLoader
 
 
 matplotlib.use("Agg")
@@ -29,27 +28,13 @@ for import_root in (ROOT, TRAIN_ROOT, TRAIN_VICTIM_ROOT):
     if str(import_root) not in sys.path:
         sys.path.insert(0, str(import_root))
 
-from common.trainer import (  # noqa: E402
-    build_generator,
-    configure_reproducibility,
-    seed_worker,
-)
+from common.trainer import configure_reproducibility  # noqa: E402
 from exp.MS.train_surrogate.core.artifacts import sha256_file  # noqa: E402
 from exp.MS.train_surrogate.core.config import (  # noqa: E402
     ATTACK_PROTOCOL_VERSION,
     resolve_device,
 )
-from exp.MS.train_surrogate.core.data import (  # noqa: E402
-    build_eval_dataset,
-    build_query_dataset,
-    build_victim,
-    load_query_targets,
-)
-from exp.MS.train_surrogate.core.engine import (  # noqa: E402
-    collect_eval_reference,
-    evaluate_surrogate,
-    train_one_epoch,
-)
+from exp.MS.train_surrogate.core.data import build_victim  # noqa: E402
 from exp.MS.train_surrogate.defense import (  # noqa: E402
     build_resnet18_tensor_units,
     initialize_surrogate,
@@ -62,6 +47,14 @@ from exp.MS.train_surrogate.selector import (  # noqa: E402
     AUTHOR_RESNET18_C100_ELIGIBLE_RANK,
     AUTHOR_RESNET18_C100_RANK,
     PUBLISHED_RESNET18_C100_WEIGHTS,
+)
+from lab.protocol import (  # noqa: E402
+    evaluate_once,
+    load_formal_bound,
+    prepare_eval,
+    prepare_soft_query,
+    protocol_metadata,
+    train_validation_best,
 )
 from models import imagenet as imagenet_models  # noqa: E402
 
@@ -129,6 +122,12 @@ HISTORY_FIELDS = (
     "query_loss",
     "query_match_count",
     "query_match",
+    "validation_count",
+    "validation_loss",
+    "validation_kl",
+    "validation_match_count",
+    "validation_match",
+    "is_best",
 )
 DATA_FIELDS = (
     "case",
@@ -284,31 +283,21 @@ def initialize_case(
     return surrogate, plan, masks, selected_metadata
 
 
-def load_bound(path: Path, artifact_id: str) -> dict[str, object]:
+def load_bound(
+    path: Path,
+    artifact_id: str,
+    label_mode: str = "soft",
+) -> dict[str, object]:
     if not path.is_file():
         raise FileNotFoundError(f"找不到参考结果：{path}")
-    payload = json.loads(path.read_text(encoding="utf-8"))
-    expected = {
-        "artifact_id": artifact_id,
-        "attack_protocol": ATTACK_PROTOCOL_VERSION,
-        "dataset": DATASET,
-        "victim_model": MODEL,
-        "query_budget": BUDGET,
-        "label_mode": "soft",
-        "query_transform": "test",
-        "lr_step": LR_STEP,
-    }
-    for key, value in expected.items():
-        if payload.get(key) != value:
-            raise ValueError(f"参考结果 {path} 的 {key}={payload.get(key)!r}，期望 {value!r}。")
-    if payload.get("primary", {}).get("checkpoint") != "end.pth":
-        raise ValueError(f"参考结果 {path} 未使用 end.pth。")
-    return {
-        "artifact_id": artifact_id,
-        "run_id": payload["run_id"],
-        "protection": payload["protection"],
-        "end": payload["end"],
-    }
+    return load_formal_bound(
+        path,
+        artifact_id,
+        label_mode=label_mode,
+        model=MODEL,
+        dataset=DATASET,
+        budget=BUDGET,
+    )
 
 
 def write_data(path: Path, results: list[dict[str, object]]) -> None:
@@ -322,7 +311,7 @@ def write_data(path: Path, results: list[dict[str, object]]) -> None:
         writer.writeheader()
         for result in results:
             protection = result["protection"]
-            end = result["end"]
+            metrics = result["result"]
             writer.writerow(
                 {
                     "case": result["case"],
@@ -334,9 +323,9 @@ def write_data(path: Path, results: list[dict[str, object]]) -> None:
                     "protected_param_ratio": protection["protected_param_ratio"],
                     "head_mode": protection["head_mode"],
                     "protection_mask_sha256": protection["protection_mask_sha256"],
-                    "surrogate_acc": end["surrogate_acc"],
-                    "fidelity": end["fidelity"],
-                    "posterior_kl": end["posterior_kl"],
+                    "surrogate_acc": metrics["surrogate_acc"],
+                    "fidelity": metrics["fidelity"],
+                    "posterior_kl": metrics["posterior_kl"],
                 }
             )
 
@@ -387,9 +376,10 @@ def plot_metrics(
             sharey=True,
             gridspec_kw={"width_ratios": (1.7, 1.0), "wspace": 0.05},
         )
-        y_values = [float(result["end"][metric]) for result in results]
-        no_value = float(references["no_protection"]["end"][metric])
-        full_value = float(references["full_protection"]["end"][metric])
+        y_values = [float(result["result"][metric]) for result in results]
+        no_value = float(references["no_protection"]["result"][metric])
+        full_value = float(references["full_protection"]["result"][metric])
+        hard_value = float(references["hard_blackbox"]["result"][metric])
         for index, axis in enumerate((left_axis, right_axis)):
             axis.plot(
                 x_values,
@@ -413,6 +403,13 @@ def plot_metrics(
                 linestyle=":",
                 linewidth=1.4,
                 label="Full protection" if index == 0 else None,
+            )
+            axis.axhline(
+                hard_value,
+                color="#CC79A7",
+                linestyle=(0, (3, 2)),
+                linewidth=1.2,
+                label="Hard-label black-box" if index == 0 else None,
             )
             axis.grid(True, color="#D9D9D9", linewidth=0.7, alpha=0.75)
             axis.set_axisbelow(True)
@@ -449,7 +446,7 @@ def plot_metrics(
             )
         set_y_limits(
             left_axis,
-            [*y_values, no_value, full_value],
+            [*y_values, no_value, full_value, hard_value],
             bounded=metric != "posterior_kl",
         )
         left_axis.yaxis.set_major_locator(MaxNLocator(nbins=6))
@@ -497,7 +494,7 @@ def plot_metrics(
             labels,
             loc="upper center",
             bbox_to_anchor=(0.5, 0.88),
-            ncol=4,
+            ncol=5,
             frameon=False,
         )
         figure.supxlabel("Protected parameters (%)", y=0.04)
@@ -540,12 +537,17 @@ def main() -> int:
     out_dir = ROOT / "results" / "lab" / EXPERIMENT
 
     configure_reproducibility(SEED, deterministic=True)
-    query_indices, query_posteriors, query_labels, posterior_path, query_manifest = (
-        load_query_targets(protocol_root, DATASET, MODEL, BUDGET, "soft")
+    query = prepare_soft_query(
+        dataset=DATASET,
+        model=MODEL,
+        budget=BUDGET,
+        seed=SEED,
+        dataset_root=dataset_root,
+        protocol_root=protocol_root,
     )
     victim, victim_metadata = build_victim(MODEL, NUM_CLASSES, victim_checkpoint)
     victim_sha256 = sha256_file(victim_checkpoint)
-    expected_victim_sha256 = query_manifest.get("victim", {}).get("checkpoint_sha256")
+    expected_victim_sha256 = query.manifest.get("victim", {}).get("checkpoint_sha256")
     if expected_victim_sha256 and expected_victim_sha256 != victim_sha256:
         raise ValueError("victim best.pth 与生成 soft posterior 时使用的 checkpoint 不一致。")
     ranking, cases = build_cases(victim)
@@ -568,30 +570,26 @@ def main() -> int:
         print("[INFO] dry-run 完成，未写入实验产物。")
         return 0
 
+    bounds_root = ROOT / "results" / "MS" / MODEL / DATASET
+    references = {
+        "no_protection": load_bound(
+            bounds_root / "no_protection" / "metrics.json", "no_protection"
+        ),
+        "full_protection": load_bound(
+            bounds_root / "full_protection" / "metrics.json", "full_protection"
+        ),
+        "hard_blackbox": load_bound(
+            bounds_root / "hard_blackbox" / "metrics.json",
+            "hard_blackbox",
+            "hard",
+        ),
+    }
     out_dir.mkdir(parents=True, exist_ok=True)
     clean_replaced_outputs(out_dir)
-    query_dataset = build_query_dataset(
-        DATASET, dataset_root, query_indices, query_posteriors, query_labels
-    )
-    eval_dataset = build_eval_dataset(DATASET, dataset_root, protocol_root, None)
-    eval_loader = DataLoader(
-        eval_dataset,
-        batch_size=EVAL_BATCH_SIZE,
-        shuffle=False,
-        num_workers=args.num_workers,
-        pin_memory=device.type == "cuda",
-        worker_init_fn=seed_worker,
-        generator=build_generator(SEED, offset=1),
-    )
-    eval_victim = victim.to(device)
-    reference = collect_eval_reference(eval_victim, eval_loader, device)
-    victim = eval_victim.cpu()
-    del eval_victim
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
 
     history_path = out_dir / "history.tsv"
     results: list[dict[str, object]] = []
+    evaluation = None
     with history_path.open("w", newline="", encoding="utf-8") as history_file:
         history_writer = csv.DictWriter(
             history_file,
@@ -608,48 +606,33 @@ def main() -> int:
             mask_path = out_dir / f"{case.name}_mask.pt"
             save_protection_mask(mask_path, masks)
             surrogate = surrogate.to(device)
-            query_loader = DataLoader(
-                query_dataset,
-                batch_size=BATCH_SIZE,
-                shuffle=True,
+            selection, history = train_validation_best(
+                surrogate,
+                query,
+                device=device,
                 num_workers=args.num_workers,
-                pin_memory=device.type == "cuda",
-                worker_init_fn=seed_worker,
-                generator=build_generator(SEED),
+                seed=SEED,
             )
-            optimizer = torch.optim.SGD(
-                surrogate.parameters(),
-                lr=LEARNING_RATE,
-                momentum=MOMENTUM,
-                weight_decay=WEIGHT_DECAY,
-            )
-            scheduler = torch.optim.lr_scheduler.StepLR(
-                optimizer, step_size=LR_STEP, gamma=LR_GAMMA
-            )
-            for epoch in range(1, EPOCHS + 1):
-                learning_rate = optimizer.param_groups[0]["lr"]
-                train_metrics = train_one_epoch(
-                    surrogate,
-                    query_loader,
-                    optimizer,
-                    device,
-                    "soft",
-                    epoch,
-                    EPOCHS,
-                    None,
-                )
-                scheduler.step()
+            for row in history:
                 history_writer.writerow(
                     {
                         "case": case.name,
                         "top_k": case.top_k,
-                        "epoch": epoch,
-                        "learning_rate": learning_rate,
-                        **train_metrics,
+                        **row,
                     }
                 )
                 history_file.flush()
-            end_metrics = evaluate_surrogate(surrogate, eval_loader, reference, device)
+            if evaluation is None:
+                evaluation = prepare_eval(
+                    victim,
+                    dataset=DATASET,
+                    dataset_root=dataset_root,
+                    protocol_root=protocol_root,
+                    device=device,
+                    num_workers=args.num_workers,
+                    seed=SEED,
+                )
+            result_metrics = evaluate_once(surrogate, evaluation, device)
             result = {
                 "case": case.name,
                 "top_k": case.top_k,
@@ -661,28 +644,25 @@ def main() -> int:
                     "selected_units": selected_units,
                     "mask_path": str(mask_path.relative_to(ROOT)),
                 },
-                "primary": {"evaluation": "end", "epoch": EPOCHS},
-                "end": end_metrics,
+                "primary": {
+                    "checkpoint": "best.pth",
+                    "epoch": selection["epoch"],
+                    "selection_metric": selection["metric"],
+                },
+                "selection": selection,
+                "result": result_metrics,
             }
             results.append(result)
             print(
-                f"[END/{case.name}] accuracy={end_metrics['surrogate_acc']:.6f} "
-                f"fidelity={end_metrics['fidelity']:.6f} "
-                f"posterior_kl={end_metrics['posterior_kl']:.6f}"
+                f"[RESULT/{case.name}] epoch={selection['epoch']} "
+                f"accuracy={result_metrics['surrogate_acc']:.6f} "
+                f"fidelity={result_metrics['fidelity']:.6f} "
+                f"posterior_kl={result_metrics['posterior_kl']:.6f}"
             )
-            del surrogate, optimizer, scheduler, query_loader
+            del surrogate
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
-    bounds_root = ROOT / "results" / "MS" / MODEL / DATASET
-    references = {
-        "no_protection": load_bound(
-            bounds_root / "no_protection" / "metrics.json", "no_protection"
-        ),
-        "full_protection": load_bound(
-            bounds_root / "full_protection" / "metrics.json", "full_protection"
-        ),
-    }
     metrics_path = out_dir / "metrics.json"
     data_path = out_dir / "data.tsv"
     plot_paths = {
@@ -691,15 +671,12 @@ def main() -> int:
         "posterior_kl": out_dir / "posterior_kl.png",
     }
     payload = {
-        "schema_version": 2,
+        "schema_version": 3,
         "experiment": EXPERIMENT,
         "protocol": "MS",
-        "attack_protocol": ATTACK_PROTOCOL_VERSION,
+        **protocol_metadata(query),
         "dataset": DATASET,
         "victim_model": MODEL,
-        "query_budget": BUDGET,
-        "label_mode": "soft",
-        "query_transform": "test",
         "seed": SEED,
         "randomization": {
             "reset_before_each_surrogate_initialization": True,
@@ -725,23 +702,14 @@ def main() -> int:
         "victim_checkpoint_epoch": victim_metadata.get("epoch"),
         "official_weight": str(official_weight.relative_to(ROOT)),
         "official_weight_sha256": sha256_file(official_weight),
-        "posterior_path": str(posterior_path.relative_to(ROOT)),
-        "posterior_sha256": sha256_file(posterior_path),
-        "training": {
-            "mode": "finetune",
-            "epochs": EPOCHS,
-            "batch_size": BATCH_SIZE,
-            "eval_batch_size": EVAL_BATCH_SIZE,
-            "optimizer": "SGD",
-            "learning_rate": LEARNING_RATE,
-            "momentum": MOMENTUM,
-            "weight_decay": WEIGHT_DECAY,
-            "lr_scheduler": "StepLR",
-            "lr_step": LR_STEP,
-            "lr_gamma": LR_GAMMA,
-            "evaluation_schedule": "end_only",
+        "posterior_path": str(query.target_path.relative_to(ROOT)),
+        "posterior_sha256": query.target_sha256,
+        "training": protocol_metadata(query),
+        "primary": {
+            "checkpoint": "best.pth",
+            "selection_metric": "minimum_validation_soft_cross_entropy",
+            "tie_break": "earliest_epoch",
         },
-        "primary": {"evaluation": "end", "epoch": EPOCHS},
         "results": results,
         "references": references,
         "outputs": {

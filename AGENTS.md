@@ -43,6 +43,33 @@
 5. 专门研究分类头结构的实验可以在 canonical 构造前缀之后创建不同 head，但所有 head 变体必须从相同实验 seed 和相同构造前缀开始。完全由官方 checkpoint 覆盖、没有保留随机任务状态的公开特征提取模型不受本条约束。
 6. TEESlice 等结构与普通 public backbone 不同的独立方法使用其就近 README 固化的 seeded 构造轨迹；同一方法的 exp 与 Lab 入口仍必须共享该轨迹和 seed 元数据，不得套用普通 ResNet/VGG 的构造序列。
 
+### MS surrogate 选模与评估隔离
+
+以下规则适用于正式 `exp/MS/train_surrogate/` 以及所有训练普通 MS surrogate 的
+`lab/` 和 `temp/` 实验。不得保留全量 query 训练、逐 epoch `eval_ms` 选模或以
+surrogate `end.pth` 作为主结果的旧协议入口和旧结果。
+
+1. 当前正式 query budget 先取 `query_pool_ms` 的固定前缀，再由共享
+   `exp/MS/train_surrogate/core/data.py` 按实验 seed 和固定 offset 100 随机拆成
+   80% query train 与 20% query validation。采用本协议的入口不得复制另一套划分
+   逻辑，也不得把 validation 样本用于梯度更新。
+2. soft-label 攻击按 query validation soft cross-entropy 最低的 epoch 选择
+   `best.pth`；hard-label 攻击按 validation hard cross-entropy 最低点选择。
+   实现必须使用严格更低才更新，因此数值并列时保留更早 epoch。
+3. `eval_ms` 不得用于选择 surrogate checkpoint、epoch、保护位置、Top-k 或超参数。
+   每个 checkpoint 固定后只允许在完整 `eval_ms` 上做一次最终评估；逐 epoch 日志只
+   保存 query train 与 query validation 指标。
+4. 普通部分保护策略和 soft-posterior 黑盒统一使用 victim soft posterior；
+   label-only 黑盒使用完整保护 mask 与 hard pseudo label。两者都是正式黑盒边界，
+   后续正式汇总图必须同时展示。无保护白盒是 victim 完整状态的 epoch-0 恒等模型，
+   不使用 query 更新。TEESlice 等 standalone 方法的输出模式由其就近 README 固化；
+   若声明采用本协议，也必须使用相同的 80/20 选模隔离。
+5. 除无保护白盒外，当前统一攻击训练为最多 100 epoch、batch size 64、SGD
+   `lr=0.01`、`momentum=0.5`、`weight_decay=5e-4`，以及
+   `StepLR(step_size=60, gamma=0.1)`。正式入口不得通过临时命令行覆盖这些值。
+6. 这里的隔离只表示 `eval_ms` 不参与 surrogate 选模。MS 数据协议仍允许
+   `query_pool_ms` 来自 victim 训练集；文档不得把二者混写为训练数据完全互斥。
+
 
 ## 失效内容清理
 

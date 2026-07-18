@@ -30,6 +30,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--dry-run", action="store_true", help="只校验全部配置，不写训练产物。")
     parser.add_argument("--only", default=None, help="只处理指定 plan_id，多个 id 使用逗号分隔。")
     parser.add_argument("--jobs", type=int, default=1, help="并行训练进程数，默认 1。")
+    parser.add_argument("--overwrite", action="store_true", help="覆盖并重跑全部选中配置。")
     return parser.parse_args()
 
 
@@ -48,8 +49,7 @@ def load_incomplete() -> set[str]:
     for path in WEIGHTS_ROOT.glob("*/params.json"):
         payload = json.loads(path.read_text(encoding="utf-8"))
         plan_id = payload.get("plan_id")
-        results_dir = Path(payload.get("results_dir", ""))
-        if plan_id and not (results_dir / "metrics.json").is_file():
+        if plan_id and not (RESULTS_ROOT / str(plan_id) / "metrics.json").is_file():
             incomplete.add(str(plan_id))
     return incomplete
 
@@ -58,21 +58,30 @@ def validate_result(config: dict, payload: dict) -> None:
     protocol_actual = {
         "attack_protocol": payload.get("attack_protocol"),
         "query_budget": payload.get("query_budget"),
+        "query_train_size": payload.get("query_partition", {}).get("train_size"),
+        "query_validation_size": payload.get("query_partition", {}).get("validation_size"),
         "label_mode": payload.get("label_mode"),
         "training_mode": payload.get("training_mode"),
         "query_transform": payload.get("query_transform"),
         "lr_step": payload.get("lr_step"),
-        "primary": payload.get("primary"),
     }
     protocol_expected = {
         "attack_protocol": ATTACK_PROTOCOL_VERSION,
         "query_budget": 500,
+        "query_train_size": 400,
+        "query_validation_size": 100,
         "label_mode": "soft",
         "training_mode": "finetune",
         "query_transform": "test",
         "lr_step": 60,
-        "primary": {"checkpoint": "end.pth", "epoch": 100},
     }
+    primary = payload.get("primary", {})
+    if (
+        primary.get("checkpoint") != "best.pth"
+        or primary.get("selection_metric") != "validation_soft_cross_entropy"
+        or not 1 <= int(primary.get("epoch", -1)) <= 100
+    ):
+        raise RuntimeError(f"plan_id={config['id']} 的 primary checkpoint 不符合新协议：{primary}")
     if protocol_actual != protocol_expected:
         raise RuntimeError(
             f"plan_id={config['id']} 的正式攻击协议不一致："
@@ -203,13 +212,22 @@ def main() -> int:
     skipped = 0
     for ordinal, config in enumerate(configurations, start=1):
         plan_id = config["id"]
-        if not args.dry_run and plan_id in completed:
+        if not args.dry_run and not args.overwrite and plan_id in completed:
             validate_result(config, completed[plan_id])
             print(f"[SKIP] {plan_id} 已完成并通过校验。")
             skipped += 1
             continue
         print(f"[QUEUE] {ordinal:02d}/{len(configurations):02d} {plan_id}")
-        pending.append((config, build_command(config, args.dry_run, plan_id in incomplete)))
+        pending.append(
+            (
+                config,
+                build_command(
+                    config,
+                    args.dry_run,
+                    args.overwrite or plan_id in incomplete,
+                ),
+            )
+        )
 
     worker_count = min(args.jobs, len(pending))
     if worker_count == 1:

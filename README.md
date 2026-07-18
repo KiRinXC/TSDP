@@ -25,7 +25,7 @@ make unit
 
 `make gpu` 必须在正式训练会话中通过。它会核对 WSL `/dev/dxg`、`nvidia-smi`、固定 PyTorch/CUDA 版本，并执行真实 CUDA 前向和反向计算。不要使用系统 `/usr/bin/python3` 运行 TSDP。
 
-TSDP 当前实现 Model Stealing（MS）实验。受害者模型使用官方训练集全量训练，query pool 从同一训练集随机无放回抽取 1%。普通 victim 不另划 validation split，而是沿用 TensorShield 与 TEESlice 参考代码的训练风格，在官方 test/validation 对应的 `eval_ms` 上逐轮评估并保存 accuracy 最高的 `best.pth`，再用该 checkpoint 生成 posterior 和 hard pseudo label。正式主 baseline 统一使用 posterior-visible 查询接口和 soft posterior；另保留 `ResNet18+C100` 的 `hard_blackbox` 正式输出能力对比，但不替换 soft 主黑盒下界。两种查询训练均使用确定性 test transform，攻击训练固定 `lr_step=60`。victim 的 best 选择不改变 surrogate 的主结果规则：正式攻击比较固定读取第 100 轮 `end.pth`，surrogate `best.pth` 只作诊断。
+TSDP 当前实现 Model Stealing（MS）实验。受害者模型使用官方训练集全量训练，query pool 从同一训练集随机无放回抽取 1%。普通 victim 不另划 validation split，而是沿用 TensorShield 与 TEESlice 参考代码的训练风格，在官方 test/validation 对应的 `eval_ms` 上逐轮评估并保存 accuracy 最高的 `best.pth`，再用该 checkpoint 生成 posterior 和 hard pseudo label。正式 surrogate 在当前 query budget 内按 seed 42 与固定 offset 100 划分 80% query train 和 20% query validation，最多训练 100 轮，并按 validation cross-entropy 选择最早的最优 `best.pth`；`eval_ms` 不参与选模，只在 checkpoint 固定后完整评估一次。正式结果同时保留 soft-posterior `full_protection` 黑盒与 label-only `hard_blackbox` 黑盒，两者都必须进入汇总图。
 
 MS 的基本流程：
 
@@ -40,7 +40,7 @@ bash exp/MS/train_surrogate/run.sh resnet18 c100 \
   --label-mode soft
 ```
 
-surrogate 阶段实现无保护、全保护、仅分类头保护、浅层、中间层、深层、大权重和 TensorShield baseline，并支持自定义 unit mask。TensorShield 的 `ResNet18+CIFAR-100` 方案直接使用作者确认 rank 派生的 Figure 12 固定集合，不再运行公式评分代码。当前正式协议固定使用全模型微调；分类头完整暴露时复制 victim 分类头，部分暴露时按 mask 混合随机初始化与 victim 标量，完整保护时使用替换头。保护范围使用明确的官方层或绝对 unit 索引而不是比例，每种策略统一保存为按模型 `state_dict` unit 排列的 `protection_mask.pt`；训练与评估只保存 accuracy、fidelity、posterior KL 及其原始计数，固定终点 `end.pth` 作为主结果，派生对比指标留给后续绘图阶段计算。
+surrogate 阶段实现无保护、全保护、仅分类头保护、浅层、中间层、深层、大权重和 TensorShield baseline，并支持自定义 unit mask。TensorShield 的 `ResNet18+CIFAR-100` 方案直接使用作者确认 rank 派生的 Figure 12 固定集合，不再运行公式评分代码。当前正式协议固定使用全模型微调；分类头完整暴露时复制 victim 分类头，部分暴露时按 mask 混合随机初始化与 victim 标量，完整保护时使用替换头。保护范围使用明确的官方层或绝对 unit 索引而不是比例，每种策略统一保存为按模型 `state_dict` unit 排列的 `protection_mask.pt`；正式 surrogate 只保存 validation-best `best.pth`，训练日志不读取 `eval_ms`，最终保存 accuracy、fidelity、posterior KL 及其原始计数，派生对比指标留给绘图阶段计算。
 
 TEESlice 属于先训练专用 defended victim、再实施攻击的独立 baseline，不使用普通 victim 的 122-unit mask。当前 `ResNet18+C100` 完整流程为：
 

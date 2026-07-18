@@ -11,9 +11,12 @@ import torch
 
 
 REPO_ROOT = Path(__file__).resolve().parents[4]
+TRAIN_SURROGATE_ROOT = REPO_ROOT / "exp" / "MS" / "train_surrogate"
 TRAIN_VICTIM_ROOT = REPO_ROOT / "exp" / "MS" / "train_victim"
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
+if str(TRAIN_SURROGATE_ROOT) not in sys.path:
+    sys.path.insert(0, str(TRAIN_SURROGATE_ROOT))
 if str(TRAIN_VICTIM_ROOT) not in sys.path:
     sys.path.insert(0, str(TRAIN_VICTIM_ROOT))
 
@@ -21,8 +24,16 @@ from defense import DEFENSES  # noqa: E402
 
 
 NUM_CLASSES = {"c10": 10, "c100": 100, "s10": 10, "t200": 200}
-ATTACK_PROTOCOL_VERSION = "posterior_replace_finetune_v2"
-HARD_BLACKBOX_ATTACK_PROTOCOL_VERSION = "hard_label_replace_finetune_v1"
+ATTACK_PROTOCOL_VERSION = "soft_query_validation_best_v1"
+HARD_BLACKBOX_ATTACK_PROTOCOL_VERSION = "hard_query_validation_best_v1"
+FORMAL_EPOCHS = 100
+FORMAL_BATCH_SIZE = 64
+FORMAL_EVAL_BATCH_SIZE = 128
+FORMAL_LEARNING_RATE = 0.01
+FORMAL_MOMENTUM = 0.5
+FORMAL_WEIGHT_DECAY = 5e-4
+FORMAL_LR_STEP = 60
+FORMAL_LR_GAMMA = 0.1
 MODEL_SPECS = {
     "resnet18": ("resnet18", "resnet18-5c106cde.pth"),
     "resnet50": ("resnet50", "resnet50-19c8e357.pth"),
@@ -64,7 +75,7 @@ def parse_args() -> argparse.Namespace:
         "--label-mode",
         choices=("soft", "hard"),
         default="soft",
-        help="普通 baseline 使用 soft；hard 只允许 ResNet18+C100 全保护输出能力对比。",
+        help="部分保护与 soft 全保护使用 soft；正式 label-only 黑盒使用 hard。",
     )
     parser.add_argument("--dataset-root", default=str(REPO_ROOT / "dataset" / "public"), help="公开数据集根目录。")
     parser.add_argument("--protocol-root", default=str(REPO_ROOT / "dataset" / "MS"), help="MS 协议根目录。")
@@ -76,14 +87,24 @@ def parse_args() -> argparse.Namespace:
         help="surrogate 权重根目录。",
     )
     parser.add_argument("--results-root", default=str(REPO_ROOT / "results" / "MS"), help="MS 原始指标根目录。")
-    parser.add_argument("--epochs", type=int, default=100, help="训练轮数。")
-    parser.add_argument("--batch-size", type=int, default=64, help="训练 batch size。")
-    parser.add_argument("--eval-batch-size", type=int, default=128, help="评估 batch size。")
-    parser.add_argument("--lr", type=float, default=0.01, help="SGD 学习率。")
-    parser.add_argument("--momentum", type=float, default=0.5, help="SGD 动量。")
-    parser.add_argument("--weight-decay", type=float, default=5e-4, help="权重衰减。")
-    parser.add_argument("--lr-step", type=int, default=60, help="学习率衰减步长。")
-    parser.add_argument("--lr-gamma", type=float, default=0.1, help="学习率衰减系数。")
+    parser.add_argument("--epochs", type=int, default=FORMAL_EPOCHS, help="训练轮数。")
+    parser.add_argument("--batch-size", type=int, default=FORMAL_BATCH_SIZE, help="训练 batch size。")
+    parser.add_argument(
+        "--eval-batch-size",
+        type=int,
+        default=FORMAL_EVAL_BATCH_SIZE,
+        help="validation/eval batch size。",
+    )
+    parser.add_argument("--lr", type=float, default=FORMAL_LEARNING_RATE, help="SGD 学习率。")
+    parser.add_argument("--momentum", type=float, default=FORMAL_MOMENTUM, help="SGD 动量。")
+    parser.add_argument(
+        "--weight-decay",
+        type=float,
+        default=FORMAL_WEIGHT_DECAY,
+        help="权重衰减。",
+    )
+    parser.add_argument("--lr-step", type=int, default=FORMAL_LR_STEP, help="学习率衰减步长。")
+    parser.add_argument("--lr-gamma", type=float, default=FORMAL_LR_GAMMA, help="学习率衰减系数。")
     parser.add_argument("--num-workers", type=int, default=4, help="DataLoader worker 数。")
     parser.add_argument("--seed", type=int, default=42, help="随机种子。")
     parser.add_argument(
@@ -122,8 +143,24 @@ def validate_attack_configuration(
         raise ValueError(f"未知 label mode：{label_mode}")
     if defense != "full_protection":
         raise ValueError("hard-label 正式对比只允许 --defense full_protection。")
-    if model_name != "resnet18" or dataset_name != "c100":
-        raise ValueError("hard-label 正式对比当前只固化 ResNet18+C100。")
+
+
+def validate_formal_hyperparameters(args: argparse.Namespace) -> None:
+    expected = {
+        "epochs": FORMAL_EPOCHS,
+        "batch_size": FORMAL_BATCH_SIZE,
+        "eval_batch_size": FORMAL_EVAL_BATCH_SIZE,
+        "lr": FORMAL_LEARNING_RATE,
+        "momentum": FORMAL_MOMENTUM,
+        "weight_decay": FORMAL_WEIGHT_DECAY,
+        "lr_step": FORMAL_LR_STEP,
+        "lr_gamma": FORMAL_LR_GAMMA,
+    }
+    actual = {name: getattr(args, name) for name in expected}
+    if actual != expected:
+        raise ValueError(f"正式 MS 超参数不可临时覆盖：expected={expected}, actual={actual}")
+    if args.eval_subset is not None:
+        raise ValueError("正式 MS 不允许裁剪 eval_ms。")
 
 
 def resolve_device(value: str) -> torch.device:

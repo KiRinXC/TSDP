@@ -7,6 +7,7 @@ import argparse
 import csv
 import hashlib
 import json
+import math
 from pathlib import Path
 
 import matplotlib
@@ -17,8 +18,8 @@ from matplotlib.ticker import MaxNLocator  # noqa: E402
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-ATTACK_PROTOCOL = "posterior_replace_finetune_v2"
-HARD_BLACKBOX_PROTOCOL = "hard_label_replace_finetune_v1"
+ATTACK_PROTOCOL = "soft_query_validation_best_v1"
+HARD_BLACKBOX_PROTOCOL = "hard_query_validation_best_v1"
 CURVE_STRATEGIES = {
     "shallow": {"label": "Shallow layers", "color": "#0072B2", "marker": "o"},
     "middle": {"label": "Middle layers", "color": "#009E73", "marker": "s"},
@@ -61,9 +62,17 @@ DATA_FIELDS = [
     "protected_layer_count",
     "source_ratio",
     "protected_scalar_count",
+    "protected_param_count",
+    "native_total_param_count",
     "protected_param_ratio",
+    "native_private_param_ratio",
+    "baseline_total_param_count",
+    "baseline_normalized_param_ratio",
     "head_mode",
     "label_mode",
+    "attack_protocol",
+    "primary_epoch",
+    "selection_metric",
     "source_path",
     "run_id",
     "surrogate_acc",
@@ -125,8 +134,25 @@ def load_rows(input_dir: Path) -> list[dict[str, object]]:
             raise ValueError(f"query budget 不一致：{path}")
         if payload.get("query_transform") != "test" or payload.get("lr_step") != 60:
             raise ValueError(f"query transform 或 lr_step 不符合当前正式协议：{path}")
-        if payload.get("primary", {}).get("checkpoint") != "end.pth":
-            raise ValueError(f"主要 checkpoint 不是 end.pth：{path}")
+        primary = payload.get("primary", {})
+        if payload.get("schema_version") != 3 or primary.get("checkpoint") != "best.pth":
+            raise ValueError(f"结果不是 validation-best 新协议：{path}")
+        partition = payload.get("query_partition", {})
+        if (
+            partition.get("train_size") != 400
+            or partition.get("validation_size") != 100
+            or partition.get("seed") != 42
+            or partition.get("seed_offset") != 100
+        ):
+            raise ValueError(f"query train/validation 划分不符合正式协议：{path}")
+        if artifact_id == "no_protection":
+            if primary.get("epoch") != 0 or primary.get("selection_metric") != "identity_epoch_0":
+                raise ValueError(f"无保护白盒不是 epoch-0 恒等模型：{path}")
+        elif (
+            not 1 <= int(primary.get("epoch", -1)) <= 100
+            or primary.get("selection_metric") != "validation_soft_cross_entropy"
+        ):
+            raise ValueError(f"soft surrogate 的 checkpoint 选择信息不正确：{path}")
 
         protection = payload["protection"]
         comparison_scope = payload.get("comparison_scope", "ordinary_fixed_victim")
@@ -145,7 +171,27 @@ def load_rows(input_dir: Path) -> list[dict[str, object]]:
                 role = "bound"
             else:
                 continue
-        end = payload["end"]
+        result = payload["result"]
+        if result.get("eval_count") != 10_000 or result.get("eval_passes") != 1:
+            raise ValueError(f"eval_ms 不是选模后唯一一次完整评估：{path}")
+        protected_param_count = protection.get("protected_param_count")
+        native_total_param_count = protection.get("total_param_count")
+        if (
+            not isinstance(protected_param_count, int)
+            or not isinstance(native_total_param_count, int)
+            or protected_param_count < 0
+            or native_total_param_count <= 0
+            or protected_param_count > native_total_param_count
+        ):
+            raise ValueError(f"保护参数统计无效：{path}")
+        native_ratio = protected_param_count / native_total_param_count
+        if not math.isclose(
+            native_ratio,
+            float(protection["protected_param_ratio"]),
+            rel_tol=0.0,
+            abs_tol=1e-15,
+        ):
+            raise ValueError(f"保护参数原生比例与计数不一致：{path}")
         rows.append(
             {
                 "artifact_id": artifact_id,
@@ -155,14 +201,26 @@ def load_rows(input_dir: Path) -> list[dict[str, object]]:
                 "protected_layer_count": payload.get("protected_layer_count"),
                 "source_ratio": payload.get("source_ratio"),
                 "protected_scalar_count": protection.get("magnitude_protected_count"),
+                "protected_param_count": protected_param_count,
+                "native_total_param_count": native_total_param_count,
                 "protected_param_ratio": protection["protected_param_ratio"],
+                "native_private_param_ratio": (
+                    protection["protected_param_ratio"]
+                    if comparison_scope == "standalone_reproduction"
+                    else None
+                ),
+                "baseline_total_param_count": None,
+                "baseline_normalized_param_ratio": None,
                 "head_mode": protection["head_mode"],
                 "label_mode": payload["label_mode"],
+                "attack_protocol": payload["attack_protocol"],
+                "primary_epoch": primary["epoch"],
+                "selection_metric": primary["selection_metric"],
                 "source_path": str(path.relative_to(REPO_ROOT)),
                 "run_id": payload["run_id"],
-                "surrogate_acc": end["surrogate_acc"],
-                "fidelity": end["fidelity"],
-                "posterior_kl": end["posterior_kl"],
+                "surrogate_acc": result["surrogate_acc"],
+                "fidelity": result["fidelity"],
+                "posterior_kl": result["posterior_kl"],
             }
         )
 
@@ -190,7 +248,7 @@ def load_hard_blackbox(path: Path) -> dict[str, object]:
         raise FileNotFoundError(f"找不到 hard-label 黑盒结果：{path}")
     payload = json.loads(path.read_text(encoding="utf-8"))
     expected = {
-        "schema_version": 2,
+        "schema_version": 3,
         "protocol": "MS",
         "attack_protocol": HARD_BLACKBOX_PROTOCOL,
         "artifact_id": "hard_blackbox",
@@ -205,8 +263,21 @@ def load_hard_blackbox(path: Path) -> dict[str, object]:
     for field, value in expected.items():
         if payload.get(field) != value:
             raise ValueError(f"hard-label 黑盒字段 {field} 不符合预期：{path}")
-    if payload.get("primary") != {"checkpoint": "end.pth", "epoch": 100}:
-        raise ValueError(f"hard-label 黑盒主要 checkpoint 不是 end.pth：{path}")
+    primary = payload.get("primary", {})
+    if (
+        primary.get("checkpoint") != "best.pth"
+        or primary.get("selection_metric") != "validation_hard_cross_entropy"
+        or not 1 <= int(primary.get("epoch", -1)) <= 100
+    ):
+        raise ValueError(f"hard-label 黑盒不是 validation-best checkpoint：{path}")
+    partition = payload.get("query_partition", {})
+    if (
+        partition.get("train_size") != 400
+        or partition.get("validation_size") != 100
+        or partition.get("seed") != 42
+        or partition.get("seed_offset") != 100
+    ):
+        raise ValueError(f"hard-label 黑盒 query 划分不符合正式协议：{path}")
 
     protection = payload.get("protection", {})
     if (
@@ -218,34 +289,67 @@ def load_hard_blackbox(path: Path) -> dict[str, object]:
         != "7e96847f0f89f6d4552091505464c9f18f4dd5ab49b3fb6a1a51195e275c1fa7"
     ):
         raise ValueError(f"hard-label 黑盒不是完整参数保护：{path}")
-    end = payload.get("end", {})
-    if end.get("eval_count") != 10_000:
-        raise ValueError(f"hard-label 黑盒 eval_count 不正确：{path}")
+    result = payload.get("result", {})
+    if result.get("eval_count") != 10_000 or result.get("eval_passes") != 1:
+        raise ValueError(f"hard-label 黑盒 eval_ms 评估次数不正确：{path}")
 
-    if end.get("victim_acc") != 0.6182:
+    if result.get("victim_acc") != 0.6182:
         raise ValueError(f"hard-label 黑盒与当前普通 victim 不一致：{path}")
 
     return {
         "artifact_id": "hard_blackbox",
-        "role": "auxiliary_bound",
+        "role": "bound",
         "comparison_scope": "ordinary_fixed_victim_output_ablation",
         "defense": HARD_BLACKBOX["defense"],
         "protected_layer_count": None,
         "source_ratio": None,
         "protected_scalar_count": None,
+        "protected_param_count": protection["protected_param_count"],
+        "native_total_param_count": protection["total_param_count"],
         "protected_param_ratio": protection["protected_param_ratio"],
+        "native_private_param_ratio": None,
+        "baseline_total_param_count": None,
+        "baseline_normalized_param_ratio": None,
         "head_mode": protection["head_mode"],
         "label_mode": payload["label_mode"],
+        "attack_protocol": payload["attack_protocol"],
+        "primary_epoch": primary["epoch"],
+        "selection_metric": primary["selection_metric"],
         "source_path": str(path.relative_to(REPO_ROOT)),
         "run_id": payload["run_id"],
-        "surrogate_acc": end["surrogate_acc"],
-        "fidelity": end["fidelity"],
-        "posterior_kl": end["posterior_kl"],
+        "surrogate_acc": result["surrogate_acc"],
+        "fidelity": result["fidelity"],
+        "posterior_kl": result["posterior_kl"],
     }
 
 
+def apply_baseline_parameter_normalization(rows: list[dict[str, object]]) -> int:
+    ordinary_totals = {
+        int(row["native_total_param_count"])
+        for row in rows
+        if row["comparison_scope"] != "standalone_reproduction"
+    }
+    if len(ordinary_totals) != 1:
+        raise ValueError(f"普通 ResNet18 baseline 分母不唯一：{sorted(ordinary_totals)}")
+    baseline_total = ordinary_totals.pop()
+
+    for row in rows:
+        protected_count = int(row["protected_param_count"])
+        normalized_ratio = protected_count / baseline_total
+        row["baseline_total_param_count"] = baseline_total
+        row["baseline_normalized_param_ratio"] = normalized_ratio
+        if row["comparison_scope"] != "standalone_reproduction" and not math.isclose(
+            normalized_ratio,
+            float(row["protected_param_ratio"]),
+            rel_tol=0.0,
+            abs_tol=1e-15,
+        ):
+            raise ValueError(f"普通策略 {row['artifact_id']} 的统一比例与原生比例不一致。")
+    return baseline_total
+
+
 def write_data(path: Path, rows: list[dict[str, object]]) -> None:
-    role_order = {"curve": 0, "point": 1, "standalone": 2, "bound": 3, "auxiliary_bound": 4}
+    role_order = {"curve": 0, "point": 1, "standalone": 2, "bound": 3}
     defense_order = {
         defense: index
         for index, defense in enumerate(
@@ -257,7 +361,7 @@ def write_data(path: Path, rows: list[dict[str, object]]) -> None:
         key=lambda row: (
             role_order[str(row["role"])],
             defense_order[str(row["defense"])],
-            float(row["protected_param_ratio"]),
+            float(row["baseline_normalized_param_ratio"]),
         ),
     )
     with path.open("w", newline="", encoding="utf-8") as writer_file:
@@ -287,9 +391,11 @@ def draw_metric(
     for defense, style in CURVE_STRATEGIES.items():
         points = sorted(
             (row for row in rows if row["defense"] == defense),
-            key=lambda row: float(row["protected_param_ratio"]),
+            key=lambda row: float(row["baseline_normalized_param_ratio"]),
         )
-        x_values = [float(row["protected_param_ratio"]) * 100.0 for row in points]
+        x_values = [
+            float(row["baseline_normalized_param_ratio"]) * 100.0 for row in points
+        ]
         y_values = [float(row[metric_name]) for row in points]
         plotted_values.extend(y_values)
         ax.plot(
@@ -304,7 +410,7 @@ def draw_metric(
 
     for defense, style in POINT_STRATEGIES.items():
         row = next(row for row in rows if row["defense"] == defense)
-        x_value = float(row["protected_param_ratio"]) * 100.0
+        x_value = float(row["baseline_normalized_param_ratio"]) * 100.0
         y_value = float(row[metric_name])
         plotted_values.append(y_value)
         ax.scatter(
@@ -411,6 +517,7 @@ def main() -> int:
         raise FileNotFoundError(f"找不到正式 MS 结果目录：{input_dir}")
     rows = load_rows(input_dir)
     rows.append(load_hard_blackbox(hard_blackbox_path))
+    baseline_total_param_count = apply_baseline_parameter_normalization(rows)
     out_dir.mkdir(parents=True, exist_ok=True)
     write_data(out_dir / "data.tsv", rows)
     configure_plot_style()
@@ -425,7 +532,7 @@ def main() -> int:
     plot_combined(out_dir / "metrics.png", rows)
 
     manifest = {
-        "schema_version": 1,
+        "schema_version": 3,
         "experiment": "03_baseline",
         "protocol": "MS",
         "attack_protocol": ATTACK_PROTOCOL,
@@ -434,14 +541,42 @@ def main() -> int:
         "query_budget": 500,
         "query_transform": "test",
         "lr_step": 60,
-        "primary_checkpoint": "end.pth",
-        "x_axis": "protected_param_ratio",
+        "primary_checkpoint": "best.pth",
+        "checkpoint_selection": {
+            "soft": "minimum_validation_soft_cross_entropy",
+            "hard": "minimum_validation_hard_cross_entropy",
+            "tie_break": "earliest_epoch",
+        },
+        "query_partition": {
+            "train_size": 400,
+            "validation_size": 100,
+            "seed": 42,
+            "seed_offset": 100,
+        },
+        "x_axis": "baseline_normalized_param_ratio",
+        "parameter_ratio_normalization": {
+            "numerator": "protected_param_count",
+            "denominator": "ordinary_resnet18_c100_total_param_count",
+            "denominator_value": baseline_total_param_count,
+            "native_source_field": "protected_param_ratio",
+            "teeslice_native_field": "native_private_param_ratio",
+            "teeslice_native_ratio": next(
+                row["native_private_param_ratio"]
+                for row in rows
+                if row["defense"] == "teeslice"
+            ),
+            "teeslice_baseline_normalized_ratio": next(
+                row["baseline_normalized_param_ratio"]
+                for row in rows
+                if row["defense"] == "teeslice"
+            ),
+        },
         "curve_artifacts": {
             defense: [
                 row["artifact_id"]
                 for row in sorted(
                     (item for item in rows if item["defense"] == defense),
-                    key=lambda item: float(item["protected_param_ratio"]),
+                    key=lambda item: float(item["baseline_normalized_param_ratio"]),
                 )
             ]
             for defense in CURVE_STRATEGIES
@@ -451,11 +586,17 @@ def main() -> int:
             for defense in ("head_only", "tensorshield")
         },
         "standalone_artifacts": ["teeslice"],
-        "reference_artifacts": ["no_protection", "full_protection"],
-        "auxiliary_references": {
+        "reference_artifacts": ["no_protection", "full_protection", "hard_blackbox"],
+        "blackbox_references": {
+            "soft": {
+                "artifact_id": "full_protection",
+                "label_mode": "soft",
+                "attack_protocol": ATTACK_PROTOCOL,
+            },
             "hard_blackbox": {
                 "artifact_id": "hard_blackbox",
                 "label_mode": "hard",
+                "attack_protocol": HARD_BLACKBOX_PROTOCOL,
                 "comparison_scope": "ordinary_fixed_victim_output_ablation",
                 "path": str(hard_blackbox_path.relative_to(REPO_ROOT)),
                 "sha256": sha256_file(hard_blackbox_path),

@@ -1,28 +1,32 @@
 # 实验 03 结果
 
-本目录汇总当前正式协议下 `ResNet18+CIFAR-100` 的 MS 结果。绘图读取四种 baseline 的 32 个扫描点、`head_only` 与 TensorShield 两个普通 victim 单点、TEESlice standalone 单点、普通 victim 的 no/full 两个正式参考点，以及 hard-label 全保护辅助参考点，共 38 个输入点。
+本目录汇总当前正式协议下 `ResNet18+CIFAR-100` 的 MS 结果。绘图读取四种 baseline 的 32 个扫描点、`head_only` 与 TensorShield 两个普通 victim 单点、TEESlice standalone 单点、no protection 白盒以及 soft/hard 两条正式黑盒参考线，共 38 个输入点。
+
+主图横坐标统一使用普通 ResNet18+CIFAR-100 的 `11,227,812` 个可训练参数作为
+分母。TEESlice 最终保护 `703,092` 个可训练参数；其自身架构下的原生 private
+parameter ratio 为 `5.9223%`，统一分母后的绘图比例为 `6.2621%`。两者均保存在
+`data.tsv`，避免把 TEESlice 增加的 proxy slice 同时放入分子和分母后与普通策略
+直接比较。
 
 ```text
 metrics.png        accuracy、fidelity 与 posterior KL 三联总图
 accuracy.png       surrogate accuracy 曲线
 fidelity.png       fidelity 曲线
 posterior_kl.png   posterior KL 曲线
-data.tsv           38 个输入点及其比较范围、label mode、来源和原始指标
-manifest.json      输入协议、策略 artifact、hard-label 输入哈希与输出清单
+data.tsv           38 个输入点、双参数比例、协议、来源和原始指标
+manifest.json      输入协议、统一分母、artifact、双黑盒定义与输出清单
 ```
 
 ## 结果观察
 
-在约 `1%` 实际参数保护比例下，`large_01` 的 accuracy/fidelity 为 `0.4090/0.4764`，同等成本附近的 `shallow_04` 为 `0.5560/0.6992`，全局大权重标量保护表现出更强的 MS 抑制效果。
+soft-posterior 黑盒按 validation soft cross-entropy 选择第 45 轮，三项指标为 `0.1390/0.1463/3.039817`；hard-label 黑盒按 validation hard cross-entropy 选择第 3 轮，三项指标为 `0.0890/0.0969/3.387234`。两条线均为正式参考：soft 是普通部分保护策略的同接口对照，hard 展示 label-only 查询能力边界。
 
-`head_only` 只保护分类头的 `51,300` 个参数，实际保护比例为 `0.4569%`，其 accuracy/fidelity/posterior KL 为 `0.4404/0.5135/1.347578`。与保护比例接近的 `shallow_02`（`0.4144%`，`0.5651/0.7280/0.389144`）相比，只隐藏分类头对 MS 的抑制明显更强；但与普通 victim 的全保护结果 `0.1545/0.1610/2.835290` 仍有较大距离，因此分类头是重要控制变量，但并不足以单独达到当前全保护参考水平。
+`head_only` 只保护 `0.4569%` 参数，得到 `0.3985/0.4621/1.616573`。它比成本接近的 `shallow_02`（`0.4144%`，`0.5608/0.7215/0.412557`）更能抑制 MS，确认分类头不可见具有显著影响；但仍远未达到 soft 黑盒。
 
-`large_weight` 的分类头部分暴露时按 mask 混合初始化，不额外丢弃可见 victim 标量。8 个扫描点的 accuracy 和 fidelity 随保护比例严格下降，posterior KL 严格上升，实际不可见参数量与横坐标一致。
+在约 `1%` 参数比例下，`large_01` 为 `0.3637/0.4204/1.486967`，明显强于 `shallow_04` 的 `0.5541/0.6918/0.482461`。不过大权重扫描需要约 80% 以上保护比例才接近 soft 黑盒，不能作为低成本关键路径方案。
 
-深层保护的第一个点已经保护 `21.4790%` 参数，但 accuracy/fidelity 仍为 `0.4567/0.5429`。其曲线需要到很高参数比例才接近全保护参考线，按实际参数成本比较时不占优。
+TensorShield 保护 `8.9934%` 参数，结果为 `0.1728/0.1865/2.694492`，明显强于相近成本的 `shallow_10` 和 `large_02`，但三项仍未达到 soft 黑盒。它继续是当前普通固定 victim 下最强的低比例正式 baseline。
 
-`large_08` 在约 `95%` 参数保护下达到 `0.1533` accuracy 和 `0.1600` fidelity，已经接近全保护的 `0.1545/0.1610`。partial 点略低于全保护参考线属于固定种子训练波动；上下界参考线不是逐点必须满足的数学约束。
+完整层扫描不是逐点严格单调：`middle_14` 相比 `middle_12`、`deep_16` 相比 `deep_14` 出现小幅反弹。`deep_14`、`deep_16` 和 `large_08` 个别指标越过 soft 黑盒，只能视为单 seed、有限 query 与选模带来的攻击训练波动；攻击者可以忽略暴露状态并回退到 soft 黑盒，不能把这些点解释为信息意义上强于黑盒。
 
-图中的 no/full 水平线只使用普通先训练后分区 victim。TEESlice 因 victim 结构与训练过程不同，以独立星形单点和 `standalone_reproduction` 范围展示，不与普通 victim 策略连线，也不参与同条件排序。
-
-新增的 hard-label 黑盒参考线读取正式 `results/MS/resnet18/c100/hard_blackbox/metrics.json`，其指标为 `0.1393/0.1443/3.427757`，对应 accuracy、fidelity 和 posterior KL；soft-posterior 主黑盒参考线为 `0.1545/0.1610/2.835290`。Hard label 在 query 上最终完全拟合，但测试集 MS 泛化更弱。该线属于输出能力消融，不替换当前 soft-posterior 主黑盒下界。
+TEESlice 因 victim 结构和训练过程不同，使用独立星形单点和 `standalone_reproduction` 标记。其 validation-best 黑盒结果为 `0.1580/0.1698/3.342776`，不与普通 victim 策略连线，也不参与同条件成本排序。

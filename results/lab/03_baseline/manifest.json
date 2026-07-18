@@ -1,15 +1,35 @@
 {
-  "schema_version": 1,
+  "schema_version": 3,
   "experiment": "03_baseline",
   "protocol": "MS",
-  "attack_protocol": "posterior_replace_finetune_v2",
+  "attack_protocol": "soft_query_validation_best_v1",
   "model": "resnet18",
   "dataset": "c100",
   "query_budget": 500,
   "query_transform": "test",
   "lr_step": 60,
-  "primary_checkpoint": "end.pth",
-  "x_axis": "protected_param_ratio",
+  "primary_checkpoint": "best.pth",
+  "checkpoint_selection": {
+    "soft": "minimum_validation_soft_cross_entropy",
+    "hard": "minimum_validation_hard_cross_entropy",
+    "tie_break": "earliest_epoch"
+  },
+  "query_partition": {
+    "train_size": 400,
+    "validation_size": 100,
+    "seed": 42,
+    "seed_offset": 100
+  },
+  "x_axis": "baseline_normalized_param_ratio",
+  "parameter_ratio_normalization": {
+    "numerator": "protected_param_count",
+    "denominator": "ordinary_resnet18_c100_total_param_count",
+    "denominator_value": 11227812,
+    "native_source_field": "protected_param_ratio",
+    "teeslice_native_field": "native_private_param_ratio",
+    "teeslice_native_ratio": 0.059223088018420605,
+    "teeslice_baseline_normalized_ratio": 0.06262057113175747
+  },
   "curve_artifacts": {
     "shallow": [
       "shallow_02",
@@ -61,15 +81,22 @@
   ],
   "reference_artifacts": [
     "no_protection",
-    "full_protection"
+    "full_protection",
+    "hard_blackbox"
   ],
-  "auxiliary_references": {
+  "blackbox_references": {
+    "soft": {
+      "artifact_id": "full_protection",
+      "label_mode": "soft",
+      "attack_protocol": "soft_query_validation_best_v1"
+    },
     "hard_blackbox": {
       "artifact_id": "hard_blackbox",
       "label_mode": "hard",
+      "attack_protocol": "hard_query_validation_best_v1",
       "comparison_scope": "ordinary_fixed_victim_output_ablation",
       "path": "results/MS/resnet18/c100/hard_blackbox/metrics.json",
-      "sha256": "8fb5b9808e31752cd82c51a08dc8ff1d2b513e15f966e837c2e213d63e4a71ad"
+      "sha256": "8d909a538c39b9aa74abbecda3839bce59b313343a60a4aaaacd9a153672e20d"
     }
   },
   "outputs": [

@@ -38,8 +38,17 @@ from core.artifacts import (  # noqa: E402
     write_json,
 )
 from core.config import ATTACK_PROTOCOL_VERSION  # noqa: E402
-from core.data import build_eval_dataset, build_query_dataset, load_query_targets  # noqa: E402
-from core.engine import collect_eval_reference, evaluate_surrogate, train_one_epoch  # noqa: E402
+from core.data import (  # noqa: E402
+    build_eval_dataset,
+    build_query_partition_datasets,
+    load_query_targets,
+    make_query_partition,
+)
+from core.engine import (  # noqa: E402
+    collect_eval_reference,
+    evaluate_surrogate,
+    select_validation_best,
+)
 from models.teeslice import TEESliceResNet18, teeslice_r18  # noqa: E402
 
 
@@ -163,7 +172,8 @@ def remove_legacy_index_row(path: Path) -> None:
     with path.open("r", newline="", encoding="utf-8") as reader_file:
         reader = csv.DictReader(reader_file, delimiter="\t")
         if reader.fieldnames != INDEX_FIELDS:
-            raise ValueError(f"结果索引字段不兼容：{path}")
+            path.unlink()
+            return
         rows = [row for row in reader if row["artifact_id"] != ARTIFACT_ID]
     with path.open("w", newline="", encoding="utf-8") as writer_file:
         writer = csv.DictWriter(writer_file, fieldnames=INDEX_FIELDS, delimiter="\t", lineterminator="\n")
@@ -173,8 +183,26 @@ def remove_legacy_index_row(path: Path) -> None:
 
 def main() -> int:
     args = parse_args()
-    if args.epochs <= 0 or args.batch_size <= 0 or args.eval_batch_size <= 0:
-        raise ValueError("epochs、batch_size 和 eval_batch_size 必须大于 0。")
+    expected_hyperparameters = {
+        "epochs": 100,
+        "batch_size": 64,
+        "eval_batch_size": 128,
+        "lr": 0.01,
+        "momentum": 0.5,
+        "weight_decay": 5e-4,
+        "lr_step": 60,
+        "lr_gamma": 0.1,
+    }
+    actual_hyperparameters = {
+        name: getattr(args, name) for name in expected_hyperparameters
+    }
+    if actual_hyperparameters != expected_hyperparameters:
+        raise ValueError(
+            "TEESlice 正式攻击超参数不可临时覆盖："
+            f"expected={expected_hyperparameters}, actual={actual_hyperparameters}"
+        )
+    if args.eval_subset is not None:
+        raise ValueError("TEESlice 正式攻击不允许裁剪 eval_ms。")
     dataset = resolve_dataset_name(args.dataset)
     configure_reproducibility(args.seed, args.deterministic)
     device = resolve_device(args.device)
@@ -205,8 +233,15 @@ def main() -> int:
     validate_public_backbone(victim, surrogate)
     if surrogate.active_proxy_count() != topology["active_proxy_count"]:
         raise ValueError("surrogate 活跃 proxy 数与公开剪枝拓扑不一致。")
-    query_dataset = build_query_dataset(dataset, dataset_root, query_indices, query_posteriors, query_labels)
-    eval_dataset = build_eval_dataset(dataset, dataset_root, protocol_root, args.eval_subset)
+    query_partition = make_query_partition(query_indices, seed=args.seed)
+    query_train_dataset, query_validation_dataset = build_query_partition_datasets(
+        dataset,
+        dataset_root,
+        query_indices,
+        query_posteriors,
+        query_labels,
+        query_partition,
+    )
     victim_cost = victim.cost_summary()
     protection = {
         "strategy": "teeslice",
@@ -249,6 +284,14 @@ def main() -> int:
         "protected_flops": protection["protected_flops"],
         "head_mode": "replace",
         "budget": args.budget,
+        "query_train_size": query_partition.train_size,
+        "query_validation_size": query_partition.validation_size,
+        "query_split_seed": args.seed,
+        "query_split_seed_offset": query_partition.seed_offset,
+        "query_train_ranks_sha256": query_partition.to_metadata()["train_ranks_sha256"],
+        "query_validation_ranks_sha256": (
+            query_partition.to_metadata()["validation_ranks_sha256"]
+        ),
         "training_mode": args.training_mode,
         "label_mode": args.label_mode,
         "epochs": args.epochs,
@@ -270,7 +313,10 @@ def main() -> int:
         f"[INFO] topology={topology['topology_sha256']} "
         f"active_proxy={topology['active_proxy_count']}"
     )
-    print(f"[INFO] query={len(query_dataset)} eval_ms={len(eval_dataset)} device={device}")
+    print(
+        f"[INFO] query={args.budget} train={query_partition.train_size} "
+        f"validation={query_partition.validation_size} device={device}"
+    )
     if args.dry_run:
         print("[INFO] dry-run 完成，未写入训练产物。")
         return 0
@@ -290,7 +336,6 @@ def main() -> int:
     weights_run.mkdir(parents=True, exist_ok=True)
     results_run.mkdir(parents=True, exist_ok=True)
 
-    victim = victim.to(device)
     surrogate = surrogate.to(device)
     optimizer = torch.optim.SGD(
         surrogate.parameters(),
@@ -303,8 +348,8 @@ def main() -> int:
         step_size=args.lr_step,
         gamma=args.lr_gamma,
     )
-    query_loader = DataLoader(
-        query_dataset,
+    query_train_loader = DataLoader(
+        query_train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
@@ -312,8 +357,8 @@ def main() -> int:
         worker_init_fn=seed_worker,
         generator=build_generator(args.seed),
     )
-    eval_loader = DataLoader(
-        eval_dataset,
+    query_validation_loader = DataLoader(
+        query_validation_dataset,
         batch_size=args.eval_batch_size,
         shuffle=False,
         num_workers=args.num_workers,
@@ -321,13 +366,6 @@ def main() -> int:
         worker_init_fn=seed_worker,
         generator=build_generator(args.seed, offset=1),
     )
-    reference = collect_eval_reference(victim, eval_loader, device)
-    whitebox, _ = load_victim(victim_path, weight_path)
-    whitebox = whitebox.to(device)
-    whitebox_metrics = evaluate_surrogate(whitebox, eval_loader, reference, device)
-    if whitebox_metrics["agreement_count"] != whitebox_metrics["eval_count"]:
-        raise RuntimeError("完整状态白盒模型未能逐样本复现 victim 输出类别。")
-    del whitebox
     params = {
         **run_config,
         "artifact_id": ARTIFACT_ID,
@@ -344,6 +382,9 @@ def main() -> int:
         "results_dir": str(results_run),
         "topology": topology,
         "protection": protection,
+        "surrogate_initialization_seed": args.seed,
+        "query_sampler_seed": args.seed,
+        "query_partition": query_partition.to_metadata(),
         "created_at": datetime.now(timezone.utc).isoformat(),
     }
     write_json(weights_run / "params.json", params)
@@ -359,61 +400,56 @@ def main() -> int:
     history_path = weights_run / "train.log.tsv"
     write_history_row(history_path, {}, initialize=True)
 
-    best_metrics: dict[str, int | float] | None = None
-    best_epoch = -1
-    end_metrics: dict[str, int | float] | None = None
-    for epoch in range(1, args.epochs + 1):
-        learning_rate = optimizer.param_groups[0]["lr"]
-        train_metrics = train_one_epoch(
-            surrogate,
-            query_loader,
-            optimizer,
-            device,
-            args.label_mode,
-            epoch,
-            args.epochs,
-            None,
-        )
-        end_metrics = evaluate_surrogate(surrogate, eval_loader, reference, device)
-        scheduler.step()
-        write_history_row(
-            history_path,
-            {"epoch": epoch, "learning_rate": learning_rate, **train_metrics, **end_metrics},
-        )
-        print(
-            f"[EVAL] epoch={epoch:03d} surrogate_acc={end_metrics['surrogate_acc']:.6f} "
-            f"fidelity={end_metrics['fidelity']:.6f} posterior_kl={end_metrics['posterior_kl']:.6f}"
-        )
-        if best_metrics is None or end_metrics["surrogate_acc"] > best_metrics["surrogate_acc"]:
-            best_metrics = dict(end_metrics)
-            best_epoch = epoch
-            save_checkpoint(
-                weights_run / "best.pth",
-                surrogate,
-                optimizer,
-                scheduler,
-                epoch,
-                QUERY_MODEL_ID,
-                dataset,
-                run_id,
-                ATTACK_PROTOCOL_VERSION,
-                best_metrics,
-            )
-    assert best_metrics is not None and end_metrics is not None
-    save_checkpoint(
-        weights_run / "end.pth",
+    selection, history = select_validation_best(
         surrogate,
+        query_train_loader,
+        query_validation_loader,
         optimizer,
         scheduler,
+        device,
+        args.label_mode,
         args.epochs,
+        query_partition.validation_size,
+    )
+    for row in history:
+        write_history_row(history_path, row)
+    selected_epoch = int(selection["epoch"])
+    save_checkpoint(
+        weights_run / "best.pth",
+        surrogate,
+        None,
+        None,
+        selected_epoch,
         QUERY_MODEL_ID,
         dataset,
         run_id,
         ATTACK_PROTOCOL_VERSION,
-        end_metrics,
+        selection,
     )
+
+    # checkpoint 固定后才首次构造和迭代 eval_ms。
+    eval_dataset = build_eval_dataset(dataset, dataset_root, protocol_root, None)
+    eval_loader = DataLoader(
+        eval_dataset,
+        batch_size=args.eval_batch_size,
+        shuffle=False,
+        num_workers=args.num_workers,
+        pin_memory=device.type == "cuda",
+        worker_init_fn=seed_worker,
+        generator=build_generator(args.seed, offset=2),
+    )
+    victim = victim.to(device)
+    reference = collect_eval_reference(victim, eval_loader, device)
+    result_metrics = evaluate_surrogate(surrogate, eval_loader, reference, device)
+    whitebox, _ = load_victim(victim_path, weight_path)
+    whitebox = whitebox.to(device)
+    whitebox_metrics = evaluate_surrogate(whitebox, eval_loader, reference, device)
+    if whitebox_metrics["agreement_count"] != whitebox_metrics["eval_count"]:
+        raise RuntimeError("完整状态白盒模型未能逐样本复现 victim 输出类别。")
+    del whitebox
+
     metrics_payload = {
-        "schema_version": 2,
+        "schema_version": 3,
         "protocol": "MS",
         "attack_protocol": ATTACK_PROTOCOL_VERSION,
         "comparison_scope": "standalone_reproduction",
@@ -428,20 +464,24 @@ def main() -> int:
         "surrogate_initialization": "official_backbone_fresh_private_state",
         "topology": topology,
         "query_budget": args.budget,
+        "query_partition": query_partition.to_metadata(),
+        "query_sampler_seed": args.seed,
         "label_mode": args.label_mode,
         "query_transform": "test",
         "lr_step": args.lr_step,
         "training_mode": args.training_mode,
         "protection": protection,
-        "primary": {"checkpoint": "end.pth", "epoch": args.epochs},
-        "diagnostic_best": {"metric": "surrogate_acc", "epoch": best_epoch},
-        "best": best_metrics,
-        "end": end_metrics,
-        "whitebox": whitebox_metrics,
+        "primary": {
+            "checkpoint": "best.pth",
+            "epoch": selected_epoch,
+            "selection_metric": selection["metric"],
+        },
+        "selection": selection,
+        "result": {**result_metrics, "eval_passes": 1},
+        "whitebox": {**whitebox_metrics, "eval_passes": 1},
     }
     write_json(metrics_path, metrics_payload)
     print(f"[INFO] best checkpoint: {weights_run / 'best.pth'}")
-    print(f"[INFO] end checkpoint: {weights_run / 'end.pth'}")
     print(f"[INFO] 原始指标: {metrics_path}")
     return 0
 

@@ -20,20 +20,20 @@ from .config import REPO_ROOT
 INDEX_FIELDS = [
     "artifact_id", "plan_id", "run_id", "attack_protocol", "dataset", "victim_model", "defense",
     "protected_layer_count", "source_ratio", "training_mode", "label_mode", "query_transform",
-    "query_budget", "lr_step",
+    "query_budget", "query_train_size", "query_validation_size", "query_split_seed",
+    "query_sampler_seed", "lr_step",
     "protected_unit_count", "protection_mask_sha256", "protected_scalar_count", "protected_param_count",
-    "total_param_count", "protected_param_ratio", "head_mode", "primary_checkpoint", "primary_epoch", "best_epoch",
+    "total_param_count", "protected_param_ratio", "head_mode", "primary_checkpoint", "primary_epoch",
+    "selection_metric", "validation_loss", "validation_match",
     "eval_count", "victim_correct",
     "surrogate_correct", "agreement_count", "victim_acc", "surrogate_acc", "fidelity", "posterior_kl_sum",
     "posterior_kl", "metrics_path",
 ]
 HISTORY_FIELDS = [
     "epoch", "learning_rate", "query_count", "query_loss_sum", "query_loss", "query_match_count", "query_match",
-    "eval_count", "victim_correct", "surrogate_correct", "agreement_count", "victim_acc", "surrogate_acc",
-    "fidelity", "posterior_kl_sum", "posterior_kl",
+    "validation_count", "validation_loss", "validation_kl", "validation_match_count",
+    "validation_match", "is_best",
 ]
-
-
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as reader:
@@ -117,7 +117,12 @@ def write_history_row(path: Path, row: dict[str, object], initialize: bool = Fal
             writer.writerow(row)
 
 
-def update_index(path: Path, row: dict[str, object]) -> None:
+def update_index(
+    path: Path,
+    row: dict[str, object],
+    *,
+    replace_incompatible: bool = False,
+) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     directory_fd = os.open(path.parent, os.O_RDONLY)
     temporary_path = path.with_name(f".{path.name}.{os.getpid()}.tmp")
@@ -128,13 +133,15 @@ def update_index(path: Path, row: dict[str, object]) -> None:
             with path.open("r", newline="", encoding="utf-8") as reader_file:
                 reader = csv.DictReader(reader_file, delimiter="\t")
                 if reader.fieldnames != INDEX_FIELDS:
-                    raise ValueError(f"结果索引字段不兼容：{path}")
-                rows = [
-                    existing
-                    for existing in reader
-                    if existing["run_id"] != row["run_id"]
-                    and existing["artifact_id"] != row["artifact_id"]
-                ]
+                    if not replace_incompatible:
+                        raise ValueError(f"结果索引字段不兼容：{path}")
+                else:
+                    rows = [
+                        existing
+                        for existing in reader
+                        if existing["run_id"] != row["run_id"]
+                        and existing["artifact_id"] != row["artifact_id"]
+                    ]
         rows.append({name: str(row[name]) for name in INDEX_FIELDS})
         rows.sort(key=lambda existing: existing["artifact_id"])
         with temporary_path.open("w", newline="", encoding="utf-8") as writer_file:

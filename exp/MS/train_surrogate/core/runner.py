@@ -6,6 +6,7 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
+import shutil
 
 import torch
 import torch.nn as nn
@@ -19,6 +20,7 @@ from .config import (
     resolve_attack_protocol,
     resolve_device,
     validate_attack_configuration,
+    validate_formal_hyperparameters,
 )
 
 from common.trainer import (  # noqa: E402
@@ -40,17 +42,20 @@ from .artifacts import (
     write_history_row,
     write_json,
 )
-from .data import build_eval_dataset, build_query_dataset, build_victim, load_query_targets
-from .engine import collect_eval_reference, evaluate_surrogate, train_one_epoch
+from .data import (
+    build_eval_dataset,
+    build_query_partition_datasets,
+    build_victim,
+    load_query_targets,
+    make_query_partition,
+)
+from .engine import collect_eval_reference, evaluate_surrogate, select_validation_best
 from .planning import resolve_plan_configuration, validate_built_plan
 
 
 def main() -> int:
     args = parse_args()
-    if args.epochs <= 0:
-        raise ValueError("epochs 必须大于 0。")
-    if args.batch_size <= 0 or args.eval_batch_size <= 0:
-        raise ValueError("batch_size 和 eval_batch_size 必须大于 0。")
+    validate_formal_hyperparameters(args)
     dataset_name = resolve_dataset_name(args.dataset)
     model_name = args.model
     validate_attack_configuration(
@@ -112,15 +117,15 @@ def main() -> int:
         initialization_seed=args.seed,
     )
     validate_built_plan(plan_config, protection_plan)
-    query_dataset = build_query_dataset(
+    query_partition = make_query_partition(query_indices, seed=args.seed)
+    query_train_dataset, query_validation_dataset = build_query_partition_datasets(
         dataset_name,
         dataset_root,
         query_indices,
         query_posteriors,
         query_labels,
-        input_transform="test",
+        query_partition,
     )
-    eval_dataset = build_eval_dataset(dataset_name, dataset_root, protocol_root, args.eval_subset)
 
     victim_sha256 = sha256_file(victim_checkpoint)
     expected_sha256 = query_manifest.get("victim", {}).get("checkpoint_sha256")
@@ -159,6 +164,14 @@ def main() -> int:
         "head_mode": protection_plan.head_mode,
         **plan_run_config,
         "budget": args.budget,
+        "query_train_size": query_partition.train_size,
+        "query_validation_size": query_partition.validation_size,
+        "query_split_seed": args.seed,
+        "query_split_seed_offset": query_partition.seed_offset,
+        "query_train_ranks_sha256": query_partition.to_metadata()["train_ranks_sha256"],
+        "query_validation_ranks_sha256": (
+            query_partition.to_metadata()["validation_ranks_sha256"]
+        ),
         "training_mode": execution_mode,
         "label_mode": args.label_mode,
         "epochs": args.epochs,
@@ -185,6 +198,10 @@ def main() -> int:
     print(f"[INFO] 模型与数据集: {model_name}+{dataset_name}")
     print(f"[INFO] 保护策略: {args.defense}")
     print(f"[INFO] query budget: {args.budget}")
+    print(
+        f"[INFO] query train/validation: "
+        f"{query_partition.train_size}/{query_partition.validation_size}"
+    )
     print(f"[INFO] 标签模式: {args.label_mode}")
     print(f"[INFO] 攻击协议: {attack_protocol}")
     print(f"[INFO] 训练模式: {execution_mode}")
@@ -202,7 +219,6 @@ def main() -> int:
         f"[INFO] victim 参数保护: {protection_plan.protected_param_count}/"
         f"{protection_plan.total_param_count} ({protection_plan.protected_param_ratio:.6f})"
     )
-    print(f"[INFO] eval_ms 样本数: {len(eval_dataset)}")
     if args.dry_run:
         print("[INFO] dry-run 完成，未写入训练产物。")
         return 0
@@ -215,6 +231,9 @@ def main() -> int:
         raise FileExistsError(
             f"artifact_id={artifact_id} 已存在；使用 --overwrite 重新运行。"
         )
+    if args.overwrite:
+        shutil.rmtree(weights_run, ignore_errors=True)
+        shutil.rmtree(results_run, ignore_errors=True)
     weights_run.mkdir(parents=True, exist_ok=True)
     results_run.mkdir(parents=True, exist_ok=True)
     protection_mask_path = weights_run / "protection_mask.pt"
@@ -222,7 +241,6 @@ def main() -> int:
 
     device = resolve_device(args.device)
     pin_memory = device.type == "cuda"
-    victim_model = victim_model.to(device)
     surrogate_model = surrogate_model.to(device)
     trainable_parameters = [parameter for parameter in surrogate_model.parameters() if parameter.requires_grad]
     optimizer = (
@@ -241,8 +259,8 @@ def main() -> int:
         else None
     )
 
-    query_loader = DataLoader(
-        query_dataset,
+    query_train_loader = DataLoader(
+        query_train_dataset,
         batch_size=args.batch_size,
         shuffle=True,
         num_workers=args.num_workers,
@@ -250,8 +268,8 @@ def main() -> int:
         worker_init_fn=seed_worker,
         generator=build_generator(args.seed),
     )
-    eval_loader = DataLoader(
-        eval_dataset,
+    query_validation_loader = DataLoader(
+        query_validation_dataset,
         batch_size=args.eval_batch_size,
         shuffle=False,
         num_workers=args.num_workers,
@@ -259,7 +277,6 @@ def main() -> int:
         worker_init_fn=seed_worker,
         generator=build_generator(args.seed, offset=1),
     )
-    reference = collect_eval_reference(victim_model, eval_loader, device)
 
     protection_metadata = {
         **protection_plan.to_metadata(),
@@ -271,6 +288,7 @@ def main() -> int:
         "surrogate_initialization": "formal_victim_then_public_v1",
         "surrogate_initialization_seed": args.seed,
         "query_sampler_seed": args.seed,
+        "query_partition": query_partition.to_metadata(),
         "artifact_id": artifact_id,
         "run_id": run_id,
         "device": str(device),
@@ -291,64 +309,50 @@ def main() -> int:
     history_path = weights_run / "train.log.tsv"
     write_history_row(history_path, {}, initialize=True)
 
-    best_epoch = -1
-    best_metrics: dict[str, int | float] | None = None
-    end_metrics: dict[str, int | float] | None = None
-    if optimizer is None:
-        train_metrics = {
-            "query_count": 0,
-            "query_loss_sum": 0.0,
-            "query_loss": 0.0,
-            "query_match_count": 0,
-            "query_match": 0.0,
-        }
-        end_metrics = evaluate_surrogate(surrogate_model, eval_loader, reference, device)
-        best_metrics = end_metrics
-        best_epoch = 0
-        row = {"epoch": 0, "learning_rate": 0.0, **train_metrics, **end_metrics}
+    selection, history = select_validation_best(
+        surrogate_model,
+        query_train_loader if optimizer is not None else None,
+        query_validation_loader,
+        optimizer,
+        scheduler,
+        device,
+        args.label_mode,
+        args.epochs,
+        query_partition.validation_size,
+    )
+    for row in history:
         write_history_row(history_path, row)
-        save_checkpoint(
-            weights_run / "best.pth", surrogate_model, None, None, 0,
-            model_name, dataset_name, run_id, attack_protocol, best_metrics,
-        )
-    else:
-        for epoch in range(1, args.epochs + 1):
-            learning_rate = optimizer.param_groups[0]["lr"]
-            train_metrics = train_one_epoch(
-                surrogate_model,
-                query_loader,
-                optimizer,
-                device,
-                args.label_mode,
-                epoch,
-                args.epochs,
-                None,
-            )
-            end_metrics = evaluate_surrogate(surrogate_model, eval_loader, reference, device)
-            scheduler.step()
-            row = {"epoch": epoch, "learning_rate": learning_rate, **train_metrics, **end_metrics}
-            write_history_row(history_path, row)
-            print(
-                f"[EVAL] epoch={epoch:03d} surrogate_acc={end_metrics['surrogate_acc']:.6f} "
-                f"fidelity={end_metrics['fidelity']:.6f} posterior_kl={end_metrics['posterior_kl']:.6f}"
-            )
-            if best_metrics is None or end_metrics["surrogate_acc"] > best_metrics["surrogate_acc"]:
-                best_metrics = dict(end_metrics)
-                best_epoch = epoch
-                save_checkpoint(
-                    weights_run / "best.pth", surrogate_model, optimizer, scheduler, epoch,
-                    model_name, dataset_name, run_id, attack_protocol, best_metrics,
-                )
-
-    assert best_metrics is not None and end_metrics is not None
-    end_epoch = args.epochs if optimizer is not None else 0
+    selected_epoch = int(selection["epoch"])
     save_checkpoint(
-        weights_run / "end.pth", surrogate_model, optimizer, scheduler, end_epoch,
-        model_name, dataset_name, run_id, attack_protocol, end_metrics,
+        weights_run / "best.pth",
+        surrogate_model,
+        None,
+        None,
+        selected_epoch,
+        model_name,
+        dataset_name,
+        run_id,
+        attack_protocol,
+        selection,
     )
 
+    # checkpoint 固定后才首次构造和迭代 eval_ms。
+    eval_dataset = build_eval_dataset(dataset_name, dataset_root, protocol_root, None)
+    eval_loader = DataLoader(
+        eval_dataset,
+        batch_size=args.eval_batch_size,
+        shuffle=False,
+        num_workers=args.num_workers,
+        pin_memory=pin_memory,
+        worker_init_fn=seed_worker,
+        generator=build_generator(args.seed, offset=2),
+    )
+    victim_model = victim_model.to(device)
+    reference = collect_eval_reference(victim_model, eval_loader, device)
+    result_metrics = evaluate_surrogate(surrogate_model, eval_loader, reference, device)
+
     metrics_payload = {
-        "schema_version": 2,
+        "schema_version": 3,
         "protocol": "MS",
         "attack_protocol": attack_protocol,
         "artifact_id": artifact_id,
@@ -368,12 +372,16 @@ def main() -> int:
         "surrogate_initialization": "formal_victim_then_public_v1",
         "surrogate_initialization_seed": args.seed,
         "query_sampler_seed": args.seed,
+        "query_partition": query_partition.to_metadata(),
         **plan_run_config,
         "protection": protection_metadata,
-        "primary": {"checkpoint": "end.pth", "epoch": end_epoch},
-        "diagnostic_best": {"metric": "surrogate_acc", "epoch": best_epoch},
-        "best": best_metrics,
-        "end": end_metrics,
+        "primary": {
+            "checkpoint": "best.pth",
+            "epoch": selected_epoch,
+            "selection_metric": selection["metric"],
+        },
+        "selection": selection,
+        "result": {**result_metrics, "eval_passes": 1},
     }
     metrics_path = results_run / "metrics.json"
     write_json(metrics_path, metrics_payload)
@@ -393,6 +401,10 @@ def main() -> int:
         "label_mode": args.label_mode,
         "query_transform": query_transform,
         "query_budget": args.budget,
+        "query_train_size": query_partition.train_size,
+        "query_validation_size": query_partition.validation_size,
+        "query_split_seed": args.seed,
+        "query_sampler_seed": args.seed,
         "lr_step": args.lr_step,
         "protected_unit_count": protection_plan.protected_unit_count,
         "protection_mask_sha256": protection_plan.protection_mask_sha256,
@@ -405,14 +417,19 @@ def main() -> int:
         "total_param_count": protection_plan.total_param_count,
         "protected_param_ratio": protection_plan.protected_param_ratio,
         "head_mode": protection_plan.head_mode,
-        "primary_checkpoint": "end.pth",
-        "primary_epoch": end_epoch,
-        "best_epoch": best_epoch,
-        **end_metrics,
+        "primary_checkpoint": "best.pth",
+        "primary_epoch": selected_epoch,
+        "selection_metric": selection["metric"],
+        "validation_loss": selection["validation_loss"],
+        "validation_match": selection["validation_match"],
+        **result_metrics,
         "metrics_path": display_path(metrics_path),
     }
-    update_index(results_root / "metrics.tsv", index_row)
+    update_index(
+        results_root / "metrics.tsv",
+        index_row,
+        replace_incompatible=True,
+    )
     print(f"[INFO] best checkpoint: {weights_run / 'best.pth'}")
-    print(f"[INFO] end checkpoint: {weights_run / 'end.pth'}")
     print(f"[INFO] 原始指标: {metrics_path}")
     return 0

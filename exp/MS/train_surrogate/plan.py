@@ -20,7 +20,12 @@ for path in (ROOT, TRAIN_VICTIM_ROOT):
 from common.trainer import configure_reproducibility  # noqa: E402
 from core.artifacts import display_path, sha256_file  # noqa: E402
 from core.config import ATTACK_PROTOCOL_VERSION  # noqa: E402
-from core.data import build_victim  # noqa: E402
+from core.data import (
+    QUERY_SPLIT_SEED_OFFSET,
+    build_victim,
+    make_query_partition,
+    read_query_indices,
+)  # noqa: E402
 from defense import (  # noqa: E402
     build_mask_selection,
     build_public_model as build_seeded_public_model,
@@ -130,6 +135,10 @@ def main() -> int:
     protocol_manifest = json.loads(protocol_manifest_path.read_text(encoding="utf-8"))
     if protocol_manifest.get("query", {}).get("max_budget") != QUERY_BUDGET:
         raise ValueError("C100 manifest 的正式 query budget 不再是 500。")
+    query_partition = make_query_partition(
+        read_query_indices(ROOT / "dataset" / "MS", DATASET_NAME)[:QUERY_BUDGET],
+        seed=SEED,
+    )
 
     configure_reproducibility(SEED, deterministic=True)
     victim_model, _ = build_victim(MODEL_NAME, NUM_CLASSES, victim_path)
@@ -198,10 +207,18 @@ def main() -> int:
         "dataset": DATASET_NAME,
         "seed": SEED,
         "query_budget": QUERY_BUDGET,
+        "query_train_size": query_partition.train_size,
+        "query_validation_size": query_partition.validation_size,
+        "query_split_seed": SEED,
+        "query_split_seed_offset": QUERY_SPLIT_SEED_OFFSET,
+        "query_partition": query_partition.to_metadata(),
         "label_mode": "soft",
         "query_transform": "test",
         "training_mode": "finetune",
-        "primary_checkpoint": "end.pth",
+        "primary_checkpoint": "best.pth",
+        "checkpoint_selection": "minimum_validation_soft_cross_entropy",
+        "checkpoint_tie_break": "earliest_epoch",
+        "eval_ms_passes": 1,
         "training_hyperparameters": {
             "epochs": EPOCHS,
             "batch_size": BATCH_SIZE,

@@ -6,10 +6,10 @@
 
 ```text
 victim.json    source、teacher、full、pruned 的效用、剪枝判断与成本
-metrics.json   已知剪枝拓扑的黑盒攻击、诊断 checkpoint 与实际白盒评估
+metrics.json   已知剪枝拓扑的 validation-best 黑盒攻击与实际白盒评估
 ```
 
-## Defended Victim
+## 受保护 Victim
 
 | 阶段 | checkpoint | eval_ms accuracy | 相对 source fidelity |
 |---|---|---:|---:|
@@ -34,10 +34,9 @@ full 模型的内部验证 accuracy 为 `0.7632`，容忍阈值为 `0.755568`。
 
 黑盒 surrogate 使用最终 8 条活跃 proxy 的相同剪枝拓扑、公开 ImageNet backbone 和 fresh 私有状态。白盒重新加载最终 victim 的完整状态并实际评估。
 
-| 能力与 checkpoint | epoch | accuracy | fidelity | posterior KL |
-|---|---:|---:|---:|---:|
-| black-box `end.pth`（主结果） | 100 | 0.1619 | 0.1784 | 3.251131 |
-| black-box `best.pth`（训练诊断） | 69 | 0.1638 | 0.1797 | 3.258412 |
-| white-box full state（实际评估） | - | 0.7578 | 1.0000 | 0.0000000005 |
+| 能力与 checkpoint | epoch | validation loss | accuracy | fidelity | posterior KL |
+|---|---:|---:|---:|---:|---:|
+| black-box `best.pth` | 92 | 3.674704 | 0.1580 | 0.1698 | 3.342776 |
+| white-box full state（实际评估） | - | - | 0.7578 | 1.0000 | 0.0000000004 |
 
-主结果固定读取第 100 轮 `end.pth`。`best.pth` 只用于观察训练过程，不参与正式选模。白盒 posterior KL 原始值为 `4.814928395546758e-10`，来自相同状态重复前向时的浮点误差。
+黑盒在 500 条 query 内使用与普通正式 surrogate 相同的固定 400/100 划分，按 validation soft cross-entropy 选择最早的最优 `best.pth`；`eval_ms` 不参与选模，只在 checkpoint 固定后完整评估一次。正式产物不再保存 surrogate `end.pth`。白盒 posterior KL 原始值为 `3.598613115940452e-10`，来自相同状态重复前向时的浮点误差。

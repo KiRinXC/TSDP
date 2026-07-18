@@ -47,7 +47,7 @@ MS victim 只读取 canonical `victim_train`。当前 `reference_random_overlap`
 
 模型默认加载 `weights/pre_train/` 下的 ImageNet-1K 官方预训练权重，并替换最后分类层。
 
-普通 victim 不另划 validation split。为保持与 TensorShield、TEESlice 两个参考仓库的 victim 训练风格一致，训练期间每轮在 `eval_ms` 上评估，accuracy 最高的 checkpoint 保存为 `best.pth` 并用于后续 query；第 100 轮状态另存为 `end.pth`。这项规则只描述 victim 的固定方式，不能外推到 surrogate：正式 MS 结果仍统一读取 surrogate `end.pth`，其 `best.pth` 只用于诊断。
+普通 victim 不另划 validation split。为保持与 TensorShield、TEESlice 两个参考仓库的 victim 训练风格一致，训练期间每轮在 `eval_ms` 上评估，accuracy 最高的 checkpoint 保存为 `best.pth` 并用于后续 query；第 100 轮状态另存为 `end.pth`。这项规则只描述 victim 的固定方式，不能外推到 surrogate：正式 surrogate 使用 query 内部 validation loss 选择最早的最优 `best.pth`，`eval_ms` 不参与选模且只在 checkpoint 固定后完整评估一次。
 
 ## 输入尺寸协议
 

@@ -37,7 +37,7 @@ dataset/MS/<dataset>/
 
 ## 生成伪标签
 
-先完成对应 victim 训练。普通 victim 不单独划分 validation split；训练入口沿用两个参考仓库的风格，在 `eval_ms` 上逐轮评估并保存 accuracy 最高的 `best.pth`。查询阶段只允许加载该 `best.pth`，不会使用最后一个 epoch 的 `end.pth`。这里的 victim 选模规则不适用于 surrogate 正式结果：surrogate 仍以固定训练终点 `end.pth` 为主结果。
+先完成对应 victim 训练。普通 victim 不单独划分 validation split；训练入口沿用两个参考仓库的风格，在 `eval_ms` 上逐轮评估并保存 accuracy 最高的 `best.pth`。查询阶段只允许加载该 `best.pth`，不会使用最后一个 epoch 的 `end.pth`。这里的 victim 选模规则不适用于 surrogate：正式 surrogate 在 query 内部划分出的 validation subset 上按 loss 选择最早的最优 `best.pth`，再到 `eval_ms` 完整评估一次，不保存 surrogate `end.pth`。
 
 ```bash
 "$HOME/venvs/dl-py310-torch210-cu121/bin/python" exp/MS/transfer/get_label.py resnet18 c100

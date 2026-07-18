@@ -1,155 +1,91 @@
-# 攻击可恢复性残差割验证
+# 交叉残差与因果残差临时验证
 
-本目录验证 Attack-Recoverability Cut（ARC）。它是临时科研验证，不属于
-`exp/` 或 `lab/` 正式入口，也不会写入正式 `results/`、`weights/` 或主
-`metrics.tsv`。
+本目录只保留两条仍在验证的 filter 级保护思路：
 
-上一轮按一般 victim-public 功能残差选择节点，在 5% producer-only 保护下只得到
-`0.4083/0.4679/1.498233`；增加直接 consumer 输入切片后，9.7901% 保护也只有
-`0.4066/0.4658/1.511940`。这些实现和产物已经删除。本实验不再扩大闭包，而是把
-选块目标改为攻击者训练后的恢复能力。
+1. `residual.py`：计算公开预训练模型与受害者模型的四路交叉前向残差；
+2. `causal.py`：把局部交叉残差通过受害者模型的下游计算图投影到最终 posterior；
+3. `attack.py`：在相同卷积参数预算下分别保护两种分数选出的 filter，并按统一
+   MS 协议直接比较保护效果。
 
-## 单一目标
+早期 ARC、REC 门优化、入口层、尾部层、Shapley、独立 XAI tensor/block 等探索已经
+失效并删除。需要追溯时使用 Git 历史，不在 `temp/` 中保留兼容脚本或旧产物。
 
-设 `m_j=1` 表示保护通道块 `j`。内部 shadow surrogate 的有效参数为：
+## 残差定义
 
-```text
-theta_shadow = theta_public
-             + (1 - m) * (theta_victim - theta_public)
-             + delta_attack
-```
-
-分类头始终完整保护，因此从目标类别随机初始化开始，只通过 `delta_attack` 学习。
-内部攻击者在 discovery query 上最小化 soft-posterior cross-entropy；门在攻击者未
-查询的 discovery holdout 上最大化同一个损失。soft cross-entropy 与
-`KL(victim || shadow)` 只相差固定的 victim posterior entropy，因此选块没有拼接
-其他 XAI、权重或激活评分。
-
-优化采用 first-order 交替近似：每个 query batch 先更新一次攻击者，再用一个互不
-重叠的 holdout batch 更新一次门。门使用温度退火的 sigmoid、固定参数预算投影和
-二值化正则，最终一次性硬化为全局静态掩码。内部 shadow 选择阶段固定 BN 运行状态
-并使用 eval forward；由于 PyTorch 不支持对 BN `running_mean/var` 求梯度，选择阶段
-对二者使用 stop-gradient，但硬化后仍随配对通道一起保护。最终 MS 验证仍使用当前
-正式 train-mode BN 协议。
-
-## 图对齐比例块
-
-候选节点建立在 ResNet18 的 feature graph 上，而不是 122 个 tensor unit：
+对同一张图像和同一卷积位置，记公开权重/公开输入、受害者权重/受害者输入产生的
+pre-BN 输出为 `PP`、`PV`、`VP`、`VV`。逐 filter 的局部 weight 残差为：
 
 ```text
-stem 输出                    1 组
-8 个 BasicBlock 的 conv1     8 组
-8 个 BasicBlock 的残差输出    8 组
-合计                         17 组
+R_weight = 0.5 * ((PV - PP) + (VV - VP))
 ```
 
-每组选择能整除通道数的 2 的幂作为块大小，使块数量最接近 16：
+`residual.py` 使用 `mean(abs(R_weight))` 作为交叉残差分数。`causal.py` 则把
+`R_weight` 从当前卷积输出移除再逐步注回，并以受害者 posterior KL 为目标计算
+residual conductance；绝对 conductance 的样本均值作为因果残差分数。
 
-| 输出通道数 | 块大小 | 块数量 |
-|---:|---:|---:|
-| 64 | 4 | 16 |
-| 128 | 8 | 16 |
-| 256 | 16 | 16 |
-| 512 | 32 | 16 |
-
-因此共有 272 个全局候选块。downsample 的相同输出通道范围与对应 BasicBlock 残差
-输出共享一个门，不作为游离节点。一个块保护 producer Conv 输出 filters、配对 BN
-affine 与运行状态；分类头 weight 和 bias 固定完整保护。所有块进入同一个实际参数
-预算，不要求每层被选中。
+交叉残差的测量边界不包含 BN。因果投影的后续计算包含 BN、残差连接和分类头。
 
 ## 数据隔离
 
-节点选择不读取正式 `query_pool_ms` 的 posterior 或任何 MS 结果。首先从
-`victim_train` 中排除全部 500 个正式 `query_pool_ms` 索引，再按 seed 42 固定抽取：
+固定 500 条 `query_pool_ms` 先按 seed 42 拆成 400 条 query-train 与 100 条
+query-validation：
+
+- 两种 filter 分数只读取 400 条 query-train 图像，不读取标签或保存的 posterior；
+- 100 条 query-validation 只用于 surrogate checkpoint 选择，不参与 filter 排名；
+- 10,000 条 `eval_ms` 不参与选择，只在每个 case 的 checkpoint 固定后评估一次。
+
+## 保护与 MS 协议
+
+两种方法使用相同的 `239,616` 个卷积权重参数预算。filter 按分数降序遍历，只有
+在剩余预算可容纳整个 filter 时才纳入。除此之外固定完整保护：
+
+- 分类头 weight 与 bias，共 51,300 个参数；
+- 全部 20 个 BN gamma，共 4,800 个参数。
+
+surrogate 使用 `formal_victim_then_public_v1` 初始化轨迹。未保护状态由 victim
+直接暴露，保护状态保持公开初始化；随后与正式部分保护攻击一致，对整个 surrogate
+进行联合微调。MS 固定为：
 
 ```text
-discovery query       500 个样本，仅供内部 shadow 更新
-discovery holdout    4096 个样本，仅供保护门更新
-正式 query_pool_ms    500 个样本，只在掩码固定后运行最终 MS
-正式 eval_ms        10000 个样本，只在最终 MS 评估时读取
+label                  soft posterior
+query train/validation 400 / 100
+最大 epoch             100
+batch size             64
+优化器                 SGD，lr=0.01，momentum=0.5，weight_decay=5e-4
+调度器                 StepLR，step_size=60，gamma=0.1
+checkpoint             validation soft cross-entropy 最低的最早 epoch
+最终评估               checkpoint 固定后对 eval_ms 评估一次
 ```
 
-三个集合的 source index 必须互不重叠。discovery 数据只使用 victim 在线生成的
-posterior，不保存或读取正式 `dataset/MS/c100/resnet18/posteriors.pt`。
-
-## 固定协议
-
-```text
-模型与数据集           ResNet18 + CIFAR-100
-victim                 weights/MS/victim/resnet18/c100/best.pth
-公开初始化             weights/pre_train/resnet18-5c106cde.pth
-随机种子               42
-随机初始化轨迹         formal_victim_then_public_v1
-总参数保护上限         8%，包含完整分类头
-候选块                 17 组 × 16 块，共 272 块
-shadow discovery       100 epoch，query/holdout batch size 64
-shadow 优化器          SGD，lr=0.01，momentum=0.5，weight_decay=5e-4
-shadow 调度            第 60 轮后学习率乘 0.1
-门优化器               Adam，lr=0.02
-门温度                 2.0 退火到 0.1
-门二值正则             0.01 × 参数成本加权的 m(1-m)
-正式 MS query          query_pool_ms 固定前 500 个样本
-正式 MS 输出           victim 完整 softmax posterior
-正式 MS 训练           SGD，100 epoch，batch size 64，lr=0.01
-正式 MS 调度           第 60 轮后学习率乘 0.1
-正式主评估点           第 100 轮 end
-```
-
-8% 点低于 TensorShield 的 8.9934%，先用于判断攻击恢复目标能否达到相近安全效果。
-只有该点有效，后续才继续压缩到 5% 和 3%。
+图中同时给出正式 white-box、soft 黑盒、hard 黑盒和 TensorShield 参考；其中部分
+保护策略与 soft 黑盒共享 soft-posterior 攻击训练，hard 黑盒仅作为 label-only
+下界参考。
 
 ## 运行
 
-只核对输入哈希、图块、参数覆盖、数据隔离和预算，不训练或写产物：
-
 ```bash
-PYTHONDONTWRITEBYTECODE=1 \
-  "$HOME/venvs/dl-py310-torch210-cu121/bin/python" temp/run.py --dry-run
+"$HOME/venvs/dl-py310-torch210-cu121/bin/python" temp/residual.py --overwrite
+"$HOME/venvs/dl-py310-torch210-cu121/bin/python" temp/causal.py --overwrite
+"$HOME/venvs/dl-py310-torch210-cu121/bin/python" temp/attack.py --overwrite
 ```
 
-完整运行：
+三个入口的 `--dry-run` 都不会训练或读取 `eval_ms`。输出统一写入
+`temp/output/`；该目录不进入正式 `results/MS/`、`weights/MS/` 或主汇总表。
 
-```bash
-PYTHONDONTWRITEBYTECODE=1 \
-  "$HOME/venvs/dl-py310-torch210-cu121/bin/python" temp/run.py
-```
+## 当前结果
 
-如果选块已经完成而最终 MS 因进程中断，可只消费已固定且摘要核对通过的掩码恢复：
-
-```bash
-PYTHONDONTWRITEBYTECODE=1 \
-  "$HOME/venvs/dl-py310-torch210-cu121/bin/python" temp/run.py --final-only
-```
-
-产物全部写入 `temp/output/`：
+400 张 query-train 图像重算后，两种方法的卷积预算几乎完全用满；加入完整分类头与
+全部 BN gamma 后，总保护比例均为 `2.6336%`：
 
 ```text
-output/
-├── mask.pt          ARC 静态保护掩码
-├── selection.json   图块、数据隔离、选择协议与最终块清单
-├── selection.tsv    每轮 shadow/门优化记录
-├── attack.tsv       每轮正式 surrogate query 训练记录
-├── end.pth          第 100 轮临时 surrogate checkpoint，仅本地生成并由 Git 忽略
-└── metrics.json     正式 MS end 指标及现有基线比较
+方法             filter 数  卷积参数  best  accuracy  fidelity  posterior KL
+交叉残差              300     239587    90   0.1846    0.2016       2.569087
+因果残差              208     239594    90   0.1627    0.1803       2.720244
+TensorShield            -    1009704    93   0.1728    0.1865       2.694492
+soft 黑盒               -          -    45   0.1390    0.1463       3.039817
 ```
 
-## 本轮结果
-
-8% 单点已经按上述协议完成。硬化后选择 37/272 个块，分布在 17 个 feature group
-中的 10 组；它没有要求每层都有块。分类头与通道块共保护 897,796/11,227,812 个
-参数，即 7.9962%。掩码 SHA256 为
-`be1a5bb25a7401ce0db7f0d91dfd01a48c434b48cd157be7b54b7ec6ff91c1a5`。
-
-| 策略 | 参数保护比例 | MS accuracy | fidelity | posterior KL |
-|---|---:|---:|---:|---:|
-| full protection（soft black-box） | 100% | 0.1545 | 0.1610 | 2.835290 |
-| TensorShield | 8.9934% | 0.1913 | 0.2099 | 2.505831 |
-| ARC（本轮） | 7.9962% | 0.2694 | 0.2968 | 2.133637 |
-| head only | 0.4569% | 0.4404 | 0.5135 | 1.347578 |
-
-ARC 明显强于只保护分类头，但没有达到 TensorShield 或 soft black-box 水平，因此
-当前规则未通过 8% scientific gate，不继续跑 5% 和 3%。这不能否定攻击依赖路径
-本身：本轮只把可训练门放在计算图对齐节点上，并未建立显式边变量、残差注入传播
-或连通路径约束。它否定的是“独立节点门 + first-order recoverability 目标已经足够”
-这一具体规则。后续若继续，应先把门改为由计算图边传播得到的静态路径，再重新做同一
-8% 单点，不能直接增加多个代理分数。
+因果残差在相同 filter 预算下三项均优于直接交叉残差，并且以更低保护比例三项均优于
+TensorShield，说明“沿下游计算图衡量局部残差对最终 posterior 的贡献”确实增加了
+有用信息。不过它仍未达到 soft 黑盒，当前结论只是因果分数值得继续扩展为跨层连通
+通道块路径，不是方法已经完成。

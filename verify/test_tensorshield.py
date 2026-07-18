@@ -242,6 +242,76 @@ class TensorShieldAblationTests(unittest.TestCase):
                 self.assertEqual(protection_mask_sha256(masks), expected_hash)
 
 
+class TensorShieldCandidateTests(unittest.TestCase):
+    def test_three_multiseed_strategies_are_controlled_comparisons(self):
+        candidate = load_lab04_module("candidate")
+        model = imagenet_models.resnet18(num_classes=100)
+        selected, kept_weights, bn_gamma = candidate.build_candidate(model)
+        self.assertEqual(candidate.SELECTION_SEED, 42)
+        self.assertEqual(candidate.EVALUATION_SEEDS, tuple(range(43, 53)))
+        self.assertEqual(
+            candidate.STRATEGY_CASES,
+            (
+                "tensorshield_top10",
+                "tensorshield_top10_bn_gamma",
+                "candidate_drop_05_08_10_bn_gamma",
+            ),
+        )
+        self.assertEqual(candidate.KEPT_ELIGIBLE_RANKS, (1, 2, 3, 4, 6, 7, 9))
+        self.assertEqual(candidate.DROPPED_TOP10_RANKS, (5, 8, 10))
+        self.assertIn("layer2.1.conv1.weight", selected)
+        self.assertIn("layer2.0.conv2.weight", selected)
+        self.assertNotIn("layer1.1.conv2.weight", selected)
+        self.assertNotIn("layer1.0.conv2.weight", selected)
+        self.assertNotIn("layer2.1.conv2.weight", selected)
+        self.assertEqual(len(kept_weights), 7)
+        self.assertEqual(len(bn_gamma), 20)
+        self.assertEqual(len(selected), 28)
+
+        units = {
+            unit.state_name: unit for unit in build_resnet18_tensor_units(model)
+        }
+        selected_indices = tuple(units[name].index for name in selected)
+        masks = build_unit_masks(model, selected_indices)
+        self.assertEqual(
+            sum(units[name].numel for name in selected),
+            candidate.EXPECTED_STATS[candidate.CANDIDATE_CASE][1],
+        )
+        self.assertTrue(bool(masks["last_linear.weight"].all()))
+        self.assertTrue(bool(masks["last_linear.bias"].all()))
+        self.assertTrue(bool(masks["layer2.1.conv1.weight"].all()))
+        self.assertTrue(bool(masks["layer2.0.conv2.weight"].all()))
+        self.assertEqual(
+            protection_mask_sha256(masks),
+            "7f62208e2137a86a36c55c0e9a1d272d7e34cd99001499c6b5fa95087bdae557",
+        )
+
+        top10, top10_weights, top10_gamma = candidate.build_strategy_states(
+            model,
+            candidate.STRATEGY_BY_NAME[candidate.TOP10_CASE],
+        )
+        top10_bn, top10_bn_weights, top10_bn_gamma = (
+            candidate.build_strategy_states(
+                model,
+                candidate.STRATEGY_BY_NAME[candidate.TOP10_BN_CASE],
+            )
+        )
+        self.assertEqual(top10_weights, top10_bn_weights)
+        self.assertEqual(top10_gamma, ())
+        self.assertEqual(len(top10_bn_gamma), 20)
+        self.assertEqual(set(top10_bn) - set(top10), set(top10_bn_gamma))
+        self.assertIn("last_linear.bias", top10)
+        self.assertIn("last_linear.bias", top10_bn)
+        self.assertEqual(
+            (len(top10), sum(units[name].numel for name in top10)),
+            candidate.EXPECTED_STATS[candidate.TOP10_CASE],
+        )
+        self.assertEqual(
+            (len(top10_bn), sum(units[name].numel for name in top10_bn)),
+            candidate.EXPECTED_STATS[candidate.TOP10_BN_CASE],
+        )
+
+
 class TensorShieldWindowTests(unittest.TestCase):
     def test_spread_10_uses_fixed_candidate_positions_and_head(self):
         window = load_lab04_window_module()
@@ -290,7 +360,7 @@ class TensorShieldWindowTests(unittest.TestCase):
             "b771c0fa3306467ec09fb5d49383fe613f60d665256233122600195e11c244bd",
         )
 
-    def test_end_metrics_reject_nonfinite_and_inconsistent_values(self):
+    def test_result_metrics_reject_nonfinite_and_inconsistent_values(self):
         window = load_lab04_window_module()
         valid = {
             "eval_count": 10,
@@ -302,19 +372,21 @@ class TensorShieldWindowTests(unittest.TestCase):
             "fidelity": 0.4,
             "posterior_kl_sum": 12.5,
             "posterior_kl": 1.25,
+            "eval_passes": 1,
         }
-        self.assertEqual(window.validate_end_metrics(valid, "test end"), valid)
+        self.assertEqual(window.validate_result_metrics(valid, "test result"), valid)
 
         invalid_values = (
             {**valid, "posterior_kl": math.nan},
             {**valid, "surrogate_correct": 3.5},
             {**valid, "agreement_count": 11},
             {**valid, "surrogate_acc": 0.31},
+            {**valid, "eval_passes": 2},
             {key: value for key, value in valid.items() if key != "fidelity"},
         )
         for invalid in invalid_values:
             with self.subTest(invalid=invalid), self.assertRaises(ValueError):
-                window.validate_end_metrics(invalid, "test end")
+                window.validate_result_metrics(invalid, "test result")
 
     def test_history_requires_complete_ordered_case_blocks(self):
         window = load_lab04_window_module()
@@ -362,7 +434,7 @@ class TensorShieldWindowTests(unittest.TestCase):
                     path, set(case_order), case_order, case_order
                 )
 
-    def test_schema2_tsv_rejects_header_and_candidate_changes(self):
+    def test_schema3_tsv_rejects_header_and_candidate_changes(self):
         window = load_lab04_window_module()
         cases = {case.name: case for case in window.build_cases()}
         valid_end = {
@@ -375,6 +447,7 @@ class TensorShieldWindowTests(unittest.TestCase):
             "fidelity": 0.4,
             "posterior_kl_sum": 12.5,
             "posterior_kl": 1.25,
+            "eval_passes": 1,
         }
         results = []
         for case_name in cases:
@@ -394,7 +467,7 @@ class TensorShieldWindowTests(unittest.TestCase):
                         "head_mode": "replace",
                         "protection_mask_sha256": f"sha-{case.name}",
                     },
-                    "end": valid_end,
+                    "result": valid_end,
                 }
             )
         raw_results = {result["case"]: result for result in results}
@@ -402,7 +475,7 @@ class TensorShieldWindowTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "window.tsv"
             window.write_data(path, results)
-            window.validate_existing_data(path, raw_results, cases, 2)
+            window.validate_existing_data(path, raw_results, cases, 3)
 
             with path.open(encoding="utf-8") as data_file:
                 rows = list(csv.DictReader(data_file, delimiter="\t"))
@@ -417,11 +490,11 @@ class TensorShieldWindowTests(unittest.TestCase):
                 writer.writeheader()
                 writer.writerows(rows)
             with self.assertRaisesRegex(ValueError, "candidate_positions"):
-                window.validate_existing_data(path, raw_results, cases, 2)
+                window.validate_existing_data(path, raw_results, cases, 3)
 
             path.write_text("case\tselected_weight_names\n", encoding="utf-8")
             with self.assertRaisesRegex(ValueError, "window.tsv 表头"):
-                window.validate_existing_data(path, raw_results, cases, 2)
+                window.validate_existing_data(path, raw_results, cases, 3)
 
 if __name__ == "__main__":
     unittest.main()

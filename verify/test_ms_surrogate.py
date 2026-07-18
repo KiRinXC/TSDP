@@ -48,8 +48,13 @@ from models import resnet18  # noqa: E402
 from core.config import resolve_attack_protocol, validate_attack_configuration  # noqa: E402
 from core.artifacts import INDEX_FIELDS, make_artifact_id  # noqa: E402
 from core import data as surrogate_data  # noqa: E402
-from core.data import QueryDataset  # noqa: E402
-from core.engine import collect_eval_reference, distillation_loss, evaluate_surrogate  # noqa: E402
+from core.data import QueryDataset, make_query_partition  # noqa: E402
+from core.engine import (  # noqa: E402
+    collect_eval_reference,
+    distillation_loss,
+    evaluate_query_validation,
+    evaluate_surrogate,
+)
 from core.planning import resolve_plan_configuration  # noqa: E402
 
 
@@ -152,8 +157,11 @@ class SurrogateProtectionTests(unittest.TestCase):
         plan_path = REPO_ROOT / "exp" / "MS" / "train_surrogate" / "baseline.json"
         plan = json.loads(plan_path.read_text(encoding="utf-8"))
 
-        self.assertEqual(plan["attack_protocol"], "posterior_replace_finetune_v2")
+        self.assertEqual(plan["attack_protocol"], "soft_query_validation_best_v1")
         self.assertEqual(plan["query_transform"], "test")
+        self.assertEqual(plan["primary_checkpoint"], "best.pth")
+        self.assertEqual(plan["query_train_size"], 400)
+        self.assertEqual(plan["query_validation_size"], 100)
         self.assertEqual(plan["training_hyperparameters"]["lr_step"], 60)
         self.assertEqual(plan["mask_config_count"], 32)
         self.assertEqual(plan["training_run_count"], 32)
@@ -197,14 +205,50 @@ class SurrogateProtectionTests(unittest.TestCase):
         validate_attack_configuration("full_protection", "finetune", "soft", "resnet18", "c100")
         validate_attack_configuration("shallow", "finetune", "soft", "resnet18", "c100")
         validate_attack_configuration("full_protection", "finetune", "hard", "resnet18", "c100")
-        self.assertEqual(resolve_attack_protocol("soft"), "posterior_replace_finetune_v2")
-        self.assertEqual(resolve_attack_protocol("hard"), "hard_label_replace_finetune_v1")
+        self.assertEqual(resolve_attack_protocol("soft"), "soft_query_validation_best_v1")
+        self.assertEqual(resolve_attack_protocol("hard"), "hard_query_validation_best_v1")
         with self.assertRaises(ValueError):
             validate_attack_configuration("shallow", "finetune", "hard", "resnet18", "c100")
-        with self.assertRaises(ValueError):
-            validate_attack_configuration("full_protection", "finetune", "hard", "resnet50", "c100")
+        validate_attack_configuration("full_protection", "finetune", "hard", "resnet50", "c100")
         with self.assertRaises(ValueError):
             validate_attack_configuration("shallow", "frozen", "soft", "resnet18", "c100")
+
+    def test_query_partition_is_fixed_disjoint_and_complete(self):
+        query_indices = list(range(500))
+        first = make_query_partition(query_indices, seed=42)
+        second = make_query_partition(query_indices, seed=42)
+        other_seed = make_query_partition(query_indices, seed=43)
+        self.assertEqual(first, second)
+        self.assertNotEqual(first.train_ranks, other_seed.train_ranks)
+        self.assertEqual(first.train_size, 400)
+        self.assertEqual(first.validation_size, 100)
+        self.assertFalse(set(first.train_ranks) & set(first.validation_ranks))
+        self.assertEqual(
+            set(first.train_ranks) | set(first.validation_ranks),
+            set(range(500)),
+        )
+        metadata = first.to_metadata()
+        self.assertEqual(metadata["seed_offset"], 100)
+        self.assertEqual(
+            metadata["train_source_indices_sha256"],
+            "87c30e7a4717f0c74fd0099b572fa235c38a21a52ff8de711fd5b8cf460e4830",
+        )
+
+    def test_query_validation_uses_targets_without_eval_reference(self):
+        logits = torch.tensor([[2.0, 0.0], [0.0, 2.0]])
+        posteriors = torch.tensor([[0.8, 0.2], [0.1, 0.9]])
+        labels = posteriors.argmax(dim=1)
+        loader = DataLoader(TensorDataset(logits, posteriors, labels), batch_size=2)
+        metrics = evaluate_query_validation(
+            nn.Identity(),
+            loader,
+            torch.device("cpu"),
+            "soft",
+            expected_count=2,
+        )
+        self.assertEqual(metrics["validation_count"], 2)
+        self.assertEqual(metrics["validation_match_count"], 2)
+        self.assertGreater(float(metrics["validation_loss"]), 0.0)
 
     def test_planned_baseline_rejects_configuration_drift(self):
         config = resolve_plan_configuration(

@@ -46,17 +46,24 @@ surrogate topology  从 victim keep_flags 复制连接关系
 surrogate 参数       公开 backbone + fresh 私有状态，全部 finetune
 query 来源          query_pool_ms 的固定预算前缀
 query budget        500，即 victim_train 的 1%
+query train/val     固定随机 400/100
 标签模式            soft posterior
 query transform     确定性的 test transform
 训练轮数            100
 优化器              SGD，lr=0.01，momentum=0.5，weight_decay=5e-4
 学习率调度          StepLR，step_size=60，gamma=0.1
-主要评估点          第 100 轮 end.pth
+checkpoint 选择     validation soft cross-entropy 最低；并列取更早 epoch
+主要 checkpoint     best.pth
+eval_ms             checkpoint 固定后只评估一次
 原始指标            accuracy、fidelity、posterior KL 及其计数
 随机种子            42
 ```
 
-fidelity 和 posterior KL 始终相对于当前 TEESlice pruned victim 计算。`eval_ms` 不参与 surrogate checkpoint 选择；`best.pth` 只作为逐轮诊断，正式结果读取固定训练终点 `end.pth`。
+fidelity 和 posterior KL 始终相对于当前 TEESlice pruned victim 计算。
+`eval_ms` 不参与 surrogate checkpoint 选择；训练过程中只读取 100 条 query
+validation，选中的 `best.pth` 最后在 `eval_ms` 上评估一次。TEESlice 的黑盒仍按其
+standalone 威胁模型读取 soft posterior；普通 victim 的 label-only
+`hard_blackbox` 另行提供统一黑盒下界。
 
 ## 运行方式
 
@@ -79,7 +86,6 @@ fidelity 和 posterior KL 始终相对于当前 TEESlice pruned victim 计算。
 ```text
 weights/MS/surrogate/resnet18/c100/teeslice/
 ├── best.pth
-├── end.pth
 ├── params.json
 ├── topology.json
 └── train.log.tsv

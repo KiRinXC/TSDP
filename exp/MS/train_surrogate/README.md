@@ -23,7 +23,7 @@ train_surrogate/
 
 ```text
 no_protection    所有 victim 权重暴露，作为攻击上界
-full_protection  所有 victim 权重不可见，作为 posterior-visible 黑盒下界
+full_protection  所有 victim 权重不可见，作为 soft-posterior 黑盒
 head_only        只隐藏 victim 分类头，完整暴露并复制全部 backbone 状态
 shallow          从官方第 1 层开始保护连续完整层
 middle           保护不接触首尾的连续完整官方层
@@ -33,7 +33,10 @@ large_weight     按公开预训练权重绝对值保护全局大权重标量
 tensorshield     按作者确认 rank 构造 Figure 12 固定 tensor mask
 ```
 
-`hard_blackbox` 不是新的保护策略，而是 `full_protection` 在 label-only 查询接口下的独立输出能力对比 artifact。它沿用完整保护 mask，但使用不同的攻击协议和结果目录，不替换 posterior-visible `full_protection` 的主黑盒定义。
+`hard_blackbox` 不是新的保护 mask，而是 `full_protection` 在 label-only 查询接口下的
+第二个正式黑盒 artifact。它与 soft `full_protection` 使用同一完整保护 mask：
+`full_protection` 表示攻击者可查询 soft posterior 的黑盒，`hard_blackbox` 表示
+攻击者只能查询 argmax label 的黑盒。后续正式结果图必须同时绘制这两条黑盒边界。
 
 ResNet18 以 `state_dict` 的稳定顺序定义 122 个基础 tensor unit，索引范围为 `0` 至 `121`。每个 unit 对应一个参数或缓冲区条目；后续所有完整层和细粒度策略均由这些 unit 聚合，不再另外定义底层保护单位。
 
@@ -93,13 +96,18 @@ bash exp/MS/train_surrogate/run.sh resnet18 c100 \
 
 ## 正式攻击协议
 
-当前正式协议为 `posterior_replace_finetune_v2`：按 TEESlice 与 TensorShield 的 adversary 训练入口使用 `lr_step=60`；soft posterior 训练使用与 victim 查询一致的确定性 test transform，不把原图 posterior 绑定到随机裁剪或翻转后的图像。完整协议如下：
+当前 soft-posterior 黑盒及普通部分保护策略使用
+`soft_query_validation_best_v1`，label-only 黑盒使用
+`hard_query_validation_best_v1`。两者使用相同的数据隔离、初始化、优化器和学习率
+调度，只改变 query target 与 validation loss。`full_protection` 和
+`hard_blackbox` 都是正式黑盒参考，不互相替代。
 
 ```text
 query 来源          query_pool_ms 的固定预算前缀
 query budget        各数据集 victim 训练集的 1%
-攻击者可观测输出    victim 完整 softmax posterior
-标签模式            soft posterior
+query train         当前 budget 内固定随机 80%，只用于梯度更新
+query validation    当前 budget 内固定随机 20%，只用于选 checkpoint
+query 划分随机流     experiment seed + 固定 offset 100
 query 输入变换       与 posterior 生成一致的确定性 test transform
 暴露权重            从 victim best.pth 复制
 受保护 backbone     保留官方 ImageNet 初始化
@@ -108,23 +116,45 @@ query 输入变换       与 posterior 生成一致的确定性 test transform
 分类头完整保护      使用目标类别随机初始化 Linear，head_mode=replace
 随机初始化轨迹      formal_victim_then_public_v1，seed 42；与调用者此前 RNG 消耗无关
 训练方式            除无保护恒等上界外，所有参数共同 finetune
-正式 checkpoint     固定训练轮数后的 end.pth
-诊断 checkpoint     best.pth，仅记录 eval_ms accuracy 最高点，不进入主结果汇总
+最大训练轮数        100
+优化器              SGD，lr=0.01，momentum=0.5，weight_decay=5e-4
+学习率调度          StepLR，step_size=60，gamma=0.1
+soft checkpoint     validation soft cross-entropy 最低的最早 epoch
+hard checkpoint     validation hard cross-entropy 最低的最早 epoch
+正式 checkpoint     best.pth
+eval_ms             不参与选模；checkpoint 固定后仅评估一次
 ```
 
 `formal_victim_then_public_v1` 显式复现既有正式入口的初始化顺序：重置 PyTorch
 seed 后先构造一次目标类别 victim 结构，再构造 1000 类 ImageNet public 结构并替换为
 目标类别随机分类头。checkpoint 加载本身不消耗 RNG。该过程由共享初始化器完成，因此
 后续策略不能通过改变函数调用顺序得到不同的随机分类头。seed 42 下生成的 public
-初始状态与本协议调整前的正式入口逐 tensor 相同，现有正式 baseline 不因此失效。
+初始状态与本协议调整前的正式入口逐 tensor 相同。旧 baseline 仍因 query
+train/validation 和 checkpoint 规则改变而失效，不能与新结果混用。
 
-主保护策略不改变查询接口。`no_protection`、partial protection 和 `full_protection` 均读取 `posteriors.pt`，不得因为保护位置不同而切换 hard/soft。唯一例外是单独注册的 `hard_blackbox` 输出能力对比；它不参与 soft-posterior 保护策略排序，也不替换主黑盒下界。
+`no_protection`、所有部分保护策略和 soft `full_protection` 均读取
+`posteriors.pt`。其中 `no_protection` 是白盒恒等上界：完整 victim 状态已经暴露，
+在 epoch 0 固定为 `best.pth`，不使用 query 更新参数。其余 soft 策略在 400 条
+query train 上最多训练 100 epoch，并在 100 条 query validation 上选模。
 
-`no_protection` 是特殊恒等控制组：完整 victim 状态已经暴露，surrogate 在 epoch 0 直接评估并同时写出 `best.pth` 与 `end.pth`，不使用 query 更新参数。其余策略固定训练 100 epoch，使用 batch size 64、SGD、学习率 0.01、momentum 0.5、weight decay `5e-4`，并在第 60 个 epoch 后把学习率乘以 0.1；即 epoch 1-60 使用 `0.01`，epoch 61-100 使用 `0.001`。正式汇总统一读取 `end` 指标，不能从 `eval_ms` 选择 epoch 作为主结果。
+soft validation cross-entropy 与 `KL(victim || surrogate)` 只相差固定的 victim
+posterior entropy，因此二者给出相同 epoch 排序。实现使用严格小于才更新 best，
+数值并列时自然保留更早 epoch。所有 case 的 checkpoint 固定后，才首次构造并迭代
+`eval_ms`；正式产物不再保存或消费 surrogate `end.pth`。
 
-## Hard-label 黑盒输出能力对比
+## Soft 与 hard 双黑盒
 
-`hard_blackbox` 使用独立协议 `hard_label_replace_finetune_v1`，当前只允许 `ResNet18+CIFAR-100 + full_protection`。它与 soft-posterior `full_protection` 使用同一个 victim、query 前缀、公开 ImageNet 初始化、随机分类头、全保护 mask、优化器和训练轮数；唯一变化是将 victim 输出改为 argmax hard pseudo label。为了隔离输出信息差异，hard query 同样使用确定性的 test transform，不启用随机裁剪或翻转。
+soft-posterior 黑盒就是 `full_protection + soft`：攻击者看不到任何 victim 参数，
+但能查询完整 posterior。它与所有 soft 部分保护策略共享输出能力，因此是判断这些
+策略是否退化到同接口黑盒的直接边界。
+
+`hard_blackbox` 使用 `hard_query_validation_best_v1`。它与 soft
+`full_protection` 使用同一个 victim、query 前缀、80/20 划分、公开 ImageNet
+初始化、随机分类头、完整保护 mask、优化器和最大训练轮数；唯一变化是将 victim
+输出改为 argmax hard pseudo label，并按 validation hard cross-entropy 选模。
+代码只允许 `full_protection + hard`，该约束对当前四种模型和四个数据集通用。
+正式汇总不得只绘制其中一条：soft 黑盒用于同接口公平比较，hard 黑盒用于展示
+label-only 查询能力下的下界。
 
 ```text
 victim              weights/MS/victim/resnet18/c100/best.pth
@@ -133,12 +163,13 @@ comparison_scope    ordinary_fixed_victim_output_ablation
 保护策略            full_protection，122/122 unit
 攻击者可观测输出    victim argmax hard label
 query budget        500
+query train/val     400/100
 query transform     确定性的 test transform
 训练轮数            100
 优化器              SGD，lr=0.01，momentum=0.5，weight_decay=5e-4
 学习率调度          StepLR，step_size=60，gamma=0.1
-主要评估点          第 100 轮 end.pth
-诊断评估点          surrogate_acc 最高的 best.pth
+主要 checkpoint     validation hard cross-entropy 最低的 best.pth
+eval_ms             checkpoint 固定后评估一次
 随机种子            42
 ```
 
@@ -158,9 +189,8 @@ bash exp/MS/train_surrogate/run.sh resnet18 c100 \
   --training-mode finetune --label-mode hard
 ```
 
-产物固定写入 `weights/MS/surrogate/resnet18/c100/hard_blackbox/` 与 `results/MS/resnet18/c100/hard_blackbox/metrics.json`。`metrics.json` 记录独立的 `comparison_scope`，汇总索引通过 `artifact_id`、`attack_protocol` 和 `label_mode` 与 soft 主结果区分。其他保护策略、模型或数据集不得使用 `--label-mode hard`。
-
-当前固定终点结果为 `surrogate accuracy=0.1393`、`fidelity=0.1443`、`posterior KL=3.427757`。诊断 `best.pth` 位于第 88 轮，对应 `0.1407/0.1460/3.427400`，不用于主图或正式结论。
+产物固定写入 `weights/MS/surrogate/resnet18/c100/hard_blackbox/` 与
+`results/MS/resnet18/c100/hard_blackbox/metrics.json`。
 
 ## 分类头保护控制组
 
@@ -172,7 +202,9 @@ bash exp/MS/train_surrogate/run.sh resnet18 c100 \
   --training-mode finetune --label-mode soft
 ```
 
-正式结果保存到语义入口 `weights/MS/surrogate/resnet18/c100/head_only/` 与 `results/MS/resnet18/c100/head_only/`，并写入普通 victim 的主 `metrics.tsv`。主结果固定读取第 100 轮 `end.pth`；`best.pth` 仍只用于训练诊断。
+正式结果保存到语义入口 `weights/MS/surrogate/resnet18/c100/head_only/` 与
+`results/MS/resnet18/c100/head_only/`，并写入普通 victim 的主 `metrics.tsv`。
+主结果读取 query validation 选择的 `best.pth`。
 
 ## 初始化与训练
 
@@ -180,7 +212,9 @@ bash exp/MS/train_surrogate/run.sh resnet18 c100 \
 
 分类头完整暴露时直接复制 victim 分类头，完整保护时使用直接映射到当前数据集类别数的随机初始化 `Linear`。逐标量策略允许分类头部分暴露，此时严格按 mask 复制所有可见 victim 标量，只对不可见位置保留随机初始化。Lab 02 的替换头结论适用于分类头整体不可见的情况，不能用于丢弃部分暴露的分类头标量。正式实验不再运行 adapter 或 frozen 分支，所有初始化方式仍统一全模型 finetune。
 
-正式入口只接受 `--training-mode finetune`。普通保护策略固定使用 `--label-mode soft`；`--label-mode hard` 只允许上述 `ResNet18+C100` 全保护输出能力对比。冻结机制仍作为底层验证代码保留，但不属于当前正式协议，也不得产生正式结果。
+正式入口只接受 `--training-mode finetune`。普通保护策略固定使用
+`--label-mode soft`；`--label-mode hard` 只允许完整保护黑盒。冻结机制仍作为底层
+验证代码保留，但不属于当前正式协议，也不得产生正式结果。
 
 所有主保护策略使用相同的 `posteriors.pt`、确定性 query 输入和 soft cross-entropy。soft 模式不使用 RandomCrop、RandomHorizontalFlip 等随机增强；`full_protection` 仍只表示所有 victim 权重不可见，不额外叠加 label-only 输出限制。`hard_blackbox` 则读取 `labels.tsv` 并使用 hard-label cross-entropy，但保持相同的确定性输入。
 
@@ -284,18 +318,24 @@ weights/MS/surrogate/resnet18/c100/baseline.pt     32 组紧凑保护 mask
 浅层、中间层和深层的 24 组正式训练使用可续跑批量入口：
 
 ```bash
-"$HOME/venvs/dl-py310-torch210-cu121/bin/python" exp/MS/train_surrogate/sweep.py layers --jobs 4
+"$HOME/venvs/dl-py310-torch210-cu121/bin/python" \
+  exp/MS/train_surrogate/sweep.py layers --jobs 1 --overwrite
 ```
 
 全局大权重标量保护的 8 组正式训练使用：
 
 ```bash
-"$HOME/venvs/dl-py310-torch210-cu121/bin/python" exp/MS/train_surrogate/sweep.py large_weight --jobs 4
+"$HOME/venvs/dl-py310-torch210-cu121/bin/python" \
+  exp/MS/train_surrogate/sweep.py large_weight --jobs 1 --overwrite
 ```
 
 该入口只把清单中的整数 `protected_scalars` 传给 runner，并将 `source_ratio` 作为结果元数据保存。`large_01` 的分类头完整暴露；`large_02` 至 `large_08` 的分类头部分暴露，使用 `mixed` 模式按 mask 组合随机初始化标量与 victim 标量。
 
-`--jobs` 只表示并行训练进程数，不改变任何单组实验参数；当前硬件使用 4。每个 worker 只领取一个 `plan_id` 并写入独立 run 目录，中央 `metrics.tsv` 使用进程锁和原子替换更新。正式 runner 会在创建结果目录前校验策略、层范围、保护 unit 数、保护参数量、分类头模式和 mask SHA256。已经存在完整 `metrics.json` 的 `plan_id` 会被跳过，因此中断后可以使用同一命令继续。
+`--jobs` 只表示并行训练进程数，不改变任何单组实验参数。当前单张 RTX 4060
+Laptop GPU 固定使用 `--jobs 1`，避免多个训练进程争用显存。每个 worker 只领取一个
+`plan_id` 并写入独立 run 目录，中央 `metrics.tsv` 使用进程锁和原子替换更新。
+协议迁移全量重跑时使用 `--overwrite`；稳定协议下恢复中断时去掉该参数，已完成且
+通过新协议校验的配置会被跳过。
 
 每个运行都会在保护摘要和 `results/MS/resnet18/c100/metrics.tsv` 中保存 `protected_unit_count`、`protected_param_count` 与 `protected_param_ratio`。层数用于表示原策略的保护位置和范围，参数保护比例用于后续横向观察不同策略的实际保护成本。
 
@@ -303,19 +343,20 @@ weights/MS/surrogate/resnet18/c100/baseline.pt     32 组紧凑保护 mask
 
 ```text
 weights/MS/surrogate/<model>/<dataset>/<artifact_id>/
-  best.pth                surrogate_acc 最高的 checkpoint
-  end.pth                 最后一个 epoch 的 checkpoint
+  best.pth                query validation loss 最低的正式 checkpoint
   protection_mask.pt      当前策略的 unit 保护掩码
   params.json             输入、训练参数和掩码摘要
-  train.log.tsv           每个 epoch 的训练观测与 eval_ms 原始指标
+  train.log.tsv           每个 epoch 的 query train 与 validation 指标
 
 results/MS/<model>/<dataset>/
   metrics.tsv             同一模型和数据集下所有 run 的原始指标索引
   <artifact_id>/metrics.json
-                          best 与 end 的完整原始指标
+                          checkpoint 选择信息与一次 eval_ms 原始指标
 ```
 
-`best.pth` 按逐 epoch 的 `surrogate_acc` 保存，仅用于诊断训练过程。`metrics.json` 同时保留 best 和 end，正式表格、绘图和策略比较只读取固定训练终点 `end`。无保护恒等上界的 best 和 end 均为 epoch 0。
+`best.pth` 是唯一正式 surrogate checkpoint。soft/hard 分别按对应 validation
+cross-entropy 选择；无保护恒等白盒固定为 epoch 0。`train.log.tsv` 不含任何
+`eval_ms` 指标，`metrics.json.result` 是选模完成后的唯一一次独立评估。
 
 正式保存的 MS 指标为：
 

@@ -11,12 +11,10 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import torch
-from torch.utils.data import DataLoader
 
 import run as prefix
 
 
-PREFIX_METRICS_SHA256 = "f090bb890ce295db2154fb7d700bd2d9d56d9771d7483768d9375d7f54dbc023"
 FIXED_PROTECTED_STATES = ("last_linear.bias",)
 FULL_TOP12_PROTECTED_PARAMS = 2_779_236
 TOP12_WEIGHT_NUMELS = {
@@ -233,12 +231,9 @@ def initialize_selection(
 def load_prefix_results(path: Path) -> tuple[dict[str, object], dict[int, dict[str, object]]]:
     if not path.is_file():
         raise FileNotFoundError(f"找不到前缀曲线结果：{path}")
-    digest = prefix.sha256_file(path)
-    if digest != PREFIX_METRICS_SHA256:
-        raise ValueError(f"前缀结果 SHA256={digest}，期望 {PREFIX_METRICS_SHA256}。")
     payload = json.loads(path.read_text(encoding="utf-8"))
     expected = {
-        "schema_version": 2,
+        "schema_version": 3,
         "experiment": prefix.EXPERIMENT,
         "attack_protocol": prefix.ATTACK_PROTOCOL_VERSION,
         "dataset": prefix.DATASET,
@@ -260,13 +255,14 @@ def load_prefix_results(path: Path) -> tuple[dict[str, object], dict[int, dict[s
     expected_references = {
         "no_protection": "no_protection",
         "full_protection": "full_protection",
+        "hard_blackbox": "full_protection",
     }
     for name, defense in expected_references.items():
         reference = references.get(name, {})
         if reference.get("protection", {}).get("defense") != defense:
             raise ValueError(f"前缀结果缺少有效的 {name} 边界。")
         if not {"surrogate_acc", "fidelity", "posterior_kl"} <= set(
-            reference.get("end", {})
+            reference.get("result", {})
         ):
             raise ValueError(f"前缀结果的 {name} 边界缺少 MS 指标。")
     return payload, by_k
@@ -293,7 +289,8 @@ def reused_result(
         "selected_weight_names": list(case.selected_weights),
         "protection": protection,
         "primary": prefix_result["primary"],
-        "end": prefix_result["end"],
+        "selection": prefix_result["selection"],
+        "result": prefix_result["result"],
     }
 
 
@@ -301,15 +298,14 @@ def train_case(
     case: AblationCase,
     victim: torch.nn.Module,
     official_weight: Path,
-    query_dataset,
-    eval_loader: DataLoader,
-    reference,
+    query,
+    evaluation,
     device: torch.device,
     history_writer: csv.DictWriter,
     history_file,
     out_dir: Path,
     num_workers: int,
-) -> dict[str, object]:
+) -> tuple[dict[str, object], object]:
     prefix.configure_reproducibility(prefix.SEED, deterministic=True)
     surrogate, plan, masks, selected_units = initialize_selection(
         case, victim, official_weight
@@ -317,54 +313,40 @@ def train_case(
     mask_path = out_dir / f"{case.name}_mask.pt"
     prefix.save_protection_mask(mask_path, masks)
     surrogate = surrogate.to(device)
-    query_loader = DataLoader(
-        query_dataset,
-        batch_size=prefix.BATCH_SIZE,
-        shuffle=True,
+    selection, case_history = prefix.train_validation_best(
+        surrogate,
+        query,
+        device=device,
         num_workers=num_workers,
-        pin_memory=device.type == "cuda",
-        worker_init_fn=prefix.seed_worker,
-        generator=prefix.build_generator(prefix.SEED),
+        seed=prefix.SEED,
     )
-    optimizer = torch.optim.SGD(
-        surrogate.parameters(),
-        lr=prefix.LEARNING_RATE,
-        momentum=prefix.MOMENTUM,
-        weight_decay=prefix.WEIGHT_DECAY,
-    )
-    scheduler = torch.optim.lr_scheduler.StepLR(
-        optimizer, step_size=prefix.LR_STEP, gamma=prefix.LR_GAMMA
-    )
-    for epoch in range(1, prefix.EPOCHS + 1):
-        learning_rate = optimizer.param_groups[0]["lr"]
-        train_metrics = prefix.train_one_epoch(
-            surrogate,
-            query_loader,
-            optimizer,
-            device,
-            "soft",
-            epoch,
-            prefix.EPOCHS,
-            None,
-        )
-        scheduler.step()
+    for row in case_history:
         history_writer.writerow(
             {
                 "case": case.name,
                 "top_k": len(case.selected_weights),
-                "epoch": epoch,
-                "learning_rate": learning_rate,
-                **train_metrics,
+                **row,
             }
         )
         history_file.flush()
-    end_metrics = prefix.evaluate_surrogate(surrogate, eval_loader, reference, device)
+    if evaluation is None:
+        evaluation = prefix.prepare_eval(
+            victim,
+            dataset=prefix.DATASET,
+            dataset_root=prefix.ROOT / "dataset" / "public",
+            protocol_root=prefix.ROOT / "dataset" / "MS",
+            device=device,
+            num_workers=num_workers,
+            seed=prefix.SEED,
+        )
+    result_metrics = prefix.evaluate_once(surrogate, evaluation, device)
     print(
-        f"[END/{case.name}] accuracy={end_metrics['surrogate_acc']:.6f} "
-        f"fidelity={end_metrics['fidelity']:.6f} "
-        f"posterior_kl={end_metrics['posterior_kl']:.6f}"
+        f"[RESULT/{case.name}] epoch={selection['epoch']} "
+        f"accuracy={result_metrics['surrogate_acc']:.6f} "
+        f"fidelity={result_metrics['fidelity']:.6f} "
+        f"posterior_kl={result_metrics['posterior_kl']:.6f}"
     )
-    del surrogate, optimizer, scheduler, query_loader
+    del surrogate
     if torch.cuda.is_available():
         torch.cuda.empty_cache()
     return {
@@ -379,15 +361,20 @@ def train_case(
             "selected_units": selected_units,
             "mask_path": str(mask_path.relative_to(prefix.ROOT)),
         },
-        "primary": {"evaluation": "end", "epoch": prefix.EPOCHS},
-        "end": end_metrics,
-    }
+        "primary": {
+            "checkpoint": "best.pth",
+            "epoch": selection["epoch"],
+            "selection_metric": selection["metric"],
+        },
+        "selection": selection,
+        "result": result_metrics,
+    }, evaluation
 
 
 def add_deletion_deltas(results: list[dict[str, object]]) -> None:
-    full = next(result for result in results if result["case"] == "full_top12")["end"]
+    full = next(result for result in results if result["case"] == "full_top12")["result"]
     for result in results:
-        end = result["end"]
+        end = result["result"]
         result["attack_gain_from_deletion"] = {
             "accuracy_increase": float(end["surrogate_acc"]) - float(full["surrogate_acc"]),
             "fidelity_increase": float(end["fidelity"]) - float(full["fidelity"]),
@@ -406,7 +393,7 @@ def write_data(path: Path, results: list[dict[str, object]]) -> None:
         writer.writeheader()
         for result in results:
             protection = result["protection"]
-            end = result["end"]
+            end = result["result"]
             delta = result["attack_gain_from_deletion"]
             writer.writerow(
                 {
@@ -448,10 +435,11 @@ def plot_metric(
     title: str,
     color: str,
 ) -> None:
-    values = [float(result["end"][metric]) for result in results]
-    white_box = float(references["no_protection"]["end"][metric])
-    black_box = float(references["full_protection"]["end"][metric])
-    cluster = [*values, black_box]
+    values = [float(result["result"][metric]) for result in results]
+    white_box = float(references["no_protection"]["result"][metric])
+    black_box = float(references["full_protection"]["result"][metric])
+    hard_box = float(references["hard_blackbox"]["result"][metric])
+    cluster = [*values, black_box, hard_box]
     cluster_min = min(cluster)
     cluster_max = max(cluster)
     cluster_span = max(cluster_max - cluster_min, 0.01 if metric != "posterior_kl" else 0.05)
@@ -519,6 +507,13 @@ def plot_metric(
             linestyle=":",
             linewidth=1.4,
             label="Black-box (full protection)",
+        )
+        axis.axhline(
+            hard_box,
+            color="#CC79A7",
+            linestyle=(0, (3, 2)),
+            linewidth=1.2,
+            label="Hard-label black-box",
         )
         axis.axvline(
             12.5,
@@ -589,7 +584,7 @@ def plot_metric(
         legend_labels,
         loc="lower center",
         bbox_to_anchor=(0.5, 1.08),
-        ncol=3,
+        ncol=4,
         frameon=False,
     )
     figure.suptitle(
@@ -651,20 +646,19 @@ def main() -> int:
     )
     official_weight = prefix.ROOT / "weights" / "pre_train" / "resnet18-5c106cde.pth"
     prefix.configure_reproducibility(prefix.SEED, deterministic=True)
-    query_indices, query_posteriors, query_labels, posterior_path, query_manifest = (
-        prefix.load_query_targets(
-            protocol_root,
-            prefix.DATASET,
-            prefix.MODEL,
-            prefix.BUDGET,
-            "soft",
-        )
+    query = prefix.prepare_soft_query(
+        dataset=prefix.DATASET,
+        model=prefix.MODEL,
+        budget=prefix.BUDGET,
+        seed=prefix.SEED,
+        dataset_root=dataset_root,
+        protocol_root=protocol_root,
     )
     victim, victim_metadata = prefix.build_victim(
         prefix.MODEL, prefix.NUM_CLASSES, victim_checkpoint
     )
     victim_sha256 = prefix.sha256_file(victim_checkpoint)
-    expected_victim_sha256 = query_manifest.get("victim", {}).get("checkpoint_sha256")
+    expected_victim_sha256 = query.manifest.get("victim", {}).get("checkpoint_sha256")
     if expected_victim_sha256 and expected_victim_sha256 != victim_sha256:
         raise ValueError("victim best.pth 与生成 soft posterior 时使用的 checkpoint 不一致。")
     cases = build_ablation_cases(victim)
@@ -683,38 +677,14 @@ def main() -> int:
         )
         del surrogate
     if args.dry_run:
-        print(f"[INFO] prefix metrics SHA256：{PREFIX_METRICS_SHA256}")
+        print(f"[INFO] prefix metrics SHA256：{prefix.sha256_file(prefix_path)}")
         print("[INFO] dry-run 完成，未写入消融产物。")
         return 0
 
     clean_outputs(out_dir)
-    query_dataset = prefix.build_query_dataset(
-        prefix.DATASET,
-        dataset_root,
-        query_indices,
-        query_posteriors,
-        query_labels,
-    )
-    eval_dataset = prefix.build_eval_dataset(
-        prefix.DATASET, dataset_root, protocol_root, None
-    )
-    eval_loader = DataLoader(
-        eval_dataset,
-        batch_size=prefix.EVAL_BATCH_SIZE,
-        shuffle=False,
-        num_workers=args.num_workers,
-        pin_memory=device.type == "cuda",
-        worker_init_fn=prefix.seed_worker,
-        generator=prefix.build_generator(prefix.SEED, offset=1),
-    )
-    eval_victim = victim.to(device)
-    reference = prefix.collect_eval_reference(eval_victim, eval_loader, device)
-    victim = eval_victim.cpu()
-    del eval_victim
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
 
     results: list[dict[str, object]] = []
+    evaluation = None
     history_path = out_dir / "ablation_history.tsv"
     with history_path.open("w", newline="", encoding="utf-8") as history_file:
         history_writer = csv.DictWriter(
@@ -728,21 +698,19 @@ def main() -> int:
             if case.name == "full_top12":
                 results.append(reused_result(case, prefix_by_k[12]))
             else:
-                results.append(
-                    train_case(
-                        case,
-                        victim,
-                        official_weight,
-                        query_dataset,
-                        eval_loader,
-                        reference,
-                        device,
-                        history_writer,
-                        history_file,
-                        out_dir,
-                        args.num_workers,
-                    )
+                result, evaluation = train_case(
+                    case,
+                    victim,
+                    official_weight,
+                    query,
+                    evaluation,
+                    device,
+                    history_writer,
+                    history_file,
+                    out_dir,
+                    args.num_workers,
                 )
+                results.append(result)
     add_deletion_deltas(results)
 
     metrics_path = out_dir / "ablation.json"
@@ -753,21 +721,18 @@ def main() -> int:
         "posterior_kl": out_dir / "ablation_posterior_kl.png",
     }
     payload = {
-        "schema_version": 2,
+        "schema_version": 3,
         "experiment": prefix.EXPERIMENT,
         "study": "top12_leave_one_out_and_interactions",
         "protocol": "MS",
-        "attack_protocol": prefix.ATTACK_PROTOCOL_VERSION,
+        **prefix.protocol_metadata(query),
         "dataset": prefix.DATASET,
         "victim_model": prefix.MODEL,
-        "query_budget": prefix.BUDGET,
-        "label_mode": "soft",
-        "query_transform": "test",
         "seed": prefix.SEED,
         "randomization": prefix_payload["randomization"],
         "source": {
             "prefix_metrics": str(prefix_path.relative_to(prefix.ROOT)),
-            "prefix_metrics_sha256": PREFIX_METRICS_SHA256,
+            "prefix_metrics_sha256": prefix.sha256_file(prefix_path),
             "author_rank_sha256": prefix_payload["source"]["author_rank_sha256"],
             "full_top12": list(prefix.EXPECTED_ELIGIBLE_RANK[:12]),
             "single_drop_ranks": {
@@ -791,14 +756,18 @@ def main() -> int:
         "victim_checkpoint_epoch": victim_metadata.get("epoch"),
         "official_weight": str(official_weight.relative_to(prefix.ROOT)),
         "official_weight_sha256": prefix.sha256_file(official_weight),
-        "posterior_path": str(posterior_path.relative_to(prefix.ROOT)),
-        "posterior_sha256": prefix.sha256_file(posterior_path),
+        "posterior_path": str(query.target_path.relative_to(prefix.ROOT)),
+        "posterior_sha256": query.target_sha256,
         "training": {
             **prefix_payload["training"],
             "trained_cases": sorted(TRAIN_CASES),
             "reused_cases": ["full_top12"],
         },
-        "primary": {"evaluation": "end", "epoch": prefix.EPOCHS},
+        "primary": {
+            "checkpoint": "best.pth",
+            "selection_metric": "minimum_validation_soft_cross_entropy",
+            "tie_break": "earliest_epoch",
+        },
         "results": results,
         "references": prefix_payload["references"],
         "outputs": {

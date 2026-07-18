@@ -4,8 +4,10 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 from collections.abc import Callable
+from dataclasses import dataclass
 from pathlib import Path
 
 import torch
@@ -16,6 +18,7 @@ from .config import MODEL_SPECS
 
 from common.trainer import (  # noqa: E402
     MS_EVAL_SOURCES,
+    build_generator,
     build_public_split_dataset,
     build_transforms,
     read_ms_split_indices,
@@ -50,6 +53,108 @@ class QueryDataset(Dataset):
         if self.posteriors is None:
             return image, self.pseudo_labels[index]
         return image, self.posteriors[index], self.pseudo_labels[index]
+
+
+QUERY_VALIDATION_NUMERATOR = 1
+QUERY_VALIDATION_DENOMINATOR = 5
+QUERY_SPLIT_SEED_OFFSET = 100
+
+
+def hash_integer_sequence(values: list[int]) -> str:
+    encoded = json.dumps(values, separators=(",", ":")).encode("ascii")
+    return hashlib.sha256(encoded).hexdigest()
+
+
+@dataclass(frozen=True)
+class QueryPartition:
+    """在固定 query budget 内派生的训练/选模划分。"""
+
+    budget: int
+    train_ranks: tuple[int, ...]
+    validation_ranks: tuple[int, ...]
+    train_source_indices: tuple[int, ...]
+    validation_source_indices: tuple[int, ...]
+    seed: int
+    seed_offset: int
+
+    @property
+    def train_size(self) -> int:
+        return len(self.train_ranks)
+
+    @property
+    def validation_size(self) -> int:
+        return len(self.validation_ranks)
+
+    def to_metadata(self) -> dict[str, object]:
+        train_ranks = list(self.train_ranks)
+        validation_ranks = list(self.validation_ranks)
+        train_indices = list(self.train_source_indices)
+        validation_indices = list(self.validation_source_indices)
+        return {
+            "method": "fixed_seeded_random_partition_of_query_rank",
+            "budget": self.budget,
+            "train_size": self.train_size,
+            "validation_size": self.validation_size,
+            "train_fraction": self.train_size / self.budget,
+            "validation_fraction": self.validation_size / self.budget,
+            "seed": self.seed,
+            "seed_offset": self.seed_offset,
+            "train_ranks": train_ranks,
+            "validation_ranks": validation_ranks,
+            "train_source_indices": train_indices,
+            "validation_source_indices": validation_indices,
+            "train_ranks_sha256": hash_integer_sequence(train_ranks),
+            "validation_ranks_sha256": hash_integer_sequence(validation_ranks),
+            "train_source_indices_sha256": hash_integer_sequence(train_indices),
+            "validation_source_indices_sha256": hash_integer_sequence(validation_indices),
+        }
+
+
+def make_query_partition(
+    query_indices: list[int],
+    *,
+    seed: int,
+    seed_offset: int = QUERY_SPLIT_SEED_OFFSET,
+) -> QueryPartition:
+    """按实验 seed 将 query budget 固定拆成 80% train 与 20% validation。"""
+
+    budget = len(query_indices)
+    if budget <= 0:
+        raise ValueError("query budget 必须大于 0。")
+    if budget % QUERY_VALIDATION_DENOMINATOR:
+        raise ValueError("query budget 必须能被 5 整除，才能固定使用 80/20 划分。")
+    if len(set(query_indices)) != budget:
+        raise ValueError("query budget 内包含重复 source_index。")
+    validation_size = budget * QUERY_VALIDATION_NUMERATOR // QUERY_VALIDATION_DENOMINATOR
+    train_size = budget - validation_size
+    permutation = torch.randperm(
+        budget,
+        generator=build_generator(seed, offset=seed_offset),
+    ).tolist()
+    train_ranks = permutation[:train_size]
+    validation_ranks = permutation[train_size:]
+    if set(train_ranks) & set(validation_ranks):
+        raise ValueError("query train 与 validation 发生重叠。")
+    if set(train_ranks) | set(validation_ranks) != set(range(budget)):
+        raise ValueError("query train/validation 没有完整覆盖当前 query budget。")
+    return QueryPartition(
+        budget=budget,
+        train_ranks=tuple(train_ranks),
+        validation_ranks=tuple(validation_ranks),
+        train_source_indices=tuple(query_indices[rank] for rank in train_ranks),
+        validation_source_indices=tuple(query_indices[rank] for rank in validation_ranks),
+        seed=seed,
+        seed_offset=seed_offset,
+    )
+
+
+def select_tensor_rows(
+    tensor: torch.Tensor | None,
+    ranks: tuple[int, ...],
+) -> torch.Tensor | None:
+    if tensor is None:
+        return None
+    return tensor[torch.tensor(ranks, dtype=torch.long)]
 
 
 def load_json(path: Path) -> dict:
@@ -199,6 +304,36 @@ def build_query_dataset(
     if invalid:
         raise ValueError(f"query_pool_ms 包含越界索引：{invalid[0]}")
     return QueryDataset(public_dataset, source_indices, posteriors, pseudo_labels)
+
+
+def build_query_partition_datasets(
+    dataset_name: str,
+    dataset_root: Path,
+    query_indices: list[int],
+    posteriors: torch.Tensor | None,
+    pseudo_labels: torch.Tensor,
+    partition: QueryPartition,
+) -> tuple[QueryDataset, QueryDataset]:
+    if partition.budget != len(query_indices):
+        raise ValueError("query partition budget 与 query target 数量不一致。")
+    return (
+        build_query_dataset(
+            dataset_name,
+            dataset_root,
+            list(partition.train_source_indices),
+            select_tensor_rows(posteriors, partition.train_ranks),
+            select_tensor_rows(pseudo_labels, partition.train_ranks),
+            input_transform="test",
+        ),
+        build_query_dataset(
+            dataset_name,
+            dataset_root,
+            list(partition.validation_source_indices),
+            select_tensor_rows(posteriors, partition.validation_ranks),
+            select_tensor_rows(pseudo_labels, partition.validation_ranks),
+            input_transform="test",
+        ),
+    )
 
 
 def build_eval_dataset(dataset_name: str, dataset_root: Path, protocol_root: Path, subset: int | None):

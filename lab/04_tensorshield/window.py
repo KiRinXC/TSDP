@@ -13,7 +13,6 @@ from datetime import datetime, timezone
 from pathlib import Path
 
 import torch
-from torch.utils.data import DataLoader
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -45,7 +44,7 @@ CASE_COLORS = {
     "spread_10": "#CC79A7",
     "last_10": "#D55E00",
 }
-END_FIELDS = (
+RESULT_FIELDS = (
     "eval_count",
     "victim_correct",
     "surrogate_correct",
@@ -55,6 +54,7 @@ END_FIELDS = (
     "fidelity",
     "posterior_kl_sum",
     "posterior_kl",
+    "eval_passes",
 )
 DATA_FIELDS = (
     "case",
@@ -190,12 +190,15 @@ def initialize_case(case: WindowCase, victim: torch.nn.Module, official_weight: 
     return surrogate, plan, masks, selected_metadata
 
 
-def validate_end_metrics(end_metrics: object, label: str) -> dict[str, int | float]:
-    if not isinstance(end_metrics, dict) or set(end_metrics) != set(END_FIELDS):
+def validate_result_metrics(
+    result_metrics: object,
+    label: str,
+) -> dict[str, int | float]:
+    if not isinstance(result_metrics, dict) or set(result_metrics) != set(RESULT_FIELDS):
         raise ValueError(f"{label} 字段不完整。")
     normalized: dict[str, int | float] = {}
-    for field in END_FIELDS:
-        value = end_metrics[field]
+    for field in RESULT_FIELDS:
+        value = result_metrics[field]
         if isinstance(value, bool) or not isinstance(value, (int, float)):
             raise ValueError(f"{label}.{field} 不是数值。")
         if not math.isfinite(float(value)):
@@ -210,6 +213,8 @@ def validate_end_metrics(end_metrics: object, label: str) -> dict[str, int | flo
             raise ValueError(f"{label}.{count_name} 不是有效计数。")
         normalized[count_name] = count
     normalized["eval_count"] = eval_count
+    if normalized["eval_passes"] != 1:
+        raise ValueError(f"{label}.eval_passes 必须为 1。")
     checks = (
         ("victim_acc", "victim_correct"),
         ("surrogate_acc", "surrogate_correct"),
@@ -227,7 +232,8 @@ def build_case_result(
     case: WindowCase,
     plan,
     selected_units: list[dict[str, object]],
-    end_metrics: dict[str, object],
+    selection: dict[str, object],
+    result_metrics: dict[str, object],
     mask_path: Path,
 ) -> dict[str, object]:
     return {
@@ -243,8 +249,13 @@ def build_case_result(
             "selected_units": selected_units,
             "mask_path": str(mask_path.relative_to(ROOT)),
         },
-        "primary": {"evaluation": "end", "epoch": prefix.EPOCHS},
-        "end": validate_end_metrics(end_metrics, f"{case.name} end"),
+        "primary": {
+            "checkpoint": "best.pth",
+            "epoch": selection["epoch"],
+            "selection_metric": selection["metric"],
+        },
+        "selection": selection,
+        "result": validate_result_metrics(result_metrics, f"{case.name} result"),
     }
 
 
@@ -306,7 +317,7 @@ def write_data(path: Path, results: list[dict[str, object]]) -> None:
         writer.writeheader()
         for result in results:
             protection = result["protection"]
-            end = result["end"]
+            metrics = result["result"]
             writer.writerow(
                 {
                     "case": result["case"],
@@ -323,9 +334,9 @@ def write_data(path: Path, results: list[dict[str, object]]) -> None:
                     "protected_param_ratio": protection["protected_param_ratio"],
                     "head_mode": protection["head_mode"],
                     "protection_mask_sha256": protection["protection_mask_sha256"],
-                    "surrogate_acc": end["surrogate_acc"],
-                    "fidelity": end["fidelity"],
-                    "posterior_kl": end["posterior_kl"],
+                    "surrogate_acc": metrics["surrogate_acc"],
+                    "fidelity": metrics["fidelity"],
+                    "posterior_kl": metrics["posterior_kl"],
                 }
             )
 
@@ -336,7 +347,7 @@ def validate_existing_data(
     cases: dict[str, WindowCase],
     schema_version: int,
 ) -> None:
-    if schema_version < 2:
+    if schema_version != 3:
         raise ValueError("window.tsv schema_version 已失效。")
     with path.open("r", newline="", encoding="utf-8") as data_file:
         reader = csv.DictReader(data_file, delimiter="\t")
@@ -373,12 +384,19 @@ def plot_windows(
     ]
     figure, axes = prefix.plt.subplots(1, 3, figsize=(13.8, 4.2))
     for axis, (metric, title) in zip(axes, specifications):
-        values = [float(result["end"][metric]) for result in results]
-        white = float(references["no_protection"]["end"][metric])
-        black = float(references["full_protection"]["end"][metric])
+        values = [float(result["result"][metric]) for result in results]
+        white = float(references["no_protection"]["result"][metric])
+        black = float(references["full_protection"]["result"][metric])
+        hard = float(references["hard_blackbox"]["result"][metric])
         bars = axis.bar(positions, values, color=colors, width=0.62)
         axis.axhline(white, color="#222222", linestyle="--", label="No protection")
         axis.axhline(black, color="#777777", linestyle=":", label="Full protection")
+        axis.axhline(
+            hard,
+            color="#CC79A7",
+            linestyle=(0, (3, 2)),
+            label="Hard-label black-box",
+        )
         for bar, value, result in zip(bars, values, results):
             axis.annotate(
                 f"{CASE_LABELS[str(result['case'])]}\n{value:.4f}",
@@ -395,9 +413,13 @@ def plot_windows(
         axis.grid(axis="y", color="#D9D9D9", linewidth=0.7, alpha=0.75)
         axis.spines["top"].set_visible(False)
         axis.spines["right"].set_visible(False)
-        prefix.set_y_limits(axis, [*values, white, black], bounded=metric != "posterior_kl")
+        prefix.set_y_limits(
+            axis,
+            [*values, white, black, hard],
+            bounded=metric != "posterior_kl",
+        )
     handles, labels = axes[0].get_legend_handles_labels()
-    figure.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 1.03), ncol=2, frameon=False)
+    figure.legend(handles, labels, loc="upper center", bbox_to_anchor=(0.5, 1.03), ncol=3, frameon=False)
     figure.suptitle("TensorShield eligible-rank position-set ablation", y=1.10)
     figure.tight_layout()
     figure.savefig(path, bbox_inches="tight", facecolor="white", dpi=240)
@@ -416,20 +438,19 @@ def main() -> int:
     out_dir = ROOT / "results" / "lab" / prefix.EXPERIMENT
 
     prefix.configure_reproducibility(prefix.SEED, deterministic=True)
-    query_indices, query_posteriors, query_labels, posterior_path, query_manifest = (
-        prefix.load_query_targets(
-            protocol_root,
-            prefix.DATASET,
-            prefix.MODEL,
-            prefix.BUDGET,
-            "soft",
-        )
+    query = prefix.prepare_soft_query(
+        dataset=prefix.DATASET,
+        model=prefix.MODEL,
+        budget=prefix.BUDGET,
+        seed=prefix.SEED,
+        dataset_root=dataset_root,
+        protocol_root=protocol_root,
     )
     victim, victim_metadata = prefix.build_victim(
         prefix.MODEL, prefix.NUM_CLASSES, victim_checkpoint
     )
     victim_sha256 = prefix.sha256_file(victim_checkpoint)
-    expected_victim_sha256 = query_manifest.get("victim", {}).get("checkpoint_sha256")
+    expected_victim_sha256 = query.manifest.get("victim", {}).get("checkpoint_sha256")
     if expected_victim_sha256 and expected_victim_sha256 != victim_sha256:
         raise ValueError("victim best.pth 与 soft posterior 不一致。")
 
@@ -450,32 +471,6 @@ def main() -> int:
     if args.dry_run:
         print("[INFO] dry-run 完成，未写入候选位置集合产物。")
         return 0
-
-    query_dataset = prefix.build_query_dataset(
-        prefix.DATASET,
-        dataset_root,
-        query_indices,
-        query_posteriors,
-        query_labels,
-        input_transform="test",
-    )
-    eval_dataset = prefix.build_eval_dataset(
-        prefix.DATASET, dataset_root, protocol_root, None
-    )
-    eval_loader = DataLoader(
-        eval_dataset,
-        batch_size=prefix.EVAL_BATCH_SIZE,
-        shuffle=False,
-        num_workers=args.num_workers,
-        pin_memory=device.type == "cuda",
-        worker_init_fn=prefix.seed_worker,
-        generator=prefix.build_generator(prefix.SEED, offset=1),
-    )
-    victim = victim.to(device)
-    reference = prefix.collect_eval_reference(victim, eval_loader, device)
-    victim = victim.cpu()
-    if torch.cuda.is_available():
-        torch.cuda.empty_cache()
 
     out_dir.mkdir(parents=True, exist_ok=True)
     final_paths = {
@@ -500,9 +495,15 @@ def main() -> int:
         "full_protection": prefix.load_bound(
             references_root / "full_protection" / "metrics.json", "full_protection"
         ),
+        "hard_blackbox": prefix.load_bound(
+            references_root / "hard_blackbox" / "metrics.json",
+            "hard_blackbox",
+            "hard",
+        ),
     }
     results: list[dict[str, object]] = []
     history_rows: list[dict[str, object]] = []
+    evaluation = None
     try:
         for case in cases:
             prefix.configure_reproducibility(prefix.SEED, deterministic=True)
@@ -511,64 +512,49 @@ def main() -> int:
             )
             prefix.save_protection_mask(staged_paths[case.name], masks)
             surrogate = surrogate.to(device)
-            query_loader = DataLoader(
-                query_dataset,
-                batch_size=prefix.BATCH_SIZE,
-                shuffle=True,
+            selection, case_history = prefix.train_validation_best(
+                surrogate,
+                query,
+                device=device,
                 num_workers=args.num_workers,
-                pin_memory=device.type == "cuda",
-                worker_init_fn=prefix.seed_worker,
-                generator=prefix.build_generator(prefix.SEED),
+                seed=prefix.SEED,
             )
-            optimizer = torch.optim.SGD(
-                surrogate.parameters(),
-                lr=prefix.LEARNING_RATE,
-                momentum=prefix.MOMENTUM,
-                weight_decay=prefix.WEIGHT_DECAY,
-            )
-            scheduler = torch.optim.lr_scheduler.StepLR(
-                optimizer, step_size=prefix.LR_STEP, gamma=prefix.LR_GAMMA
-            )
-            for epoch in range(1, prefix.EPOCHS + 1):
-                learning_rate = optimizer.param_groups[0]["lr"]
-                train_metrics = prefix.train_one_epoch(
-                    surrogate,
-                    query_loader,
-                    optimizer,
-                    device,
-                    "soft",
-                    epoch,
-                    prefix.EPOCHS,
-                    None,
-                )
-                scheduler.step()
+            for row in case_history:
                 history_rows.append(
                     {
                         "case": case.name,
                         "top_k": len(case.selected_weights),
-                        "epoch": epoch,
-                        "learning_rate": learning_rate,
-                        **train_metrics,
+                        **row,
                     }
                 )
-            end_metrics = prefix.evaluate_surrogate(
-                surrogate, eval_loader, reference, device
-            )
+            if evaluation is None:
+                evaluation = prefix.prepare_eval(
+                    victim,
+                    dataset=prefix.DATASET,
+                    dataset_root=dataset_root,
+                    protocol_root=protocol_root,
+                    device=device,
+                    num_workers=args.num_workers,
+                    seed=prefix.SEED,
+                )
+            result_metrics = prefix.evaluate_once(surrogate, evaluation, device)
             print(
-                f"[END/{case.name}] accuracy={end_metrics['surrogate_acc']:.6f} "
-                f"fidelity={end_metrics['fidelity']:.6f} "
-                f"posterior_kl={end_metrics['posterior_kl']:.6f}"
+                f"[RESULT/{case.name}] epoch={selection['epoch']} "
+                f"accuracy={result_metrics['surrogate_acc']:.6f} "
+                f"fidelity={result_metrics['fidelity']:.6f} "
+                f"posterior_kl={result_metrics['posterior_kl']:.6f}"
             )
             results.append(
                 build_case_result(
                     case,
                     plan,
                     selected_units,
-                    end_metrics,
+                    selection,
+                    result_metrics,
                     final_paths[case.name],
                 )
             )
-            del surrogate, optimizer, scheduler, query_loader
+            del surrogate
             if torch.cuda.is_available():
                 torch.cuda.empty_cache()
 
@@ -580,12 +566,9 @@ def main() -> int:
             "experiment": prefix.EXPERIMENT,
             "study": "eligible_rank_head_control_position_sets",
             "protocol": "MS",
-            "attack_protocol": prefix.ATTACK_PROTOCOL_VERSION,
+            **prefix.protocol_metadata(query),
             "dataset": prefix.DATASET,
             "victim_model": prefix.MODEL,
-            "query_budget": prefix.BUDGET,
-            "label_mode": "soft",
-            "query_transform": "test",
             "seed": prefix.SEED,
             "randomization": {
                 "reset_before_each_surrogate_initialization": True,
@@ -610,24 +593,17 @@ def main() -> int:
             "victim_checkpoint_epoch": victim_metadata.get("epoch"),
             "official_weight": str(official_weight.relative_to(ROOT)),
             "official_weight_sha256": prefix.sha256_file(official_weight),
-            "posterior_path": str(posterior_path.relative_to(ROOT)),
-            "posterior_sha256": prefix.sha256_file(posterior_path),
+            "posterior_path": str(query.target_path.relative_to(ROOT)),
+            "posterior_sha256": query.target_sha256,
             "training": {
-                "mode": "finetune",
-                "epochs": prefix.EPOCHS,
-                "batch_size": prefix.BATCH_SIZE,
-                "eval_batch_size": prefix.EVAL_BATCH_SIZE,
-                "optimizer": "SGD",
-                "learning_rate": prefix.LEARNING_RATE,
-                "momentum": prefix.MOMENTUM,
-                "weight_decay": prefix.WEIGHT_DECAY,
-                "lr_scheduler": "StepLR",
-                "lr_step": prefix.LR_STEP,
-                "lr_gamma": prefix.LR_GAMMA,
-                "evaluation_schedule": "end_only",
+                **prefix.protocol_metadata(query),
                 "trained_cases": [case.name for case in cases],
             },
-            "primary": {"evaluation": "end", "epoch": prefix.EPOCHS},
+            "primary": {
+                "checkpoint": "best.pth",
+                "selection_metric": "minimum_validation_soft_cross_entropy",
+                "tie_break": "earliest_epoch",
+            },
             "results": results,
             "references": references,
             "outputs": {

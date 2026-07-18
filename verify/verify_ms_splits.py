@@ -57,6 +57,8 @@ def verify_dataset(protocol_root: Path, dataset: str, expected: dict[str, int | 
         fail(f"{dataset}: query 定义不正确")
     if query.get("max_budget") != expected["query"] or query.get("planned_budgets") != expected["budgets"]:
         fail(f"{dataset}: query 预算不正确")
+    if any(int(budget) % 5 for budget in expected["budgets"]):
+        fail(f"{dataset}: planned budget 不能严格执行 80/20 query 划分")
 
     with splits_path.open("r", newline="", encoding="utf-8") as reader_file:
         reader = csv.DictReader(reader_file, delimiter="\t")
