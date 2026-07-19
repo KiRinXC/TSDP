@@ -1,3 +1,0 @@
-case	label	score	selected_filter_count	selected_conv_param_count	protected_param_count	total_param_count	protected_param_ratio	protected_state_count	protection_mask_sha256	best_epoch	surrogate_acc	fidelity	posterior_kl
-cross_residual	Cross residual	weight_residual_abs_mean	300	239587	295687	11227812	0.026335228983171432	35	42a0fc3f5094fab403c4a3eb3957a2a62eb998209db6a8e2992551e8b5018660	90	0.1846	0.2016	2.569086500549316
-causal_residual	Causal residual	conductance_abs_mean	208	239594	295694	11227812	0.026335852435006926	32	2cf2346bd24347b50a9f165ca096e919247c4766a4d314555c4521a416d9b66f	90	0.1627	0.1803	2.720243910598755
