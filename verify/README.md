@@ -13,17 +13,16 @@ make install     # 按 requirements.lock.txt 补齐或复现唯一环境
 make env         # 检查 Python 与依赖版本，允许当前会话暂时看不到 GPU
 make gpu         # 严格检查 WSL GPU，并执行 CUDA 矩阵乘法和卷积反向传播
 make unit        # 运行 MS、TensorShield、TEESlice 的 43 项单元测试
-make results     # 核对正式 MS 及 Lab/temp 的指标、日志、mask、输入哈希和图片
+make results     # 核对正式 MS 及 Lab 的指标、日志、mask、输入哈希和图片
 make check       # 依次运行 GPU、单元测试、数据协议和结果一致性检查
 ```
 
-其中 Lab/temp 验证会拒绝以下情况：Lab03 没有使用普通 ResNet18 统一参数分母；
+其中 Lab 验证会拒绝以下情况：Lab03 没有使用普通 ResNet18 统一参数分母；
 Lab02/04/05/06 不是 400/100 query
 train/validation、主结果不是最早的 validation-best、单个 case 多次读取
-`eval_ms`、mask 文件与 JSON 哈希不一致，或 `temp/` 仍残留 ARC、REC 门优化及独立
-XAI 脚本。Lab04 candidate 还会核对 seed 43–52 的十组独立 query 划分、四十组
-完整 history、三策略受控配对及黑盒判定、均值和样本标准差。`temp/` 当前只允许交叉残差、
-因果残差和二者的统一 MS 验证入口。
+`eval_ms` 或 mask 文件与 JSON 哈希不一致。Lab04 candidate 还会核对 seed 43–52
+的十组独立 query 划分、四十组完整 history、三策略受控配对及黑盒判定、均值和
+样本标准差。
 
 `make verify` 默认检查四个公开数据集的 canonical layout 和 `dataset/MS/` 划分协议，但跳过公开数据压缩包的 MD5。需要同时核对压缩包时使用 `make verify VERIFY_ARGS=""`。旧的 `dataset/query/` 已退出当前协议，不再由验证器读取；MS query 只由 `dataset/MS/<dataset>/manifest.json` 指向 `splits.tsv` 中的 `query_pool_ms`。
 

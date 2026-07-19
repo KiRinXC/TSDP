@@ -45,7 +45,5 @@ TSDP/
 │   ├── 04_tensorshield              TensorShield 前缀、三策略十种子候选与集合验证
 │   ├── 05_state                     State 类型与参数语义保护对比
 │   └── 06_weight                    TensorShield Top-k 的遗漏 weight 语义闭包验证
-├── temp/                            交叉残差与因果残差的 filter 级临时验证
-│   └── output/                      残差分数、filter mask、统一 MS 指标与图
 └── docs/                            参考论文
 ```

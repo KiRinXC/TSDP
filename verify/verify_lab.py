@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""核对当前 Lab02/04/05/06 与 temp 残差实验的统一 MS 协议。"""
+"""核对当前 Lab02/04/05/06 的统一 MS 协议。"""
 
 from __future__ import annotations
 
@@ -710,84 +710,6 @@ def validate_lab06() -> None:
     )
 
 
-def validate_temp() -> None:
-    allowed_code = {
-        "README.md",
-        "attack.py",
-        "causal.py",
-        "residual.py",
-        "support.py",
-    }
-    actual_code = {
-        path.name
-        for path in (ROOT / "temp").iterdir()
-        if path.is_file()
-    }
-    if actual_code != allowed_code:
-        raise ValueError(f"temp 仍含失效代码：{sorted(actual_code - allowed_code)}")
-    allowed_outputs = {
-        "residual.json",
-        "residual.png",
-        "residual_filters.tsv",
-        "residual_units.tsv",
-        "residual_entry.tsv",
-        "causal.json",
-        "causal.png",
-        "causal_filters.tsv",
-        "causal_units.tsv",
-        "causal_entry.tsv",
-        "attack.json",
-        "attack.tsv",
-        "attack_history.tsv",
-        "attack.png",
-        "cross_residual_mask.pt",
-        "cross_residual_selection.tsv",
-        "causal_residual_mask.pt",
-        "causal_residual_selection.tsv",
-    }
-    actual_outputs = {
-        path.name for path in (ROOT / "temp/output").iterdir() if path.is_file()
-    }
-    if actual_outputs != allowed_outputs:
-        raise ValueError(
-            "temp/output 与当前残差实验产物集合不一致："
-            f"多余={sorted(actual_outputs - allowed_outputs)}，"
-            f"缺少={sorted(allowed_outputs - actual_outputs)}"
-        )
-    residual = load_json("temp/output/residual.json")
-    causal = load_json("temp/output/causal.json")
-    for payload, label in ((residual, "residual"), (causal, "causal")):
-        protocol = payload.get("protocol")
-        if (
-            not isinstance(protocol, dict)
-            or protocol.get("input_split") != "query_pool_ms/query_train"
-            or protocol.get("input_count") != QUERY_TRAIN
-        ):
-            raise ValueError(f"temp {label} 未只使用 400 条 query-train。")
-        inputs = payload.get("inputs")
-        if not isinstance(inputs, dict) or len(inputs.get("query_source_indices", ())) != QUERY_TRAIN:
-            raise ValueError(f"temp {label} 的输入索引不完整。")
-    payload = validate_experiment(
-        "temp/output/attack.json",
-        "temp/output/attack_history.tsv",
-        key_fields=("case",),
-        expected_result_count=2,
-    )
-    if {row["case"] for row in payload["results"]} != {
-        "cross_residual",
-        "causal_residual",
-    }:
-        raise ValueError("temp MS 结果不是交叉残差与因果残差两组。")
-    discovery = payload.get("discovery_protocol")
-    if (
-        not isinstance(discovery, dict)
-        or discovery.get("input_count") != QUERY_TRAIN
-        or discovery.get("validation_used_for_filter_selection") is not False
-        or discovery.get("eval_ms_used_for_filter_selection") is not False
-    ):
-        raise ValueError("temp filter 选择存在 validation/eval_ms 泄漏。")
-
-
 def validate_readmes() -> None:
     for relative_path in (
         "results/lab/02_head/README.md",
@@ -795,7 +717,6 @@ def validate_readmes() -> None:
         "results/lab/04_tensorshield/README.md",
         "results/lab/05_state/README.md",
         "results/lab/06_weight/README.md",
-        "temp/README.md",
     ):
         text = (ROOT / relative_path).read_text(encoding="utf-8")
         forbidden = ("固定第 100 轮", "主要结果统一读取第 100 轮", "eval_ms 选择 best")
@@ -809,9 +730,8 @@ def main() -> int:
     validate_lab04()
     validate_lab05()
     validate_lab06()
-    validate_temp()
     validate_readmes()
-    print("[OK] Lab03 参数分母及 Lab02/04/05/06 与 temp 的统一 MS 协议均有效。")
+    print("[OK] Lab03 参数分母及 Lab02/04/05/06 的统一 MS 协议均有效。")
     return 0
 
 

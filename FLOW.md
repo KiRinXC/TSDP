@@ -182,26 +182,4 @@ Lab 验证实验/
         ├── metrics.png               三项 MS 指标与 soft/hard 黑盒边界三联曲线
         └── <case>_mask.pt            四十个新增组合的紧凑保护掩码
 
-临时 filter 残差验证/
-├── temp/residual.py
-│   ├── 只读取 400 条 query-train 图像，不读取标签、posterior 或 MS 指标
-│   ├── 对 public/victim 的权重与层输入执行 PP/PV/VP/VV 四路交叉卷积
-│   ├── 在每个 Conv 的 pre-BN 边界计算 4,800 个 filter 的局部 weight 残差
-│   └── temp/output/residual_{filters,units,entry}.tsv 与 residual.json/png
-├── temp/causal.py
-│   ├── 读取同一 400 条 query-train 与固定交叉残差
-│   ├── 在受害者计算图中移除并积分注回局部 filter 残差
-│   ├── 以最终 victim posterior KL 计算逐 filter residual conductance
-│   └── temp/output/causal_{filters,units,entry}.tsv 与 causal.json/png
-└── temp/attack.py
-    ├── 在相同 239,616 个 Conv 参数预算下分别按交叉/因果残差选择 filter
-    ├── 两组均固定完整保护分类头 weight/bias 与全部 BN gamma
-    ├── 使用 400 query-train、100 query-validation 和 validation-best 协议
-    ├── 每组 checkpoint 固定后只在完整 eval_ms 上评估一次
-    └── temp/output/
-        ├── attack.json/tsv           两组保护计划、选择、最终指标与正式参考线
-        ├── attack_history.tsv        两组各 100 轮 train/validation 日志
-        ├── <case>_selection.tsv      4,800 个 filter 的得分、排名与选择
-        ├── <case>_mask.pt            filter、分类头和 BN gamma 保护 mask
-        └── attack.png                与 TensorShield、soft/hard 黑盒的三指标对比
 ```

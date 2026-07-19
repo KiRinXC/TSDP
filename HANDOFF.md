@@ -264,33 +264,11 @@ TEESlice 结果只在 `results/MS/resnet18/c100/teeslice/` 保存，并标记为
 
 Lab 结果不能混入正式主实验索引，但也不能以“清理历史”为由删除仍承担独立结论的 Lab。
 
-### 4.9 临时 filter 残差验证
-
-`temp/` 已删除早期 ARC、REC 门优化、入口/尾部启发式、Shapley 和独立 XAI
-tensor/block 代码及产物，只保留三项：
-
-- `residual.py`：在同一卷积位置执行 public/victim 权重与层输入的 PP/PV/VP/VV
-  四路交叉前向，得到 4,800 个 filter 的局部 weight 残差；
-- `causal.py`：在受害者计算图中移除并积分注回局部残差，以最终 posterior KL
-  计算 residual conductance；
-- `attack.py`：在相同 `239,616` 个卷积参数预算下分别按交叉残差和因果残差选择
-  filter，固定完整保护分类头 weight/bias 与全部 BN gamma，再运行统一 MS。
-
-残差发现只使用固定 500-query budget 中的 400 条 query-train 图像，不读取标签或
-保存的 posterior；100 条 query-validation 只负责 surrogate 选模，`eval_ms` 不参与
-filter 排名并且每组只评估一次。在相同 `239,616` 个卷积参数预算、完整分类头与全部
-BN gamma 下，交叉残差为 `0.1846/0.2016/2.569087`，因果残差为
-`0.1627/0.1803/2.720244`。因果投影以 `2.6336%` 总参数保护同时优于交叉残差和
-TensorShield `0.1728/0.1865/2.694492`，但尚未达到 soft 黑盒
-`0.1390/0.1463/3.039817`。该实验仍属于 `temp/` 科学验证，不写正式 MS 索引。
-
 ## 5. 当前卡在哪里
 
 当前没有代码运行阻塞，`ResNet18+C100` 的 baseline 组合已经完成。真正未决的是本项目方法的设计与扩展边界：
 
-1. 已在 `temp/` 实现 filter 级交叉残差与因果残差排序，并用同成本 MS 直接验证；
-   尚未把逐 filter 分数扩展成跨层连通通道块路径，也尚未形成可升级为正式实验的
-   关键路径算法。
+1. 尚未形成能够先验选择攻击依赖 filter、跨层连通通道块或关键路径的统一算法。
 2. 尚未确定通道块大小、跨层成本归一化、保护预算扫描点和相同成本比较方式；Lab06 表明 BN gamma 应纳入通道块联动规则的候选状态，downsample Conv 应保留为图中候选。
 3. `ResNet50`、`VGG16-BN`、`MobileNetV2` 尚未定义各自的基础 unit 与官方层映射。
 4. TensorShield 缺少其他模型/数据集的作者 rank，不能自动扩展。

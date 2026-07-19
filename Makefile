@@ -13,7 +13,7 @@ help:
 	@printf '  %-18s %s\n' 'env' 'verify Python and dependency versions; GPU may be unavailable'
 	@printf '  %-18s %s\n' 'gpu' 'strictly verify WSL GPU and run CUDA forward/backward smoke tests'
 	@printf '  %-18s %s\n' 'unit' 'run the MS, TensorShield, and TEESlice unit tests'
-	@printf '  %-18s %s\n' 'results' 'verify formal MS and Lab/temp metrics, histories, masks, hashes, and plots'
+	@printf '  %-18s %s\n' 'results' 'verify formal MS and Lab metrics, histories, masks, hashes, and plots'
 	@printf '  %-18s %s\n' 'check' 'run gpu, unit, and dataset/protocol verification'
 	@printf '  %-18s %s\n' 'prepare' 'download public datasets and ImageNet pretrained weights; no training'
 	@printf '  %-18s %s\n' 'verify' 'verify public datasets and MS splits; use VERIFY_ARGS="" to check archives'
