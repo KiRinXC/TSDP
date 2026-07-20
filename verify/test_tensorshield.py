@@ -243,10 +243,13 @@ class TensorShieldAblationTests(unittest.TestCase):
 
 
 class TensorShieldCandidateTests(unittest.TestCase):
-    def test_three_multiseed_strategies_are_controlled_comparisons(self):
+    def test_four_multiseed_strategies_are_controlled_comparisons(self):
         candidate = load_lab04_module("candidate")
         model = imagenet_models.resnet18(num_classes=100)
         selected, kept_weights, bn_gamma = candidate.build_candidate(model)
+        drop06, drop06_weights, drop06_gamma = (
+            candidate.build_candidate_drop06(model)
+        )
         self.assertEqual(candidate.SELECTION_SEED, 42)
         self.assertEqual(candidate.EVALUATION_SEEDS, tuple(range(43, 53)))
         self.assertEqual(
@@ -255,10 +258,19 @@ class TensorShieldCandidateTests(unittest.TestCase):
                 "tensorshield_top10",
                 "tensorshield_top10_bn_gamma",
                 "candidate_drop_05_08_10_bn_gamma",
+                "candidate_drop_05_06_08_10_bn_gamma",
             ),
         )
         self.assertEqual(candidate.KEPT_ELIGIBLE_RANKS, (1, 2, 3, 4, 6, 7, 9))
         self.assertEqual(candidate.DROPPED_TOP10_RANKS, (5, 8, 10))
+        self.assertEqual(
+            candidate.DROP06_KEPT_ELIGIBLE_RANKS,
+            (1, 2, 3, 4, 7, 9),
+        )
+        self.assertEqual(
+            candidate.DROP06_DROPPED_TOP10_RANKS,
+            (5, 6, 8, 10),
+        )
         self.assertIn("layer2.1.conv1.weight", selected)
         self.assertIn("layer2.0.conv2.weight", selected)
         self.assertNotIn("layer1.1.conv2.weight", selected)
@@ -267,6 +279,13 @@ class TensorShieldCandidateTests(unittest.TestCase):
         self.assertEqual(len(kept_weights), 7)
         self.assertEqual(len(bn_gamma), 20)
         self.assertEqual(len(selected), 28)
+        self.assertEqual(len(drop06_weights), 6)
+        self.assertEqual(len(drop06_gamma), 20)
+        self.assertEqual(len(drop06), 27)
+        self.assertEqual(
+            set(selected) - set(drop06),
+            {"layer2.0.conv2.weight"},
+        )
 
         units = {
             unit.state_name: unit for unit in build_resnet18_tensor_units(model)
@@ -284,6 +303,20 @@ class TensorShieldCandidateTests(unittest.TestCase):
         self.assertEqual(
             protection_mask_sha256(masks),
             "7f62208e2137a86a36c55c0e9a1d272d7e34cd99001499c6b5fa95087bdae557",
+        )
+        drop06_indices = tuple(units[name].index for name in drop06)
+        drop06_masks = build_unit_masks(model, drop06_indices)
+        self.assertEqual(
+            sum(units[name].numel for name in drop06),
+            candidate.EXPECTED_STATS[candidate.CANDIDATE_DROP06_CASE][1],
+        )
+        self.assertTrue(bool(drop06_masks["last_linear.weight"].all()))
+        self.assertTrue(bool(drop06_masks["last_linear.bias"].all()))
+        self.assertTrue(bool(drop06_masks["layer2.1.conv1.weight"].all()))
+        self.assertFalse(bool(drop06_masks["layer2.0.conv2.weight"].any()))
+        self.assertEqual(
+            protection_mask_sha256(drop06_masks),
+            "6364e56dfa7bbc8f9acc4f33fa403c5639880b06ce4d602cfdaeaf5ac1cd3272",
         )
 
         top10, top10_weights, top10_gamma = candidate.build_strategy_states(

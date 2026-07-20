@@ -1,0 +1,17 @@
+rank	overall_rank	module	weight_state	input_shape	output_shape	image_count	cross_abs_mean
+1	2	layer2.0.conv1	layer2.0.conv1.weight	64×8×8	128×4×4	500	0.9050048649311065
+2	3	layer1.0.conv1	layer1.0.conv1.weight	64×8×8	64×8×8	500	0.8169176792502403
+3	4	layer1.1.conv1	layer1.1.conv1.weight	64×8×8	64×8×8	500	0.7895947860479355
+4	5	layer3.0.conv1	layer3.0.conv1.weight	128×4×4	256×2×2	500	0.6832092597484588
+5	6	layer4.0.conv1	layer4.0.conv1.weight	256×2×2	512×1×1	500	0.5126085511445999
+6	7	layer2.1.conv1	layer2.1.conv1.weight	128×4×4	128×4×4	500	0.4923346557021141
+7	8	layer4.1.conv1	layer4.1.conv1.weight	512×1×1	512×1×1	500	0.4808675351142883
+8	9	layer3.0.conv2	layer3.0.conv2.weight	256×2×2	256×2×2	500	0.4774483253359795
+9	11	layer2.0.conv2	layer2.0.conv2.weight	128×4×4	128×4×4	500	0.3457995408773422
+10	12	layer3.1.conv1	layer3.1.conv1.weight	256×2×2	256×2×2	500	0.32701233398914337
+11	15	layer1.0.conv2	layer1.0.conv2.weight	64×8×8	64×8×8	500	0.2906946546137333
+12	16	layer2.1.conv2	layer2.1.conv2.weight	128×4×4	128×4×4	500	0.2802447854280472
+13	19	layer1.1.conv2	layer1.1.conv2.weight	64×8×8	64×8×8	500	0.25766341355443
+14	22	layer4.0.conv2	layer4.0.conv2.weight	512×1×1	512×1×1	500	0.19468372210860252
+15	30	layer3.1.conv2	layer3.1.conv2.weight	256×2×2	256×2×2	500	0.13483940038084985
+16	32	layer4.1.conv2	layer4.1.conv2.weight	512×1×1	512×1×1	500	0.13181399302184582

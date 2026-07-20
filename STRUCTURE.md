@@ -29,21 +29,33 @@ TSDP/
 │   └── MS/                          MS victim/surrogate 权重与 unit 保护掩码
 ├── results/                         实验指标与可视化结果
 │   ├── MS/                          surrogate 原始指标与 run 索引
-│   └── lab/                         Lab 实验结果与可视化
-│       ├── 01_kmeans                ResNet18+CIFAR-100 特征聚类
-│       ├── 02_head                  全保护/随机保护的分类头与权重消融
-│       ├── 03_baseline              普通 MS 策略、双黑盒参考线与 TEESlice 独立点总览
-│       ├── 04_tensorshield          TensorShield 前缀、三策略十种子候选及消融
-│       ├── 05_state                 State 类型与参数语义保护的 MS 对比结果
-│       └── 06_weight                TensorShield Top-k 的遗漏 weight 语义闭包结果
+│   ├── lab/                         Lab 实验结果与可视化
+│   │   ├── 01_kmeans                ResNet18+CIFAR-100 特征聚类
+│   │   ├── 02_head                  全保护/随机保护的分类头与权重消融
+│   │   ├── 03_baseline              普通 MS 策略、双黑盒参考线与 TEESlice 独立点总览
+│   │   ├── 04_tensorshield          TensorShield 前缀、四策略十种子候选及消融
+│   │   ├── 05_state                 State 类型与参数语义保护对比结果
+│   │   ├── 06_weight                TensorShield Top-k 的遗漏 weight 语义闭包结果
+│   │   ├── 07_structure             ResNet18 结构、conv1 依赖与对应 conv2 替换结果
+│   │   ├── 08_leakage               泄露状态利用强度与 MS 负迁移结果
+│   │   └── 09_mechanism             攻击依赖位置的接口机制分析结果
+│   └── test/                        编号测试的独立结果
+│       └── MS/
+│           └── 01_cross             40 个 Conv/BN gamma 的 CHW 交叉残差排名
 ├── models/                          统一模型结构及 TEESlice slice/backbone 接口
 ├── verify/                          环境/GPU、数据协议、surrogate 与固定 rank mask 验证
 ├── lab/                             小型验证实验
 │   ├── 01_kmeans                    ResNet18+CIFAR-100 特征聚类
 │   ├── 02_head                      分类头与权重训练方式消融
 │   ├── 03_baseline                  MS 策略保护比例、双黑盒参考线与三项指标总览
-│   ├── 04_tensorshield              TensorShield 前缀、三策略十种子候选与集合验证
+│   ├── 04_tensorshield              TensorShield 前缀、四策略十种子候选与集合验证
 │   ├── 05_state                     State 类型与参数语义保护对比
-│   └── 06_weight                    TensorShield Top-k 的遗漏 weight 语义闭包验证
+│   ├── 06_weight                    TensorShield Top-k 的遗漏 weight 语义闭包验证
+│   ├── 07_structure                 ResNet18 结构、conv1 依赖与对应 conv2 替换验证
+│   ├── 08_leakage                   泄露状态利用强度与 MS 负迁移验证
+│   └── 09_mechanism                 攻击依赖位置的接口机制分析
+├── test/                            未进入 Lab 或正式实验的编号测试
+│   └── MS/
+│       └── 01_cross                 40 个 Conv/BN gamma 的 CHW 交叉残差测试入口
 └── docs/                            参考论文
 ```

@@ -1,0 +1,76 @@
+unit编号	模块	计算	输入	输出
+—	输入	RGB 图片	—	3×32×32
+0	conv1	7×7 卷积，stride=2，padding=3，bias=False	3×32×32	64×16×16
+1-5	bn1	BatchNorm2d(64)	64×16×16	64×16×16
+—	relu	ReLU(inplace=True)	64×16×16	64×16×16
+—	maxpool	3×3 最大池化，stride=2，padding=1	64×16×16	64×8×8
+—	layer1.0.identity	恒等映射	64×8×8	64×8×8
+6	layer1.0.conv1	3×3 卷积，stride=1，padding=1，bias=False	64×8×8	64×8×8
+7-11	layer1.0.bn1	BatchNorm2d(64)	64×8×8	64×8×8
+—	layer1.0.relu（第1次）	ReLU(inplace=True)	64×8×8	64×8×8
+12	layer1.0.conv2	3×3 卷积，stride=1，padding=1，bias=False	64×8×8	64×8×8
+13-17	layer1.0.bn2	BatchNorm2d(64)	64×8×8	64×8×8
+—	layer1.0.add	主分支与 identity 逐元素相加	64×8×8 + 64×8×8	64×8×8
+—	layer1.0.relu（第2次）	ReLU(inplace=True)	64×8×8	64×8×8
+—	layer1.1.identity	恒等映射	64×8×8	64×8×8
+18	layer1.1.conv1	3×3 卷积，stride=1，padding=1，bias=False	64×8×8	64×8×8
+19-23	layer1.1.bn1	BatchNorm2d(64)	64×8×8	64×8×8
+—	layer1.1.relu（第1次）	ReLU(inplace=True)	64×8×8	64×8×8
+24	layer1.1.conv2	3×3 卷积，stride=1，padding=1，bias=False	64×8×8	64×8×8
+25-29	layer1.1.bn2	BatchNorm2d(64)	64×8×8	64×8×8
+—	layer1.1.add	主分支与 identity 逐元素相加	64×8×8 + 64×8×8	64×8×8
+—	layer1.1.relu（第2次）	ReLU(inplace=True)	64×8×8	64×8×8
+30	layer2.0.conv1	3×3 卷积，stride=2，padding=1，bias=False	64×8×8	128×4×4
+31-35	layer2.0.bn1	BatchNorm2d(128)	128×4×4	128×4×4
+—	layer2.0.relu（第1次）	ReLU(inplace=True)	128×4×4	128×4×4
+36	layer2.0.conv2	3×3 卷积，stride=1，padding=1，bias=False	128×4×4	128×4×4
+37-41	layer2.0.bn2	BatchNorm2d(128)	128×4×4	128×4×4
+42	layer2.0.downsample.0	1×1 卷积，stride=2，padding=0，bias=False	64×8×8	128×4×4
+43-47	layer2.0.downsample.1	BatchNorm2d(128)	128×4×4	128×4×4
+—	layer2.0.add	主分支与 downsample 逐元素相加	128×4×4 + 128×4×4	128×4×4
+—	layer2.0.relu（第2次）	ReLU(inplace=True)	128×4×4	128×4×4
+—	layer2.1.identity	恒等映射	128×4×4	128×4×4
+48	layer2.1.conv1	3×3 卷积，stride=1，padding=1，bias=False	128×4×4	128×4×4
+49-53	layer2.1.bn1	BatchNorm2d(128)	128×4×4	128×4×4
+—	layer2.1.relu（第1次）	ReLU(inplace=True)	128×4×4	128×4×4
+54	layer2.1.conv2	3×3 卷积，stride=1，padding=1，bias=False	128×4×4	128×4×4
+55-59	layer2.1.bn2	BatchNorm2d(128)	128×4×4	128×4×4
+—	layer2.1.add	主分支与 identity 逐元素相加	128×4×4 + 128×4×4	128×4×4
+—	layer2.1.relu（第2次）	ReLU(inplace=True)	128×4×4	128×4×4
+60	layer3.0.conv1	3×3 卷积，stride=2，padding=1，bias=False	128×4×4	256×2×2
+61-65	layer3.0.bn1	BatchNorm2d(256)	256×2×2	256×2×2
+—	layer3.0.relu（第1次）	ReLU(inplace=True)	256×2×2	256×2×2
+66	layer3.0.conv2	3×3 卷积，stride=1，padding=1，bias=False	256×2×2	256×2×2
+67-71	layer3.0.bn2	BatchNorm2d(256)	256×2×2	256×2×2
+72	layer3.0.downsample.0	1×1 卷积，stride=2，padding=0，bias=False	128×4×4	256×2×2
+73-77	layer3.0.downsample.1	BatchNorm2d(256)	256×2×2	256×2×2
+—	layer3.0.add	主分支与 downsample 逐元素相加	256×2×2 + 256×2×2	256×2×2
+—	layer3.0.relu（第2次）	ReLU(inplace=True)	256×2×2	256×2×2
+—	layer3.1.identity	恒等映射	256×2×2	256×2×2
+78	layer3.1.conv1	3×3 卷积，stride=1，padding=1，bias=False	256×2×2	256×2×2
+79-83	layer3.1.bn1	BatchNorm2d(256)	256×2×2	256×2×2
+—	layer3.1.relu（第1次）	ReLU(inplace=True)	256×2×2	256×2×2
+84	layer3.1.conv2	3×3 卷积，stride=1，padding=1，bias=False	256×2×2	256×2×2
+85-89	layer3.1.bn2	BatchNorm2d(256)	256×2×2	256×2×2
+—	layer3.1.add	主分支与 identity 逐元素相加	256×2×2 + 256×2×2	256×2×2
+—	layer3.1.relu（第2次）	ReLU(inplace=True)	256×2×2	256×2×2
+90	layer4.0.conv1	3×3 卷积，stride=2，padding=1，bias=False	256×2×2	512×1×1
+91-95	layer4.0.bn1	BatchNorm2d(512)	512×1×1	512×1×1
+—	layer4.0.relu（第1次）	ReLU(inplace=True)	512×1×1	512×1×1
+96	layer4.0.conv2	3×3 卷积，stride=1，padding=1，bias=False	512×1×1	512×1×1
+97-101	layer4.0.bn2	BatchNorm2d(512)	512×1×1	512×1×1
+102	layer4.0.downsample.0	1×1 卷积，stride=2，padding=0，bias=False	256×2×2	512×1×1
+103-107	layer4.0.downsample.1	BatchNorm2d(512)	512×1×1	512×1×1
+—	layer4.0.add	主分支与 downsample 逐元素相加	512×1×1 + 512×1×1	512×1×1
+—	layer4.0.relu（第2次）	ReLU(inplace=True)	512×1×1	512×1×1
+—	layer4.1.identity	恒等映射	512×1×1	512×1×1
+108	layer4.1.conv1	3×3 卷积，stride=1，padding=1，bias=False	512×1×1	512×1×1
+109-113	layer4.1.bn1	BatchNorm2d(512)	512×1×1	512×1×1
+—	layer4.1.relu（第1次）	ReLU(inplace=True)	512×1×1	512×1×1
+114	layer4.1.conv2	3×3 卷积，stride=1，padding=1，bias=False	512×1×1	512×1×1
+115-119	layer4.1.bn2	BatchNorm2d(512)	512×1×1	512×1×1
+—	layer4.1.add	主分支与 identity 逐元素相加	512×1×1 + 512×1×1	512×1×1
+—	layer4.1.relu（第2次）	ReLU(inplace=True)	512×1×1	512×1×1
+—	avgpool	AdaptiveAvgPool2d((1, 1))	512×1×1	512×1×1
+—	flatten	view(N, -1)	512×1×1	512
+120-121	last_linear	Linear(512→100)，bias=True	512	100

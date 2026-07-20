@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""以十个独立 seed 对比 Top-10、BN gamma 闭包与删点候选。"""
+"""以十个独立 seed 对比 Top-10、BN gamma 闭包与两组删点候选。"""
 
 from __future__ import annotations
 
@@ -20,28 +20,39 @@ import run as prefix
 TOP10_CASE = "tensorshield_top10"
 TOP10_BN_CASE = "tensorshield_top10_bn_gamma"
 CANDIDATE_CASE = "candidate_drop_05_08_10_bn_gamma"
+CANDIDATE_DROP06_CASE = "candidate_drop_05_06_08_10_bn_gamma"
 BLACKBOX_CASE = "soft_full_protection"
-STRATEGY_CASES = (TOP10_CASE, TOP10_BN_CASE, CANDIDATE_CASE)
+STRATEGY_CASES = (
+    TOP10_CASE,
+    TOP10_BN_CASE,
+    CANDIDATE_CASE,
+    CANDIDATE_DROP06_CASE,
+)
 ALL_CASES = (*STRATEGY_CASES, BLACKBOX_CASE)
 SELECTION_SEED = 42
 EVALUATION_SEEDS = tuple(range(43, 53))
 KEPT_ELIGIBLE_RANKS = (1, 2, 3, 4, 6, 7, 9)
 DROPPED_TOP10_RANKS = (5, 8, 10)
+DROP06_KEPT_ELIGIBLE_RANKS = (1, 2, 3, 4, 7, 9)
+DROP06_DROPPED_TOP10_RANKS = (5, 6, 8, 10)
 EXPECTED_STATS = {
     TOP10_CASE: (11, 1_009_764),
     TOP10_BN_CASE: (31, 1_014_564),
     CANDIDATE_CASE: (28, 793_380),
+    CANDIDATE_DROP06_CASE: (27, 645_924),
 }
 CASE_LABELS = {
     TOP10_CASE: "TensorShield Top-10",
     TOP10_BN_CASE: "Top-10 + BN gamma",
     CANDIDATE_CASE: "Drop 5/8/10 + BN gamma",
+    CANDIDATE_DROP06_CASE: "Drop 5/6/8/10 + BN gamma",
     BLACKBOX_CASE: "Matched soft black-box",
 }
 CASE_COLORS = {
     TOP10_CASE: "#555555",
     TOP10_BN_CASE: "#009E73",
     CANDIDATE_CASE: "#AA3377",
+    CANDIDATE_DROP06_CASE: "#D55E00",
 }
 METRICS = ("surrogate_acc", "fidelity", "posterior_kl")
 HISTORY_FIELDS = (
@@ -94,6 +105,11 @@ STRATEGIES = (
     StrategySpec(TOP10_CASE, tuple(range(1, 11)), False),
     StrategySpec(TOP10_BN_CASE, tuple(range(1, 11)), True),
     StrategySpec(CANDIDATE_CASE, KEPT_ELIGIBLE_RANKS, True),
+    StrategySpec(
+        CANDIDATE_DROP06_CASE,
+        DROP06_KEPT_ELIGIBLE_RANKS,
+        True,
+    ),
 )
 STRATEGY_BY_NAME = {strategy.name: strategy for strategy in STRATEGIES}
 
@@ -166,6 +182,16 @@ def build_candidate(
 ) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
     """保留给单元测试与其他 Lab 使用的候选构造入口。"""
     return build_strategy_states(victim, STRATEGY_BY_NAME[CANDIDATE_CASE])
+
+
+def build_candidate_drop06(
+    victim: nn.Module,
+) -> tuple[tuple[str, ...], tuple[str, ...], tuple[str, ...]]:
+    """构造在原候选上额外暴露 rank-6 的受控消融。"""
+    return build_strategy_states(
+        victim,
+        STRATEGY_BY_NAME[CANDIDATE_DROP06_CASE],
+    )
 
 
 def initialize_strategy(
@@ -449,6 +475,21 @@ def build_aggregate(
                 CANDIDATE_CASE,
                 BLACKBOX_CASE,
             ),
+            "drop_06_given_drop_05_08_10_bn_gamma": difference_summary(
+                result_by_key,
+                CANDIDATE_DROP06_CASE,
+                CANDIDATE_CASE,
+            ),
+            "drop_05_06_08_10_given_bn_gamma": difference_summary(
+                result_by_key,
+                CANDIDATE_DROP06_CASE,
+                TOP10_BN_CASE,
+            ),
+            "drop_05_06_08_10_minus_blackbox": difference_summary(
+                result_by_key,
+                CANDIDATE_DROP06_CASE,
+                BLACKBOX_CASE,
+            ),
         },
         "at_or_beyond_matched_blackbox_counts": blackbox_counts,
     }
@@ -517,7 +558,7 @@ def plot_result(
         ("fidelity", "Fidelity"),
         ("posterior_kl", "Posterior KL"),
     )
-    figure, axes = prefix.plt.subplots(1, 3, figsize=(15.6, 5.1))
+    figure, axes = prefix.plt.subplots(1, 3, figsize=(17.4, 5.1))
     x_values = list(range(len(STRATEGY_CASES)))
     for axis, (metric, title) in zip(axes, specifications):
         means = [
@@ -586,6 +627,7 @@ def plot_result(
                 "Top-10\n8.9934%",
                 "+ BN gamma\n9.0362%",
                 "Drop 5/8/10\n+ BN gamma\n7.0662%",
+                "Drop 5/6/8/10\n+ BN gamma\n5.7529%",
             ),
         )
         axis.grid(axis="y", color="#D9D9D9", linewidth=0.7, alpha=0.75)
@@ -613,7 +655,7 @@ def plot_result(
         frameon=False,
     )
     figure.suptitle(
-        "TensorShield, BN gamma closure, and post-hoc candidate",
+        "TensorShield, BN gamma closure, and drop-6 ablation",
         y=1.10,
     )
     figure.tight_layout()
@@ -878,6 +920,7 @@ def main() -> int:
         TOP10_CASE: out_dir / "candidate_top10_mask.pt",
         TOP10_BN_CASE: out_dir / "candidate_top10_bn_gamma_mask.pt",
         CANDIDATE_CASE: out_dir / "candidate_mask.pt",
+        CANDIDATE_DROP06_CASE: out_dir / "candidate_drop06_mask.pt",
         BLACKBOX_CASE: out_dir / "candidate_full_mask.pt",
     }
     for case, mask_path in mask_paths.items():
@@ -973,7 +1016,7 @@ def main() -> int:
         (int(row["seed"]), str(row["case"])): row for row in results
     }
     if set(result_by_key) != expected_keys or len(results) != len(expected_keys):
-        raise RuntimeError("三策略与配对黑盒的十种子结果不完整。")
+        raise RuntimeError("四策略与配对黑盒的十种子结果不完整。")
     results = [
         result_by_key[(seed, case)]
         for seed in EVALUATION_SEEDS
@@ -1034,6 +1077,11 @@ def main() -> int:
                 "right": TOP10_BN_CASE,
                 "only_difference": "expose_eligible_ranks_5_8_10",
             },
+            "drop_rank_06_ablation": {
+                "left": CANDIDATE_DROP06_CASE,
+                "right": CANDIDATE_CASE,
+                "only_difference": "expose_eligible_rank_6",
+            },
         },
         "selection_rule": {
             "base": "author_eligible_top10",
@@ -1043,6 +1091,13 @@ def main() -> int:
             "add_all_bn_gamma": True,
             "uses_ms_feedback_for_method_selection": True,
             "status": "post_hoc_scientific_validation_only",
+        },
+        "candidate_ablation": {
+            "base": CANDIDATE_CASE,
+            "case": CANDIDATE_DROP06_CASE,
+            "keep_eligible_ranks": list(DROP06_KEPT_ELIGIBLE_RANKS),
+            "drop_top10_ranks": list(DROP06_DROPPED_TOP10_RANKS),
+            "only_difference": "expose_rank_6_layer2.0.conv2.weight",
         },
         "source": {
             "lab04_metrics": str(lab04_path.relative_to(prefix.ROOT)),
@@ -1122,7 +1177,7 @@ def main() -> int:
             f"all_three_vs_bb={counts['all_three']}/{len(EVALUATION_SEEDS)}"
         )
     print(f"[INFO] 结果：{metrics_path.relative_to(prefix.ROOT)}")
-    print(f"[INFO] 三柱图：{plot_path.relative_to(prefix.ROOT)}")
+    print(f"[INFO] 四柱图：{plot_path.relative_to(prefix.ROOT)}")
     return 0
 
 

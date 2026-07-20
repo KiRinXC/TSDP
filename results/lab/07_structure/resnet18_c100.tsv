@@ -1,0 +1,157 @@
+unit编号	state名称	state类型	模块	计算	输入	输出	TensorShield Top-17
+—	—	—	输入	RGB 图片	—	3×32×32	—
+0	conv1.weight	parameter	conv1	7×7 卷积，stride=2，padding=3，bias=False	3×32×32	64×16×16	—
+1	bn1.weight	parameter	bn1	BatchNorm2d(64)	64×16×16	64×16×16	—
+2	bn1.bias	parameter	bn1	BatchNorm2d(64)	64×16×16	64×16×16	—
+3	bn1.running_mean	buffer	bn1	BatchNorm2d(64)	64×16×16	64×16×16	—
+4	bn1.running_var	buffer	bn1	BatchNorm2d(64)	64×16×16	64×16×16	—
+5	bn1.num_batches_tracked	buffer	bn1	BatchNorm2d(64)	64×16×16	64×16×16	—
+—	—	—	relu	ReLU(inplace=True)	64×16×16	64×16×16	—
+—	—	—	maxpool	3×3 最大池化，stride=2，padding=1	64×16×16	64×8×8	—
+—	—	—	layer1.0.identity	恒等映射	64×8×8	64×8×8	—
+6	layer1.0.conv1.weight	parameter	layer1.0.conv1	3×3 卷积，stride=1，padding=1，bias=False	64×8×8	64×8×8	Top-4
+7	layer1.0.bn1.weight	parameter	layer1.0.bn1	BatchNorm2d(64)	64×8×8	64×8×8	—
+8	layer1.0.bn1.bias	parameter	layer1.0.bn1	BatchNorm2d(64)	64×8×8	64×8×8	—
+9	layer1.0.bn1.running_mean	buffer	layer1.0.bn1	BatchNorm2d(64)	64×8×8	64×8×8	—
+10	layer1.0.bn1.running_var	buffer	layer1.0.bn1	BatchNorm2d(64)	64×8×8	64×8×8	—
+11	layer1.0.bn1.num_batches_tracked	buffer	layer1.0.bn1	BatchNorm2d(64)	64×8×8	64×8×8	—
+—	—	—	layer1.0.relu（第1次）	ReLU(inplace=True)	64×8×8	64×8×8	—
+12	layer1.0.conv2.weight	parameter	layer1.0.conv2	3×3 卷积，stride=1，padding=1，bias=False	64×8×8	64×8×8	Top-8
+13	layer1.0.bn2.weight	parameter	layer1.0.bn2	BatchNorm2d(64)	64×8×8	64×8×8	—
+14	layer1.0.bn2.bias	parameter	layer1.0.bn2	BatchNorm2d(64)	64×8×8	64×8×8	—
+15	layer1.0.bn2.running_mean	buffer	layer1.0.bn2	BatchNorm2d(64)	64×8×8	64×8×8	—
+16	layer1.0.bn2.running_var	buffer	layer1.0.bn2	BatchNorm2d(64)	64×8×8	64×8×8	—
+17	layer1.0.bn2.num_batches_tracked	buffer	layer1.0.bn2	BatchNorm2d(64)	64×8×8	64×8×8	—
+—	—	—	layer1.0.add	主分支与 identity 逐元素相加	64×8×8 + 64×8×8	64×8×8	—
+—	—	—	layer1.0.relu（第2次）	ReLU(inplace=True)	64×8×8	64×8×8	—
+—	—	—	layer1.1.identity	恒等映射	64×8×8	64×8×8	—
+18	layer1.1.conv1.weight	parameter	layer1.1.conv1	3×3 卷积，stride=1，padding=1，bias=False	64×8×8	64×8×8	Top-1
+19	layer1.1.bn1.weight	parameter	layer1.1.bn1	BatchNorm2d(64)	64×8×8	64×8×8	—
+20	layer1.1.bn1.bias	parameter	layer1.1.bn1	BatchNorm2d(64)	64×8×8	64×8×8	—
+21	layer1.1.bn1.running_mean	buffer	layer1.1.bn1	BatchNorm2d(64)	64×8×8	64×8×8	—
+22	layer1.1.bn1.running_var	buffer	layer1.1.bn1	BatchNorm2d(64)	64×8×8	64×8×8	—
+23	layer1.1.bn1.num_batches_tracked	buffer	layer1.1.bn1	BatchNorm2d(64)	64×8×8	64×8×8	—
+—	—	—	layer1.1.relu（第1次）	ReLU(inplace=True)	64×8×8	64×8×8	—
+24	layer1.1.conv2.weight	parameter	layer1.1.conv2	3×3 卷积，stride=1，padding=1，bias=False	64×8×8	64×8×8	Top-5
+25	layer1.1.bn2.weight	parameter	layer1.1.bn2	BatchNorm2d(64)	64×8×8	64×8×8	—
+26	layer1.1.bn2.bias	parameter	layer1.1.bn2	BatchNorm2d(64)	64×8×8	64×8×8	—
+27	layer1.1.bn2.running_mean	buffer	layer1.1.bn2	BatchNorm2d(64)	64×8×8	64×8×8	—
+28	layer1.1.bn2.running_var	buffer	layer1.1.bn2	BatchNorm2d(64)	64×8×8	64×8×8	—
+29	layer1.1.bn2.num_batches_tracked	buffer	layer1.1.bn2	BatchNorm2d(64)	64×8×8	64×8×8	—
+—	—	—	layer1.1.add	主分支与 identity 逐元素相加	64×8×8 + 64×8×8	64×8×8	—
+—	—	—	layer1.1.relu（第2次）	ReLU(inplace=True)	64×8×8	64×8×8	—
+30	layer2.0.conv1.weight	parameter	layer2.0.conv1	3×3 卷积，stride=2，padding=1，bias=False	64×8×8	128×4×4	Top-2
+31	layer2.0.bn1.weight	parameter	layer2.0.bn1	BatchNorm2d(128)	128×4×4	128×4×4	—
+32	layer2.0.bn1.bias	parameter	layer2.0.bn1	BatchNorm2d(128)	128×4×4	128×4×4	—
+33	layer2.0.bn1.running_mean	buffer	layer2.0.bn1	BatchNorm2d(128)	128×4×4	128×4×4	—
+34	layer2.0.bn1.running_var	buffer	layer2.0.bn1	BatchNorm2d(128)	128×4×4	128×4×4	—
+35	layer2.0.bn1.num_batches_tracked	buffer	layer2.0.bn1	BatchNorm2d(128)	128×4×4	128×4×4	—
+—	—	—	layer2.0.relu（第1次）	ReLU(inplace=True)	128×4×4	128×4×4	—
+36	layer2.0.conv2.weight	parameter	layer2.0.conv2	3×3 卷积，stride=1，padding=1，bias=False	128×4×4	128×4×4	Top-6
+37	layer2.0.bn2.weight	parameter	layer2.0.bn2	BatchNorm2d(128)	128×4×4	128×4×4	—
+38	layer2.0.bn2.bias	parameter	layer2.0.bn2	BatchNorm2d(128)	128×4×4	128×4×4	—
+39	layer2.0.bn2.running_mean	buffer	layer2.0.bn2	BatchNorm2d(128)	128×4×4	128×4×4	—
+40	layer2.0.bn2.running_var	buffer	layer2.0.bn2	BatchNorm2d(128)	128×4×4	128×4×4	—
+41	layer2.0.bn2.num_batches_tracked	buffer	layer2.0.bn2	BatchNorm2d(128)	128×4×4	128×4×4	—
+42	layer2.0.downsample.0.weight	parameter	layer2.0.downsample.0	1×1 卷积，stride=2，padding=0，bias=False	64×8×8	128×4×4	—
+43	layer2.0.downsample.1.weight	parameter	layer2.0.downsample.1	BatchNorm2d(128)	128×4×4	128×4×4	—
+44	layer2.0.downsample.1.bias	parameter	layer2.0.downsample.1	BatchNorm2d(128)	128×4×4	128×4×4	—
+45	layer2.0.downsample.1.running_mean	buffer	layer2.0.downsample.1	BatchNorm2d(128)	128×4×4	128×4×4	—
+46	layer2.0.downsample.1.running_var	buffer	layer2.0.downsample.1	BatchNorm2d(128)	128×4×4	128×4×4	—
+47	layer2.0.downsample.1.num_batches_tracked	buffer	layer2.0.downsample.1	BatchNorm2d(128)	128×4×4	128×4×4	—
+—	—	—	layer2.0.add	主分支与 downsample 逐元素相加	128×4×4 + 128×4×4	128×4×4	—
+—	—	—	layer2.0.relu（第2次）	ReLU(inplace=True)	128×4×4	128×4×4	—
+—	—	—	layer2.1.identity	恒等映射	128×4×4	128×4×4	—
+48	layer2.1.conv1.weight	parameter	layer2.1.conv1	3×3 卷积，stride=1，padding=1，bias=False	128×4×4	128×4×4	Top-7
+49	layer2.1.bn1.weight	parameter	layer2.1.bn1	BatchNorm2d(128)	128×4×4	128×4×4	—
+50	layer2.1.bn1.bias	parameter	layer2.1.bn1	BatchNorm2d(128)	128×4×4	128×4×4	—
+51	layer2.1.bn1.running_mean	buffer	layer2.1.bn1	BatchNorm2d(128)	128×4×4	128×4×4	—
+52	layer2.1.bn1.running_var	buffer	layer2.1.bn1	BatchNorm2d(128)	128×4×4	128×4×4	—
+53	layer2.1.bn1.num_batches_tracked	buffer	layer2.1.bn1	BatchNorm2d(128)	128×4×4	128×4×4	—
+—	—	—	layer2.1.relu（第1次）	ReLU(inplace=True)	128×4×4	128×4×4	—
+54	layer2.1.conv2.weight	parameter	layer2.1.conv2	3×3 卷积，stride=1，padding=1，bias=False	128×4×4	128×4×4	Top-10
+55	layer2.1.bn2.weight	parameter	layer2.1.bn2	BatchNorm2d(128)	128×4×4	128×4×4	—
+56	layer2.1.bn2.bias	parameter	layer2.1.bn2	BatchNorm2d(128)	128×4×4	128×4×4	—
+57	layer2.1.bn2.running_mean	buffer	layer2.1.bn2	BatchNorm2d(128)	128×4×4	128×4×4	—
+58	layer2.1.bn2.running_var	buffer	layer2.1.bn2	BatchNorm2d(128)	128×4×4	128×4×4	—
+59	layer2.1.bn2.num_batches_tracked	buffer	layer2.1.bn2	BatchNorm2d(128)	128×4×4	128×4×4	—
+—	—	—	layer2.1.add	主分支与 identity 逐元素相加	128×4×4 + 128×4×4	128×4×4	—
+—	—	—	layer2.1.relu（第2次）	ReLU(inplace=True)	128×4×4	128×4×4	—
+60	layer3.0.conv1.weight	parameter	layer3.0.conv1	3×3 卷积，stride=2，padding=1，bias=False	128×4×4	256×2×2	Top-9
+61	layer3.0.bn1.weight	parameter	layer3.0.bn1	BatchNorm2d(256)	256×2×2	256×2×2	—
+62	layer3.0.bn1.bias	parameter	layer3.0.bn1	BatchNorm2d(256)	256×2×2	256×2×2	—
+63	layer3.0.bn1.running_mean	buffer	layer3.0.bn1	BatchNorm2d(256)	256×2×2	256×2×2	—
+64	layer3.0.bn1.running_var	buffer	layer3.0.bn1	BatchNorm2d(256)	256×2×2	256×2×2	—
+65	layer3.0.bn1.num_batches_tracked	buffer	layer3.0.bn1	BatchNorm2d(256)	256×2×2	256×2×2	—
+—	—	—	layer3.0.relu（第1次）	ReLU(inplace=True)	256×2×2	256×2×2	—
+66	layer3.0.conv2.weight	parameter	layer3.0.conv2	3×3 卷积，stride=1，padding=1，bias=False	256×2×2	256×2×2	Top-11
+67	layer3.0.bn2.weight	parameter	layer3.0.bn2	BatchNorm2d(256)	256×2×2	256×2×2	—
+68	layer3.0.bn2.bias	parameter	layer3.0.bn2	BatchNorm2d(256)	256×2×2	256×2×2	—
+69	layer3.0.bn2.running_mean	buffer	layer3.0.bn2	BatchNorm2d(256)	256×2×2	256×2×2	—
+70	layer3.0.bn2.running_var	buffer	layer3.0.bn2	BatchNorm2d(256)	256×2×2	256×2×2	—
+71	layer3.0.bn2.num_batches_tracked	buffer	layer3.0.bn2	BatchNorm2d(256)	256×2×2	256×2×2	—
+72	layer3.0.downsample.0.weight	parameter	layer3.0.downsample.0	1×1 卷积，stride=2，padding=0，bias=False	128×4×4	256×2×2	—
+73	layer3.0.downsample.1.weight	parameter	layer3.0.downsample.1	BatchNorm2d(256)	256×2×2	256×2×2	—
+74	layer3.0.downsample.1.bias	parameter	layer3.0.downsample.1	BatchNorm2d(256)	256×2×2	256×2×2	—
+75	layer3.0.downsample.1.running_mean	buffer	layer3.0.downsample.1	BatchNorm2d(256)	256×2×2	256×2×2	—
+76	layer3.0.downsample.1.running_var	buffer	layer3.0.downsample.1	BatchNorm2d(256)	256×2×2	256×2×2	—
+77	layer3.0.downsample.1.num_batches_tracked	buffer	layer3.0.downsample.1	BatchNorm2d(256)	256×2×2	256×2×2	—
+—	—	—	layer3.0.add	主分支与 downsample 逐元素相加	256×2×2 + 256×2×2	256×2×2	—
+—	—	—	layer3.0.relu（第2次）	ReLU(inplace=True)	256×2×2	256×2×2	—
+—	—	—	layer3.1.identity	恒等映射	256×2×2	256×2×2	—
+78	layer3.1.conv1.weight	parameter	layer3.1.conv1	3×3 卷积，stride=1，padding=1，bias=False	256×2×2	256×2×2	Top-17
+79	layer3.1.bn1.weight	parameter	layer3.1.bn1	BatchNorm2d(256)	256×2×2	256×2×2	—
+80	layer3.1.bn1.bias	parameter	layer3.1.bn1	BatchNorm2d(256)	256×2×2	256×2×2	—
+81	layer3.1.bn1.running_mean	buffer	layer3.1.bn1	BatchNorm2d(256)	256×2×2	256×2×2	—
+82	layer3.1.bn1.running_var	buffer	layer3.1.bn1	BatchNorm2d(256)	256×2×2	256×2×2	—
+83	layer3.1.bn1.num_batches_tracked	buffer	layer3.1.bn1	BatchNorm2d(256)	256×2×2	256×2×2	—
+—	—	—	layer3.1.relu（第1次）	ReLU(inplace=True)	256×2×2	256×2×2	—
+84	layer3.1.conv2.weight	parameter	layer3.1.conv2	3×3 卷积，stride=1，padding=1，bias=False	256×2×2	256×2×2	Top-16
+85	layer3.1.bn2.weight	parameter	layer3.1.bn2	BatchNorm2d(256)	256×2×2	256×2×2	—
+86	layer3.1.bn2.bias	parameter	layer3.1.bn2	BatchNorm2d(256)	256×2×2	256×2×2	—
+87	layer3.1.bn2.running_mean	buffer	layer3.1.bn2	BatchNorm2d(256)	256×2×2	256×2×2	—
+88	layer3.1.bn2.running_var	buffer	layer3.1.bn2	BatchNorm2d(256)	256×2×2	256×2×2	—
+89	layer3.1.bn2.num_batches_tracked	buffer	layer3.1.bn2	BatchNorm2d(256)	256×2×2	256×2×2	—
+—	—	—	layer3.1.add	主分支与 identity 逐元素相加	256×2×2 + 256×2×2	256×2×2	—
+—	—	—	layer3.1.relu（第2次）	ReLU(inplace=True)	256×2×2	256×2×2	—
+90	layer4.0.conv1.weight	parameter	layer4.0.conv1	3×3 卷积，stride=2，padding=1，bias=False	256×2×2	512×1×1	Top-12
+91	layer4.0.bn1.weight	parameter	layer4.0.bn1	BatchNorm2d(512)	512×1×1	512×1×1	—
+92	layer4.0.bn1.bias	parameter	layer4.0.bn1	BatchNorm2d(512)	512×1×1	512×1×1	—
+93	layer4.0.bn1.running_mean	buffer	layer4.0.bn1	BatchNorm2d(512)	512×1×1	512×1×1	—
+94	layer4.0.bn1.running_var	buffer	layer4.0.bn1	BatchNorm2d(512)	512×1×1	512×1×1	—
+95	layer4.0.bn1.num_batches_tracked	buffer	layer4.0.bn1	BatchNorm2d(512)	512×1×1	512×1×1	—
+—	—	—	layer4.0.relu（第1次）	ReLU(inplace=True)	512×1×1	512×1×1	—
+96	layer4.0.conv2.weight	parameter	layer4.0.conv2	3×3 卷积，stride=1，padding=1，bias=False	512×1×1	512×1×1	Top-13
+97	layer4.0.bn2.weight	parameter	layer4.0.bn2	BatchNorm2d(512)	512×1×1	512×1×1	—
+98	layer4.0.bn2.bias	parameter	layer4.0.bn2	BatchNorm2d(512)	512×1×1	512×1×1	—
+99	layer4.0.bn2.running_mean	buffer	layer4.0.bn2	BatchNorm2d(512)	512×1×1	512×1×1	—
+100	layer4.0.bn2.running_var	buffer	layer4.0.bn2	BatchNorm2d(512)	512×1×1	512×1×1	—
+101	layer4.0.bn2.num_batches_tracked	buffer	layer4.0.bn2	BatchNorm2d(512)	512×1×1	512×1×1	—
+102	layer4.0.downsample.0.weight	parameter	layer4.0.downsample.0	1×1 卷积，stride=2，padding=0，bias=False	256×2×2	512×1×1	—
+103	layer4.0.downsample.1.weight	parameter	layer4.0.downsample.1	BatchNorm2d(512)	512×1×1	512×1×1	—
+104	layer4.0.downsample.1.bias	parameter	layer4.0.downsample.1	BatchNorm2d(512)	512×1×1	512×1×1	—
+105	layer4.0.downsample.1.running_mean	buffer	layer4.0.downsample.1	BatchNorm2d(512)	512×1×1	512×1×1	—
+106	layer4.0.downsample.1.running_var	buffer	layer4.0.downsample.1	BatchNorm2d(512)	512×1×1	512×1×1	—
+107	layer4.0.downsample.1.num_batches_tracked	buffer	layer4.0.downsample.1	BatchNorm2d(512)	512×1×1	512×1×1	—
+—	—	—	layer4.0.add	主分支与 downsample 逐元素相加	512×1×1 + 512×1×1	512×1×1	—
+—	—	—	layer4.0.relu（第2次）	ReLU(inplace=True)	512×1×1	512×1×1	—
+—	—	—	layer4.1.identity	恒等映射	512×1×1	512×1×1	—
+108	layer4.1.conv1.weight	parameter	layer4.1.conv1	3×3 卷积，stride=1，padding=1，bias=False	512×1×1	512×1×1	Top-14
+109	layer4.1.bn1.weight	parameter	layer4.1.bn1	BatchNorm2d(512)	512×1×1	512×1×1	—
+110	layer4.1.bn1.bias	parameter	layer4.1.bn1	BatchNorm2d(512)	512×1×1	512×1×1	—
+111	layer4.1.bn1.running_mean	buffer	layer4.1.bn1	BatchNorm2d(512)	512×1×1	512×1×1	—
+112	layer4.1.bn1.running_var	buffer	layer4.1.bn1	BatchNorm2d(512)	512×1×1	512×1×1	—
+113	layer4.1.bn1.num_batches_tracked	buffer	layer4.1.bn1	BatchNorm2d(512)	512×1×1	512×1×1	—
+—	—	—	layer4.1.relu（第1次）	ReLU(inplace=True)	512×1×1	512×1×1	—
+114	layer4.1.conv2.weight	parameter	layer4.1.conv2	3×3 卷积，stride=1，padding=1，bias=False	512×1×1	512×1×1	Top-15
+115	layer4.1.bn2.weight	parameter	layer4.1.bn2	BatchNorm2d(512)	512×1×1	512×1×1	—
+116	layer4.1.bn2.bias	parameter	layer4.1.bn2	BatchNorm2d(512)	512×1×1	512×1×1	—
+117	layer4.1.bn2.running_mean	buffer	layer4.1.bn2	BatchNorm2d(512)	512×1×1	512×1×1	—
+118	layer4.1.bn2.running_var	buffer	layer4.1.bn2	BatchNorm2d(512)	512×1×1	512×1×1	—
+119	layer4.1.bn2.num_batches_tracked	buffer	layer4.1.bn2	BatchNorm2d(512)	512×1×1	512×1×1	—
+—	—	—	layer4.1.add	主分支与 identity 逐元素相加	512×1×1 + 512×1×1	512×1×1	—
+—	—	—	layer4.1.relu（第2次）	ReLU(inplace=True)	512×1×1	512×1×1	—
+—	—	—	avgpool	AdaptiveAvgPool2d((1, 1))	512×1×1	512×1×1	—
+—	—	—	flatten	view(N, -1)	512×1×1	512	—
+120	last_linear.weight	parameter	last_linear	Linear(512→100)，bias=True	512	100	Top-3
+121	last_linear.bias	parameter	last_linear	Linear(512→100)，bias=True	512	100	—

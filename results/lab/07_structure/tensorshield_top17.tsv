@@ -1,0 +1,18 @@
+unit编号	state名称	state类型	模块	计算	输入	输出	TensorShield Top-17
+6	layer1.0.conv1.weight	parameter	layer1.0.conv1	3×3 卷积，stride=1，padding=1，bias=False	64×8×8	64×8×8	Top-4
+12	layer1.0.conv2.weight	parameter	layer1.0.conv2	3×3 卷积，stride=1，padding=1，bias=False	64×8×8	64×8×8	Top-8
+18	layer1.1.conv1.weight	parameter	layer1.1.conv1	3×3 卷积，stride=1，padding=1，bias=False	64×8×8	64×8×8	Top-1
+24	layer1.1.conv2.weight	parameter	layer1.1.conv2	3×3 卷积，stride=1，padding=1，bias=False	64×8×8	64×8×8	Top-5
+30	layer2.0.conv1.weight	parameter	layer2.0.conv1	3×3 卷积，stride=2，padding=1，bias=False	64×8×8	128×4×4	Top-2
+36	layer2.0.conv2.weight	parameter	layer2.0.conv2	3×3 卷积，stride=1，padding=1，bias=False	128×4×4	128×4×4	Top-6
+48	layer2.1.conv1.weight	parameter	layer2.1.conv1	3×3 卷积，stride=1，padding=1，bias=False	128×4×4	128×4×4	Top-7
+54	layer2.1.conv2.weight	parameter	layer2.1.conv2	3×3 卷积，stride=1，padding=1，bias=False	128×4×4	128×4×4	Top-10
+60	layer3.0.conv1.weight	parameter	layer3.0.conv1	3×3 卷积，stride=2，padding=1，bias=False	128×4×4	256×2×2	Top-9
+66	layer3.0.conv2.weight	parameter	layer3.0.conv2	3×3 卷积，stride=1，padding=1，bias=False	256×2×2	256×2×2	Top-11
+78	layer3.1.conv1.weight	parameter	layer3.1.conv1	3×3 卷积，stride=1，padding=1，bias=False	256×2×2	256×2×2	Top-17
+84	layer3.1.conv2.weight	parameter	layer3.1.conv2	3×3 卷积，stride=1，padding=1，bias=False	256×2×2	256×2×2	Top-16
+90	layer4.0.conv1.weight	parameter	layer4.0.conv1	3×3 卷积，stride=2，padding=1，bias=False	256×2×2	512×1×1	Top-12
+96	layer4.0.conv2.weight	parameter	layer4.0.conv2	3×3 卷积，stride=1，padding=1，bias=False	512×1×1	512×1×1	Top-13
+108	layer4.1.conv1.weight	parameter	layer4.1.conv1	3×3 卷积，stride=1，padding=1，bias=False	512×1×1	512×1×1	Top-14
+114	layer4.1.conv2.weight	parameter	layer4.1.conv2	3×3 卷积，stride=1，padding=1，bias=False	512×1×1	512×1×1	Top-15
+120	last_linear.weight	parameter	last_linear	Linear(512→100)，bias=True	512	100	Top-3
