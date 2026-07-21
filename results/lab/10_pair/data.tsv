@@ -1,0 +1,3 @@
+case	label	best_epoch	protected_unit_count	protected_param_count	protected_param_ratio	protection_mask_sha256	surrogate_acc	fidelity	posterior_kl
+conv1_bn2	Five conv1 + matched BN2 gamma	92	12	641764	0.05715842053643221	76783cdabf9647046db6a8012b68af407b703d900d9076d3eda73a0aefd13080	0.1532	0.1662	2.808920674133301
+conv2_bn1	Five conv2 + matched BN1 gamma	94	12	1010404	0.0899911754845913	26c6555ddaad6d40dc6c19cb6f04b44f30c11cf4637c00cc422d79207b8a36c5	0.1562	0.1694	2.7840128120422363

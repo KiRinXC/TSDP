@@ -256,7 +256,21 @@ TEESlice 结果只在 `results/MS/resnet18/c100/teeslice/` 保存，并标记为
   即使占 `97.84%` 参数仍为 `0.2210/0.2468/2.206965`，明显弱于全部 weight 的
   `0.1435/0.1490/2.902834`；Stem、downsample、BN affine 与分类头 weight 不能从
   图模型中排除。相同参数量下 BN gamma 明显强于 beta；分类头作用几乎全部来自
-  weight；BN buffer 只作为执行闭包状态记录。
+  weight；BN buffer 只作为执行闭包状态记录。新增固定五个候选 conv1 与完整分类头
+  的 BN gamma 十种子分组消融：No/All gamma 均值分别为
+  `0.18249/0.19780/2.61784` 与 `0.11259/0.12141/3.17270`，后者在 10/10 seed
+  三项同时改善。相对 All gamma，删除 Stem 在 9/10 seed 三项反弹；删除 Block BN2
+  或 Downsample BN 都在 10/10 seed 三项反弹，平均变化分别为
+  `+0.02225/+0.02312/-0.20992` 和 `+0.02224/+0.02374/-0.20939`。删除 Block BN1
+  反而得到 `0.10654/0.11475/3.21235`，7/10 seed 三项同时改善并保持 10/10
+  黑盒三线；这应解释为 protected public conv1 与 exposed victim BN1 的固定拼接
+  失配，不代表主动泄露 BN1 对适应性攻击安全。
+  另以 seed 42 完成从 No gamma 分别单独加入四类 gamma 的对偶实验：No gamma 为
+  `0.1798/0.1947/2.642482`，Stem 为 `0.1546/0.1699/2.782362`，Block BN1 为
+  `0.1785/0.1907/2.645210`，Block BN2 为 `0.1481/0.1633/2.803683`，Downsample
+  BN 为 `0.1376/0.1509/2.939023`。相对基线的保护改善排序为 Downsample >
+  Block BN2 > Stem >> Block BN1，与 drop 必要性方向一致；但 Downsample 也未同时
+  达到 seed-42 soft 黑盒三线，说明单组不能替代跨层 gamma 闭包。
 - `lab/06_weight`：在 Top-10 至 Top-17 上分别补充全部 BN gamma、downsample
   Conv、二者组合、Stem Conv 与三类并集。新协议下 BN gamma 在全部八个 k 上都
   一致改善三项指标；`Top-11/12/13/17 + BN gamma` 严格越过 soft 黑盒三线。
@@ -299,19 +313,54 @@ TEESlice 结果只在 `results/MS/resnet18/c100/teeslice/` 保存，并标记为
   3/8 的 conv1 weight 损伤超过相邻 conv2，因此不存在普遍的 conv1 优势。
   当前准确机制是分类头幅值、BN 跨层尺度和两个高敏感 conv1 的联合接口割，而非
   每个候选都独立承载攻击信息；该接口失配仍可被 Lab08 的状态收缩绕过。
-- `test/MS/01_cross`：已用固定 500 张 `query_pool_ms` 和全部 50,000 张
-  official_train 图片计算四路交叉残差
-  `I=z_vv-z_vp-z_pv+z_pp=Conv(h_v-h_p,W_v-W_p)`。候选固定为全部 20 个
-  Conv weight 与 20 个 BN gamma；Conv 使用输入差与权重差的乘性交叉项，BN
-  gamma 使用标准化输入差与 gamma 差的乘性交叉项。当前唯一评分为
-  `mean_image(mean_chw(abs(I)))`，即每张图片先对 `C×H×W` 的绝对交叉残差取
-  平均，再跨图片平均。500-query 与全训练集的前 23 项顺序完全一致，前十为
-  `layer4.1.bn2`、`layer2.0.conv1`、`layer1.0.conv1`、
-  `layer1.1.conv1`、`layer3.0.conv1`、`layer4.0.conv1`、
-  `layer2.1.conv1`、`layer4.1.conv1`、`layer3.0.conv2` 和
-  `layer2.0.downsample.0`。原 16 个 BasicBlock 主分支卷积直接从 500-query
-  的 40 项表中抽取，不再单独用全训练集复算。该测试当前只生成残差排名和图片，
-  不生成保护 mask、不训练 surrogate，也不读取 `eval_ms`。
+- `lab/10_pair`：在 `layer1.0/1.1`、`layer2.0/2.1` 和 `layer3.0` 五个固定块上，
+  用 seed 42 比较两种局部配对保护。五个 `conv1.weight` + 对应 `bn2.weight` +
+  完整分类头保护 `5.7158%` 参数，得到 `0.1532/0.1662/2.808921`；对应五个
+  `conv2.weight` + `bn1.weight` + 完整分类头保护 `8.9991%`，得到
+  `0.1562/0.1694/2.784013`。前者三项略优且成本低 3.2833 个百分点，但二者都
+  未达到 seed-42 soft 黑盒 `0.1390/0.1463/3.039817`；局部五个 gamma 不能替代
+  Stem、Block BN2 与 Downsample BN 构成的跨层闭包。该比较只有单 seed，不能
+  表述为稳定排序。
+- `test/MS/01_cross`：数据侧计算已精简为固定 500 张 `query_pool_ms` 的单一协议，
+  不再计算 50,000 张全训练集对照。候选为 20 个 Conv weight 与 20 个 BN affine
+  参数组；每个 BN 组同时包含 weight/gamma 与 bias/beta，并从同一结果抽取 16 个
+  BasicBlock 主分支卷积。每张图片计算 `z_pp/z_pv/z_vp/z_vv`、
+  紧凑交叉项 `I` 和自然残差 `z_uu-z_pp`，再以通道为列计算六类谱熵有效秩。
+  最终九项为两个残差幅值、`r(I)`、`r(z_uu-z_pp)`、三组 rank gap、rank
+  interaction，以及两个残差幅值的乘积。40/16 项各生成九张图；所有图按指标
+  绝对值降序，柱子和文字保留真实符号。40 项交叉幅值首位仍为
+  `layer4.1.bn2=1.464529`，交叉有效秩首位为
+  `layer1.1.conv2=15.273210`，rank interaction 绝对值首位也是
+  `layer1.1.conv2=+4.793478`；自然残差首位是 stem `conv1=1.311637`，但其
+  交叉项、交叉秩和乘积严格为零。乘积前三为 `layer2.0.conv1=1.061349`、
+  `layer1.1.conv1=0.982852` 和 `layer1.0.conv1=0.896433`。beta 在四路交叉差分中
+  抵消，因此 BN 交叉项不变；但自然残差、相关有效秩和乘积分数均已重算。数据侧产物只保留
+  `metrics.json`、`all.tsv`、`main.tsv` 和 18 张当前图片；另有 `sweep.py`
+  固定保护完整分类头，按乘积分数扫描完整 tensor 前缀；使用统一 400/100 soft
+  validation-best 协议，在 Top-4 第一次 accuracy 反弹后选择 Top-3。Top-3 保护
+  比例 1.770211%，accuracy/fidelity/KL 为 0.2882/0.3239/2.096797，未达到
+  TensorShield Top-10 或双黑盒。该停止规则读取 `eval_ms`，只能作为 post-hoc
+  排名诊断，不能作为正式先验 selector。
+  同协议的 16 项 `main_product` 扫描在 Top-7 首次反弹并选择 Top-6；Top-6 固定
+  完整分类头并保护 `layer2.0/layer1.1/layer1.0/layer3.0/layer2.1/layer4.0` 的
+  `conv1.weight`，保护比例 16.216624%，accuracy/fidelity/KL 为
+  0.1519/0.1626/2.794303。三项均优于 TensorShield Top-10，但保护成本高于其
+  8.9934%，且尚未达到 soft/hard 黑盒。
+  另有 Main Conv 与对应 BN affine 的最小绑定实验：每个卷积增加对应
+  `bn1.weight/bias`，不保护 BN 运行状态或 downsample。它同样在 Top-7 反弹并选择
+  Top-6，保护比例 16.237144%，accuracy/fidelity/KL 为
+  0.1579/0.1664/2.781295；相对纯 Conv Top-6 的 0.1519/0.1626/2.794303 三项回退。
+  局部 affine 绑定不能替代 Lab04 的全部 20 个 BN gamma 跨层闭包。当前按要求不执行
+  对应 BN affine 的十种子配对验证，也不保留该多 seed 入口或结果。
+- `test/MS/02`：已在与 Test01 相同的 500 张 query 和 40 个 Conv/BN affine
+  候选上计算“相同 victim 输入”的高斯二阶表征传输分数。分类头因
+  ImageNet/CIFAR 类别坐标不对应而固定为私有边界，不进入 backbone 排名。
+  Test02 与 Test01 的 Spearman/Kendall 为 `0.596998/0.458974`，Top-5/10 只重合
+  `1/2` 项；`layer4.1.bn2` 在两种定义下均位于前五。但对称二阶能量归一化
+  会把 `layer3.1` 的四个低能量算子推到前四，既没有聚集已有五个后验
+  `conv1`，也无法表达全部 BN affine 的跨层闭包。因此当前单算子相对 RT 只是
+  可解释的局部表征迁移量，还不是最终保护位置选择器。该测试同样不生成
+  mask、不训练 surrogate，也不读取 `eval_ms`。
 
 Lab 结果不能混入正式主实验索引，但也不能以“清理历史”为由删除仍承担独立结论的 Lab。
 
@@ -431,7 +480,7 @@ make verify
 make results
 ```
 
-TSDP 只认 `~/venvs/dl-py310-torch210-cu121`。`requirements.txt` 保存直接依赖，`requirements.lock.txt` 保存完整解析版本；不得退回系统 `/usr/bin/python3`。`make gpu` 会严格核对 WSL GPU 桥接并运行真实 CUDA 前向和反向计算，正式实验前必须通过。当前 `make unit` 应通过 43 个测试，`make results` 应通过正式 MS 结果和 Lab02-09 的协议、指标、history、mask、来源哈希与图片核对。运行后清理任何意外生成的 `__pycache__` 和 `*.pyc`。
+TSDP 只认 `~/venvs/dl-py310-torch210-cu121`。`requirements.txt` 保存直接依赖，`requirements.lock.txt` 保存完整解析版本；不得退回系统 `/usr/bin/python3`。`make gpu` 会严格核对 WSL GPU 桥接并运行真实 CUDA 前向和反向计算，正式实验前必须通过。当前 `make unit` 应通过 43 个测试，`make results` 应通过正式 MS、Lab02-10 与 Test01/02 的协议、指标、history、mask、来源哈希及图片核对。运行后清理任何意外生成的 `__pycache__` 和 `*.pyc`。
 
 ### 普通 baseline
 

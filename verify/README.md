@@ -13,7 +13,7 @@ make install     # 按 requirements.lock.txt 补齐或复现唯一环境
 make env         # 检查 Python 与依赖版本，允许当前会话暂时看不到 GPU
 make gpu         # 严格检查 WSL GPU，并执行 CUDA 矩阵乘法和卷积反向传播
 make unit        # 运行 MS、TensorShield、TEESlice 的 43 项单元测试
-make results     # 核对正式 MS 及 Lab 的指标、日志、mask、输入哈希和图片
+make results     # 核对正式 MS、Lab 与 Test 的指标、日志、mask、输入哈希和图片
 make check       # 依次运行 GPU、单元测试、数据协议和结果一致性检查
 ```
 
@@ -34,6 +34,10 @@ epoch-0 探针、固定 5.7529% 系统保护集合、0%/100% 的 Lab04 来源、
 Lab09 会核对五十个分类头范数反事实、七组 1,280 个 oracle-reveal 端点及 Shapley
 闭合、八块 480 个 conv/BN 接口干预、四类 BN gamma 的 160 个组合端点、Lab07
 五点相关和全部来源哈希，并拒绝把该后验机制分析标为选择器或 MS 训练结果。
+Test 验证会核对 Test01/Test02 的 20 个 Conv weight 与 20 个 BN affine 候选，确认
+每个 BN 候选同时记录 weight/gamma 和 bias/beta、交叉项中的 beta 抵消与自然残差
+中的 beta 保留；同时核对 500-query 表格、24 张数据图/对照图、三个前缀扫描的
+来源 SHA256、100-epoch history、停止点，以及旧 gamma-only 和未执行多种子产物已清理。
 
 `make verify` 默认检查四个公开数据集的 canonical layout 和 `dataset/MS/` 划分协议，但跳过公开数据压缩包的 MD5。需要同时核对压缩包时使用 `make verify VERIFY_ARGS=""`。旧的 `dataset/query/` 已退出当前协议，不再由验证器读取；MS query 只由 `dataset/MS/<dataset>/manifest.json` 指向 `splits.tsv` 中的 `query_pool_ms`。
 

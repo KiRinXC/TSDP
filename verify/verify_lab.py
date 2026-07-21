@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""核对当前 Lab02–09 的统一 MS 协议与结果产物。"""
+"""核对当前 Lab02–10 的统一 MS 协议与结果产物。"""
 
 from __future__ import annotations
 
@@ -702,6 +702,439 @@ def validate_lab05() -> None:
         key_fields=("protection_group",),
         expected_result_count=18,
     )
+    validate_lab05_gamma()
+    validate_lab05_gamma_add()
+
+
+def validate_lab05_gamma() -> None:
+    json_path = "results/lab/05_state/gamma.json"
+    payload = load_json(json_path)
+    seeds = tuple(range(43, 53))
+    cases = (
+        "no_gamma",
+        "all_gamma",
+        "drop_stem",
+        "drop_block_bn1",
+        "drop_block_bn2",
+        "drop_downsample",
+    )
+    expected_cost = {
+        "no_gamma": (7, 641_124, 0, 0),
+        "all_gamma": (27, 645_924, 20, 4_800),
+        "drop_stem": (26, 645_860, 19, 4_736),
+        "drop_block_bn1": (19, 644_004, 12, 2_880),
+        "drop_block_bn2": (19, 644_004, 12, 2_880),
+        "drop_downsample": (24, 645_028, 17, 3_904),
+    }
+    expected_groups = {
+        "stem": (1, 64),
+        "block_bn1": (8, 1_920),
+        "block_bn2": (8, 1_920),
+        "downsample": (3, 896),
+    }
+    if (
+        payload.get("schema_version") != 1
+        or payload.get("attack_protocol") != ATTACK_PROTOCOL
+        or payload.get("dataset") != "c100"
+        or payload.get("victim_model") != "resnet18"
+        or payload.get("query_budget") != 500
+        or payload.get("label_mode") != "soft"
+        or tuple(payload.get("evaluation_seeds", ())) != seeds
+        or tuple(payload.get("gamma_group_order", ())) != tuple(expected_groups)
+    ):
+        raise ValueError("Lab05 gamma 的基础协议、seed 或分组顺序不正确。")
+    training = payload.get("training", {})
+    expected_training = {
+        "max_epochs": EPOCHS,
+        "batch_size": 64,
+        "eval_batch_size": 128,
+        "optimizer": "SGD",
+        "learning_rate": 0.01,
+        "momentum": 0.5,
+        "weight_decay": 5e-4,
+        "lr_scheduler": "StepLR",
+        "lr_step": 60,
+        "lr_gamma": 0.1,
+        "checkpoint": "best.pth",
+        "checkpoint_selection": "minimum query-validation soft cross-entropy",
+        "checkpoint_tie_break": "earliest epoch",
+        "eval_ms_passes_per_case": 1,
+    }
+    for field, expected in expected_training.items():
+        if training.get(field) != expected:
+            raise ValueError(f"Lab05 gamma.training.{field} 不正确。")
+
+    gamma_groups = payload.get("gamma_groups", {})
+    flattened = []
+    for group, (expected_count, expected_params) in expected_groups.items():
+        names = gamma_groups.get(group)
+        if not isinstance(names, list) or len(names) != expected_count:
+            raise ValueError(f"Lab05 gamma 的 {group} 数量不正确。")
+        flattened.extend(names)
+        if group == "downsample" and not all(
+            name.endswith(".downsample.1.weight") for name in names
+        ):
+            raise ValueError("Lab05 gamma 把非 downsample BN weight 放入 downsample 组。")
+        row = next(
+            result
+            for result in payload["results"]
+            if result["case"] == "all_gamma"
+        )
+        unit_by_name = {
+            unit["state_name"]: unit for unit in row["protection"]["selected_units"]
+        }
+        actual_params = sum(int(unit_by_name[name]["numel"]) for name in names)
+        if actual_params != expected_params:
+            raise ValueError(f"Lab05 gamma 的 {group} 参数量不正确。")
+    if len(flattened) != 20 or len(set(flattened)) != 20:
+        raise ValueError("Lab05 四类 gamma 没有互斥覆盖 20 个 state。")
+
+    source = payload.get("source_reuse", {})
+    for path_field, hash_field in (
+        ("path", "sha256"),
+        ("history_path", "history_sha256"),
+    ):
+        path = ROOT / str(source.get(path_field, ""))
+        if not path.is_file() or sha256_file(path) != source.get(hash_field):
+            raise ValueError(f"Lab05 gamma 来源 {hash_field} 不一致。")
+    for path_field, hash_field in (
+        ("victim_checkpoint", "victim_checkpoint_sha256"),
+        ("official_weight", "official_weight_sha256"),
+        ("posterior_path", "posterior_sha256"),
+    ):
+        path = ROOT / str(payload.get(path_field, ""))
+        if not path.is_file() or sha256_file(path) != payload.get(hash_field):
+            raise ValueError(f"Lab05 gamma.{hash_field} 不一致。")
+    hard = payload.get("hard_blackbox", {})
+    hard_path = ROOT / str(hard.get("path", ""))
+    if not hard_path.is_file() or sha256_file(hard_path) != hard.get("sha256"):
+        raise ValueError("Lab05 gamma hard black-box 来源不一致。")
+
+    partitions = payload.get("query_partitions", {})
+    train_hashes = set()
+    for seed in seeds:
+        partition = partitions.get(str(seed), {})
+        if (
+            partition.get("seed") != seed
+            or partition.get("seed_offset") != 100
+            or partition.get("budget") != 500
+            or partition.get("train_size") != QUERY_TRAIN
+            or partition.get("validation_size") != QUERY_VALIDATION
+        ):
+            raise ValueError(f"Lab05 gamma seed {seed} 的 query 划分不正确。")
+        train_hashes.add(partition.get("train_source_indices_sha256"))
+    if len(train_hashes) != len(seeds):
+        raise ValueError("Lab05 gamma 十个 seed 没有十组唯一 query train 划分。")
+
+    results = payload.get("results")
+    expected_keys = {(seed, case) for seed in seeds for case in cases}
+    if not isinstance(results, list) or len(results) != len(expected_keys):
+        raise ValueError("Lab05 gamma 应包含六配置 × 十 seed 的 60 个结果。")
+    result_by_key = {}
+    selected_epochs = {}
+    for row in results:
+        key = (int(row.get("seed", -1)), str(row.get("case", "")))
+        if key in result_by_key or key not in expected_keys:
+            raise ValueError(f"Lab05 gamma 包含重复或未知结果：{key}。")
+        result_by_key[key] = row
+        validate_result(row, f"{json_path}:{key}")
+        randomization = row.get("randomization", {})
+        if (
+            row.get("query_partition_seed") != key[0]
+            or randomization.get("surrogate_initialization")
+            != "formal_victim_then_public_v1"
+            or randomization.get("surrogate_initialization_seed") != key[0]
+            or randomization.get("query_sampler_seed") != key[0]
+        ):
+            raise ValueError(f"Lab05 gamma {key} 的随机轨迹不正确。")
+        protection = row.get("protection", {})
+        gamma = row.get("gamma", {})
+        actual_cost = (
+            protection.get("protected_unit_count"),
+            protection.get("protected_param_count"),
+            gamma.get("protected_state_count"),
+            gamma.get("protected_param_count"),
+        )
+        if actual_cost != expected_cost[key[1]]:
+            raise ValueError(f"Lab05 gamma {key} 的保护统计不正确：{actual_cost}。")
+        if not protection.get("classifier_protected") or protection.get("head_mode") != "replace":
+            raise ValueError(f"Lab05 gamma {key} 没有固定完整分类头。")
+        selected_epochs[(str(key[0]), key[1])] = int(row["primary"]["epoch"])
+    if set(result_by_key) != expected_keys:
+        raise ValueError("Lab05 gamma 结果 key 不完整。")
+    validate_masks(results, "Lab05 gamma")
+    expected_history = {
+        (str(seed), case): EPOCHS for seed in seeds for case in cases
+    }
+    validate_history(
+        "results/lab/05_state/gamma_history.tsv",
+        key_fields=("seed", "case"),
+        expected_epochs=expected_history,
+        selected_epochs=selected_epochs,
+    )
+
+    data_rows = read_tsv("results/lab/05_state/gamma.tsv")
+    if [(int(row["seed"]), row["case"]) for row in data_rows] != [
+        (seed, case) for seed in seeds for case in cases
+    ]:
+        raise ValueError("Lab05 gamma.tsv 行顺序或数量不正确。")
+    aggregate = payload.get("aggregate", {})
+    if aggregate.get("seed_count") != len(seeds):
+        raise ValueError("Lab05 gamma 聚合 seed 数不正确。")
+    metrics = ("surrogate_acc", "fidelity", "posterior_kl")
+    for case in cases:
+        for metric in metrics:
+            values = [
+                float(result_by_key[(seed, case)]["result"][metric])
+                for seed in seeds
+            ]
+            summary = aggregate["groups"][case][metric]
+            assert_close(
+                float(summary["mean"]),
+                statistics.mean(values),
+                f"Lab05 gamma {case}.{metric}.mean",
+            )
+            assert_close(
+                float(summary["sample_std"]),
+                statistics.stdev(values),
+                f"Lab05 gamma {case}.{metric}.sample_std",
+            )
+    blackbox_by_seed = {
+        int(seed): result
+        for seed, result in payload["matched_soft_blackbox"]["results_by_seed"].items()
+    }
+    if set(blackbox_by_seed) != set(seeds):
+        raise ValueError("Lab05 gamma 缺少 matched soft 黑盒十种子结果。")
+    expected_blackbox_counts = {}
+    for case in cases:
+        counts = {metric: 0 for metric in (*metrics, "all_three")}
+        for seed in seeds:
+            result = result_by_key[(seed, case)]["result"]
+            blackbox = blackbox_by_seed[seed]
+            conditions = {
+                "surrogate_acc": result["surrogate_acc"] <= blackbox["surrogate_acc"],
+                "fidelity": result["fidelity"] <= blackbox["fidelity"],
+                "posterior_kl": result["posterior_kl"] >= blackbox["posterior_kl"],
+            }
+            conditions["all_three"] = all(conditions.values())
+            for metric, condition in conditions.items():
+                counts[metric] += int(condition)
+        expected_blackbox_counts[case] = counts
+    if (
+        aggregate.get("at_or_beyond_matched_soft_blackbox_counts")
+        != expected_blackbox_counts
+    ):
+        raise ValueError("Lab05 gamma 的逐 seed 黑盒计数不正确。")
+
+    effect_specs = {
+        "all_minus_no_gamma": ("all_gamma", "no_gamma"),
+        "drop_stem_minus_all_gamma": ("drop_stem", "all_gamma"),
+        "drop_block_bn1_minus_all_gamma": ("drop_block_bn1", "all_gamma"),
+        "drop_block_bn2_minus_all_gamma": ("drop_block_bn2", "all_gamma"),
+        "drop_downsample_minus_all_gamma": ("drop_downsample", "all_gamma"),
+    }
+    for name, (left, right) in effect_specs.items():
+        effect = aggregate["paired_effects"][name]
+        if (
+            effect.get("left_case") != left
+            or effect.get("right_case") != right
+            or effect.get("definition") != "left_minus_right"
+        ):
+            raise ValueError(f"Lab05 gamma {name} 的配对定义不正确。")
+        differences = {
+            metric: [
+                float(result_by_key[(seed, left)]["result"][metric])
+                - float(result_by_key[(seed, right)]["result"][metric])
+                for seed in seeds
+            ]
+            for metric in metrics
+        }
+        for metric, values in differences.items():
+            summary = effect["metrics"][metric]
+            assert_close(
+                float(summary["mean"]),
+                statistics.mean(values),
+                f"Lab05 gamma {name}.{metric}.mean",
+            )
+            assert_close(
+                float(summary["sample_std"]),
+                statistics.stdev(values),
+                f"Lab05 gamma {name}.{metric}.sample_std",
+            )
+        harmed = {
+            "surrogate_acc": sum(value > 0 for value in differences["surrogate_acc"]),
+            "fidelity": sum(value > 0 for value in differences["fidelity"]),
+            "posterior_kl": sum(value < 0 for value in differences["posterior_kl"]),
+            "all_three": sum(
+                differences["surrogate_acc"][index] > 0
+                and differences["fidelity"][index] > 0
+                and differences["posterior_kl"][index] < 0
+                for index in range(len(seeds))
+            ),
+        }
+        improved = {
+            "surrogate_acc": sum(value < 0 for value in differences["surrogate_acc"]),
+            "fidelity": sum(value < 0 for value in differences["fidelity"]),
+            "posterior_kl": sum(value > 0 for value in differences["posterior_kl"]),
+            "all_three": sum(
+                differences["surrogate_acc"][index] < 0
+                and differences["fidelity"][index] < 0
+                and differences["posterior_kl"][index] > 0
+                for index in range(len(seeds))
+            ),
+        }
+        if effect.get("left_harms_protection_counts") != harmed:
+            raise ValueError(f"Lab05 gamma {name} 的反弹计数不正确。")
+        if effect.get("left_improves_protection_counts") != improved:
+            raise ValueError(f"Lab05 gamma {name} 的改善计数不正确。")
+    plot = ROOT / "results/lab/05_state/gamma.png"
+    if not plot.is_file() or plot.stat().st_size == 0:
+        raise ValueError("Lab05 gamma 消融图缺失或为空。")
+
+
+def validate_lab05_gamma_add() -> None:
+    json_path = "results/lab/05_state/gamma_add.json"
+    history_path = "results/lab/05_state/gamma_add_history.tsv"
+    payload = load_json(json_path)
+    validate_protocol(payload, json_path)
+    cases = (
+        "no_gamma",
+        "only_stem",
+        "only_block_bn1",
+        "only_block_bn2",
+        "only_downsample",
+    )
+    group_by_case = {
+        "no_gamma": None,
+        "only_stem": "stem",
+        "only_block_bn1": "block_bn1",
+        "only_block_bn2": "block_bn2",
+        "only_downsample": "downsample",
+    }
+    expected_cost = {
+        "no_gamma": (7, 641_124, 0, 0),
+        "only_stem": (8, 641_188, 1, 64),
+        "only_block_bn1": (15, 643_044, 8, 1_920),
+        "only_block_bn2": (15, 643_044, 8, 1_920),
+        "only_downsample": (10, 642_020, 3, 896),
+    }
+    if (
+        payload.get("seed") != SEED
+        or tuple(payload.get("gamma_group_order", ()))
+        != ("stem", "block_bn1", "block_bn2", "downsample")
+    ):
+        raise ValueError("Lab05 gamma add 的 seed 或分组顺序不正确。")
+    validate_source_hashes(
+        payload,
+        (
+            ("victim_checkpoint", "victim_checkpoint_sha256"),
+            ("official_weight", "official_weight_sha256"),
+            ("posterior_path", "posterior_sha256"),
+        ),
+        "Lab05 gamma add",
+    )
+    gamma_groups = payload.get("gamma_groups", {})
+    expected_group_counts = {
+        "stem": 1,
+        "block_bn1": 8,
+        "block_bn2": 8,
+        "downsample": 3,
+    }
+    flattened = []
+    for group, count in expected_group_counts.items():
+        names = gamma_groups.get(group)
+        if not isinstance(names, list) or len(names) != count:
+            raise ValueError(f"Lab05 gamma add 的 {group} 数量不正确。")
+        flattened.extend(names)
+    if len(flattened) != 20 or len(set(flattened)) != 20:
+        raise ValueError("Lab05 gamma add 的四组没有互斥覆盖 20 个 gamma。")
+
+    results = payload.get("results")
+    if (
+        not isinstance(results, list)
+        or [row.get("case") for row in results] != list(cases)
+    ):
+        raise ValueError("Lab05 gamma add 不是五种配置的固定顺序结果。")
+    result_by_case = {}
+    selected_epochs = {}
+    for row in results:
+        case = str(row["case"])
+        result_by_case[case] = row
+        validate_result(row, f"{json_path}:{case}")
+        if row.get("added_gamma_group") != group_by_case[case]:
+            raise ValueError(f"Lab05 gamma add {case} 的 group 不正确。")
+        protection = row.get("protection", {})
+        gamma = row.get("gamma", {})
+        actual_cost = (
+            protection.get("protected_unit_count"),
+            protection.get("protected_param_count"),
+            gamma.get("protected_state_count"),
+            gamma.get("protected_param_count"),
+        )
+        if (
+            actual_cost != expected_cost[case]
+            or not protection.get("classifier_protected")
+            or protection.get("head_mode") != "replace"
+        ):
+            raise ValueError(f"Lab05 gamma add {case} 的保护统计不正确。")
+        units = protection.get("selected_units", ())
+        if (
+            sum(unit.get("role") == "fixed_conv1" for unit in units) != 5
+            or sum(unit.get("role") == "fixed_head" for unit in units) != 2
+            or sum(unit.get("role") == "added_bn_gamma" for unit in units)
+            != expected_cost[case][2]
+            or {unit["state_name"] for unit in units}
+            != set(row.get("selected_states", ()))
+        ):
+            raise ValueError(f"Lab05 gamma add {case} 的 unit 语义不正确。")
+        randomization = row.get("randomization", {})
+        if (
+            randomization.get("surrogate_initialization")
+            != "formal_victim_then_public_v1"
+            or randomization.get("surrogate_initialization_seed") != SEED
+            or randomization.get("query_sampler_seed") != SEED
+        ):
+            raise ValueError(f"Lab05 gamma add {case} 的随机轨迹不正确。")
+        selected_epochs[(case,)] = int(row["primary"]["epoch"])
+    validate_masks(results, "Lab05 gamma add")
+    validate_history(
+        history_path,
+        key_fields=("case",),
+        expected_epochs={(case,): EPOCHS for case in cases},
+        selected_epochs=selected_epochs,
+    )
+    data_rows = read_tsv("results/lab/05_state/gamma_add.tsv")
+    if [row["case"] for row in data_rows] != list(cases):
+        raise ValueError("Lab05 gamma_add.tsv 行顺序不正确。")
+
+    baseline = result_by_case["no_gamma"]["result"]
+    expected_effects = {}
+    for case in cases[1:]:
+        result = result_by_case[case]["result"]
+        expected_effects[f"{case}_minus_no_gamma"] = {
+            metric: float(result[metric]) - float(baseline[metric])
+            for metric in ("surrogate_acc", "fidelity", "posterior_kl")
+        }
+    effects = payload.get("paired_effects")
+    if set(effects) != set(expected_effects):
+        raise ValueError("Lab05 gamma add 的配对差集合不正确。")
+    for name, expected in expected_effects.items():
+        for metric, value in expected.items():
+            assert_close(
+                float(effects[name][metric]),
+                value,
+                f"Lab05 gamma add {name}.{metric}",
+            )
+    outputs = payload.get("outputs", {})
+    if outputs != {
+        "data": "results/lab/05_state/gamma_add.tsv",
+        "history": "results/lab/05_state/gamma_add_history.tsv",
+        "plot": "results/lab/05_state/gamma_add.png",
+    }:
+        raise ValueError("Lab05 gamma add 输出索引不正确。")
+    plot = ROOT / str(outputs["plot"])
+    if not plot.is_file() or plot.stat().st_size == 0:
+        raise ValueError("Lab05 gamma add 指标图缺失或为空。")
 
 
 def validate_lab06() -> None:
@@ -1730,6 +2163,113 @@ def validate_lab09() -> None:
         raise ValueError("Lab09 指标图缺失或为空。")
 
 
+def validate_lab10() -> None:
+    json_path = "results/lab/10_pair/metrics.json"
+    history_path = "results/lab/10_pair/history.tsv"
+    payload = load_json(json_path)
+    validate_protocol(payload, json_path)
+    cases = ("conv1_bn2", "conv2_bn1")
+    blocks = ("layer1.0", "layer1.1", "layer2.0", "layer2.1", "layer3.0")
+    expected_states = {
+        "conv1_bn2": (
+            *(f"{block}.conv1.weight" for block in blocks),
+            *(f"{block}.bn2.weight" for block in blocks),
+            "last_linear.weight",
+            "last_linear.bias",
+        ),
+        "conv2_bn1": (
+            *(f"{block}.conv2.weight" for block in blocks),
+            *(f"{block}.bn1.weight" for block in blocks),
+            "last_linear.weight",
+            "last_linear.bias",
+        ),
+    }
+    expected_cost = {
+        "conv1_bn2": (12, 641_764),
+        "conv2_bn1": (12, 1_010_404),
+    }
+    if (
+        payload.get("seed") != SEED
+        or tuple(payload.get("blocks", ())) != blocks
+        or {
+            case: tuple(states)
+            for case, states in payload.get("strategies", {}).items()
+        }
+        != expected_states
+    ):
+        raise ValueError("Lab10 的 seed、block 或两种配对策略定义不正确。")
+    validate_source_hashes(
+        payload,
+        (
+            ("victim_checkpoint", "victim_checkpoint_sha256"),
+            ("official_weight", "official_weight_sha256"),
+            ("posterior_path", "posterior_sha256"),
+        ),
+        "Lab10",
+    )
+    results = payload.get("results")
+    if (
+        not isinstance(results, list)
+        or [row.get("case") for row in results] != list(cases)
+    ):
+        raise ValueError("Lab10 不是两种策略的固定顺序结果。")
+    selected_epochs = {}
+    for row in results:
+        case = str(row["case"])
+        validate_result(row, f"{json_path}:{case}")
+        if tuple(row.get("selected_states", ())) != expected_states[case]:
+            raise ValueError(f"Lab10 {case} 的 selected_states 不正确。")
+        protection = row.get("protection", {})
+        actual_cost = (
+            protection.get("protected_unit_count"),
+            protection.get("protected_param_count"),
+        )
+        if (
+            actual_cost != expected_cost[case]
+            or not protection.get("classifier_protected")
+            or protection.get("head_mode") != "replace"
+        ):
+            raise ValueError(f"Lab10 {case} 的保护成本或分类头模式不正确。")
+        units = protection.get("selected_units", ())
+        if (
+            len(units) != 12
+            or {unit["state_name"] for unit in units} != set(expected_states[case])
+            or sum(unit.get("role") == "protected_conv" for unit in units) != 5
+            or sum(unit.get("role") == "paired_bn_gamma" for unit in units) != 5
+            or sum(unit.get("role") == "fixed_head" for unit in units) != 2
+        ):
+            raise ValueError(f"Lab10 {case} 的 unit 语义不正确。")
+        randomization = row.get("randomization", {})
+        if (
+            randomization.get("surrogate_initialization")
+            != "formal_victim_then_public_v1"
+            or randomization.get("surrogate_initialization_seed") != SEED
+            or randomization.get("query_sampler_seed") != SEED
+        ):
+            raise ValueError(f"Lab10 {case} 的随机轨迹不正确。")
+        selected_epochs[(case,)] = int(row["primary"]["epoch"])
+    validate_masks(results, "Lab10")
+    validate_history(
+        history_path,
+        key_fields=("case",),
+        expected_epochs={(case,): EPOCHS for case in cases},
+        selected_epochs=selected_epochs,
+    )
+    data_rows = read_tsv("results/lab/10_pair/data.tsv")
+    if [row["case"] for row in data_rows] != list(cases):
+        raise ValueError("Lab10 data.tsv 行顺序不正确。")
+    outputs = payload.get("outputs", {})
+    if outputs != {
+        "data": "results/lab/10_pair/data.tsv",
+        "history": "results/lab/10_pair/history.tsv",
+        "plot": "results/lab/10_pair/metrics.png",
+    }:
+        raise ValueError("Lab10 输出索引不正确。")
+    plot = ROOT / str(outputs["plot"])
+    if not plot.is_file() or plot.stat().st_size == 0:
+        raise ValueError("Lab10 指标图缺失或为空。")
+
+
 def validate_readmes() -> None:
     for relative_path in (
         "results/lab/02_head/README.md",
@@ -1740,6 +2280,7 @@ def validate_readmes() -> None:
         "results/lab/07_structure/README.md",
         "results/lab/08_leakage/README.md",
         "results/lab/09_mechanism/README.md",
+        "results/lab/10_pair/README.md",
     ):
         text = (ROOT / relative_path).read_text(encoding="utf-8")
         forbidden = ("固定第 100 轮", "主要结果统一读取第 100 轮", "eval_ms 选择 best")
@@ -1757,8 +2298,9 @@ def main() -> int:
     validate_lab07_swap()
     validate_lab08()
     validate_lab09()
+    validate_lab10()
     validate_readmes()
-    print("[OK] Lab02–09 的统一协议、结果、mask 与配对统计均有效。")
+    print("[OK] Lab02–10 的统一协议、结果、mask 与配对统计均有效。")
     return 0
 
 

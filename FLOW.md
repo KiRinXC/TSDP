@@ -163,12 +163,23 @@ Lab 验证实验/
     ├── 语义组拆分主路径/Stem/downsample Conv、局部/全局 BN affine、分类头与完整分支
     ├── 使用统一 400/100 soft-posterior validation-best 协议训练十八个 surrogate
     ├── 以 protected_state_byte_ratio 为横坐标绘制独立散点
+    ├── gamma.py 固定五个候选 conv1 与完整分类头，将 20 个 gamma 分成 Stem、
+    │   Block BN1、Block BN2 和 Downsample BN 四个互斥功能组
+    ├── 以 seed 43–52 比较 No/All gamma 及四个 leave-one-group-out 消融
+    ├── 严格核对后复用 Lab04 同 mask 的 All gamma 与 matched soft 黑盒十种子结果
+    ├── gamma_add.py 以 seed 42 从 No gamma 分别单独加入四类 gamma，训练五个 surrogate
     └── results/lab/05_state/
         ├── metrics.json              十八组保护统计与 validation-best 原始指标
         ├── history.tsv               十八组各 100 轮 train/validation 记录
         ├── data.tsv                  绘图使用的单次 eval_ms 原始点
         ├── accuracy/fidelity/posterior_kl.png
-        └── <group>_mask.pt           十八组紧凑保护掩码
+        ├── <group>_mask.pt           十八组紧凑保护掩码
+        ├── gamma.json/tsv/png        六配置十种子 MS 指标、配对效应与三联图
+        ├── gamma_history.tsv         六配置共 6,000 轮训练与验证日志
+        ├── gamma_<case>_mask.pt      六种 gamma drop 配置的紧凑保护掩码
+        ├── gamma_add.json/tsv/png    五种 add 配置的 seed-42 指标、基线差值与三联图
+        ├── gamma_add_history.tsv     五种 add 配置共 500 轮训练与验证日志
+        └── gamma_add_<case>_mask.pt  五种 add 配置的紧凑保护掩码
 ├── lab/06_weight/
     ├── 读取 Lab04 Top-10 至 Top-17 的八个前缀点、mask 与固定 eligible rank
     ├── 分别补充全部 BN gamma、三个 downsample Conv、二者组合、Stem Conv 或三类并集
@@ -232,27 +243,68 @@ Lab 验证实验/
         ├── seam.tsv                  八个残差块的 conv1/conv2 成对接口干预
         ├── bn.tsv                    四类 BN gamma 的 16 组合 × 十 seed 原始结果
         └── metrics.png               范数反事实、组贡献和块内对照图
-└── test/MS/01_cross/
-    ├── 读取 query_pool_ms 按 query_rank 排序的全部 500 张 CIFAR-100 图片
-    ├── 读取 official_train 全部 50,000 张图片进行一次全训练集对照
+├── lab/10_pair/
+    ├── 固定 layer1.0/1.1、layer2.0/2.1 与 layer3.0 五个 BasicBlock
+    ├── 比较五个 conv1.weight + 对应 bn2.weight 与五个 conv2.weight + 对应 bn1.weight
+    ├── 两组均固定保护分类头 weight/bias，不保护其他 gamma、downsample 或 BN 状态
+    ├── 使用 seed 42 的 400/100 soft-query validation-best 协议各训练一个 surrogate
+    └── results/lab/10_pair/
+        ├── metrics.json              两种局部配对策略的协议、mask、选模与最终指标
+        ├── data.tsv                  两种策略的绘图原始点
+        ├── history.tsv               两种策略共 200 轮训练与验证日志
+        ├── metrics.png               三指标柱状图与正式 soft/hard 黑盒参考线
+        └── <case>_mask.pt            两种策略的紧凑保护掩码
+├── test/MS/01_cross/
+    ├── 读取 query_pool_ms 按 query_rank 排序的固定 500 张 CIFAR-100 图片
     ├── 读取官方 ImageNet ResNet18 public 权重与 victim best.pth
-    ├── 候选固定为全部 20 个 Conv weight 与 20 个 BN gamma
-    ├── BN running state 只构造标准化输入，beta 与分类头不进入联合排名
-    ├── Conv 计算输入差与权重差的乘性交叉项
-    ├── BN gamma 计算标准化输入差与 gamma 差的乘性交叉项
-    ├── 每张图片对交叉项取绝对值并除 C×H×W，再对全部图片取平均
-    ├── 分别生成 500-query 与 50,000-image 的 40 项统一排名
-    ├── 从 500-query 统一表直接抽取 16 个 BasicBlock 主分支卷积
-    ├── 不重复计算原 16 个卷积的全训练集版本
-    ├── 不生成保护 mask，不训练 surrogate，也不读取 eval_ms
+    ├── 候选固定为全部 20 个 Conv weight 与 20 个 BN affine 参数组
+    ├── 每个 BN affine 组同时包含 weight/gamma 与 bias/beta，running state 只构造标准化输入
+    ├── 计算四路输出 z_pp/z_pv/z_vp/z_vv、紧凑交叉项 I 与自然残差 z_uu-z_pp
+    ├── 每张图片将 C×H×W 整理为 (H×W)×C，计算六类谱熵有效秩
+    ├── 汇总两个残差幅值、两个残差秩、三个 rank gap、rank interaction 和乘积
+    ├── 从 40 项统一表直接抽取 16 个 BasicBlock 主分支卷积
+    ├── 40 项与 16 项各生成九张单指标图，共 18 张
+    ├── 每张图按指标绝对值降序排列，柱子和文字保留真实符号
+    ├── weights.py 不生成保护 mask、不训练 surrogate，也不读取 eval_ms
+    ├── sweep.py 分别按 all.tsv 的 40 项与 main.tsv 的 16 项 product_score 顺序扫描
+    ├── paired-BN-affine 变体为每个 main Conv 绑定对应 bn1/bn2.weight 与 bias
+    ├── 该变体不保护 BN 运行状态并排除 downsample BN，只检验 affine 绑定
+    ├── 当前 affine 绑定只运行 seed 42 前缀扫描，不执行十种子配对验证
+    ├── 每个前缀固定保护分类头 weight/bias，并额外保护前 k 个完整 Conv/BN affine 候选组
+    ├── 每个前缀重放 seed 42 canonical 初始化与 400/100 soft validation-best 协议
+    ├── 每个 checkpoint 固定后只评估一次 eval_ms；反弹点由相邻 accuracy 严格上升定义
+    ├── eval_ms 参与停止，故该扫描只作 post-hoc 排名诊断，不作为正式先验 selector
     └── results/test/MS/01_cross/
-        ├── weights.json/tsv          500 张 query 的协议、检查与 40 项排名
-        ├── weights_conv/bn.tsv       500 张结果按候选类型拆分的排名
-        ├── weights.png               500 张 query 的 40 项统一柱状图
-        ├── weights_full.json/tsv     全部 50,000 张训练图片的协议与 40 项排名
-        ├── weights_full_conv/bn.tsv  全训练集结果按候选类型拆分的排名
-        ├── weights_full.png          全训练集的 40 项统一柱状图
-        ├── tensors.tsv               从 500 张统一表抽取的 16 个主分支卷积
-        └── tensors.png               16 个主分支卷积的绝对残差均值柱状图
+        ├── metrics.json              协议、模型/数据哈希、正确性、40/16 项指标
+        ├── all.tsv                   全部 40 个候选的九项指标
+        ├── main.tsv                  16 个主分支卷积的九项指标
+        ├── all_*.png                 全部 40 项的九张单指标图
+        ├── main_*.png                16 项的九张单指标图
+        ├── sweep.json/tsv            Product 前缀、停止点、最佳点与三项 MS 原始指标
+        ├── sweep_history.tsv         已运行前缀的逐轮 query train/validation 指标
+        ├── sweep.png                 40 项 accuracy 前缀曲线与三条参考线
+        ├── main_sweep.json/tsv       16 项 Product 前缀、停止点与三项 MS 原始指标
+        ├── main_sweep_history.tsv    16 项扫描已运行前缀的逐轮训练/验证指标
+        ├── main_sweep.png            16 项 accuracy 前缀曲线与三条参考线
+        ├── main_affine_sweep.json/tsv Main Conv+对应 BN affine 前缀与三项 MS 原始指标
+        ├── main_affine_sweep_history.tsv  Conv+affine 扫描的逐轮训练/验证指标
+        └── main_affine_sweep.png     Conv+affine accuracy 前缀曲线与三条参考线
+└── test/MS/02/
+    ├── 读取 query_pool_ms 按 query_rank 排序的固定 500 张 CIFAR-100 图片
+    ├── 读取官方 ImageNet ResNet18 public 权重与 victim best.pth
+    ├── 分类头 weight/bias 固定为私有边界，不进入 backbone 排名
+    ├── 候选与 Test01 一致：全部 20 个 Conv weight 与 20 个 BN affine 参数组
+    ├── Conv 将同一 victim 自然输入分别交给 public/victim weight
+    ├── BN affine 固定 victim 标准化输入，同时替换 public/victim gamma 与 beta
+    ├── 将 N×C×H×W 整理为 (N×H×W)×C 并累积 float64 均值/协方差
+    ├── 计算对称二阶能量归一化的高斯 Wasserstein 表征传输分数
+    ├── 生成 40 项、16 个主分支卷积及 Test01 逐项排名对照
+    ├── 不生成保护 mask，不训练 surrogate，也不读取 eval_ms
+    └── results/test/MS/02/
+        ├── metrics.json              协议、模型/数据哈希、正确性、排名与 Test01 统计
+        ├── weights.tsv/png           40 个候选的表征传输排名与图
+        ├── weights_conv/bn.tsv       两类候选的类别内排名
+        ├── tensors.tsv/png           16 个 BasicBlock 主分支卷积的抽取表和图
+        └── comparison.tsv/png        Test02 RT 与 Test01 交叉残差排名对照
 
 ```

@@ -34,28 +34,32 @@ TSDP/
 │   │   ├── 02_head                  全保护/随机保护的分类头与权重消融
 │   │   ├── 03_baseline              普通 MS 策略、双黑盒参考线与 TEESlice 独立点总览
 │   │   ├── 04_tensorshield          TensorShield 前缀、四策略十种子候选及消融
-│   │   ├── 05_state                 State 类型与参数语义保护对比结果
+│   │   ├── 05_state                 State 语义结果与 BN gamma 分组消融
 │   │   ├── 06_weight                TensorShield Top-k 的遗漏 weight 语义闭包结果
 │   │   ├── 07_structure             ResNet18 结构、conv1 依赖与对应 conv2 替换结果
 │   │   ├── 08_leakage               泄露状态利用强度与 MS 负迁移结果
-│   │   └── 09_mechanism             攻击依赖位置的接口机制分析结果
+│   │   ├── 09_mechanism             攻击依赖位置的接口机制分析结果
+│   │   └── 10_pair                  卷积与局部 BN gamma 配对保护结果
 │   └── test/                        编号测试的独立结果
 │       └── MS/
-│           └── 01_cross             40 个 Conv/BN gamma 的 CHW 交叉残差排名
+│           ├── 01_cross             40/16 项残差、有效秩与 Product 前缀诊断结果
+│           └── 02                   同输入算子的表征传输排名与 Test01 对照
 ├── models/                          统一模型结构及 TEESlice slice/backbone 接口
-├── verify/                          环境/GPU、数据协议、surrogate 与固定 rank mask 验证
+├── verify/                          环境/GPU、数据协议及 MS/Lab/Test 结果验证
 ├── lab/                             小型验证实验
 │   ├── 01_kmeans                    ResNet18+CIFAR-100 特征聚类
 │   ├── 02_head                      分类头与权重训练方式消融
 │   ├── 03_baseline                  MS 策略保护比例、双黑盒参考线与三项指标总览
 │   ├── 04_tensorshield              TensorShield 前缀、四策略十种子候选与集合验证
-│   ├── 05_state                     State 类型与参数语义保护对比
+│   ├── 05_state                     State 语义保护与 BN gamma 分组消融
 │   ├── 06_weight                    TensorShield Top-k 的遗漏 weight 语义闭包验证
 │   ├── 07_structure                 ResNet18 结构、conv1 依赖与对应 conv2 替换验证
 │   ├── 08_leakage                   泄露状态利用强度与 MS 负迁移验证
-│   └── 09_mechanism                 攻击依赖位置的接口机制分析
+│   ├── 09_mechanism                 攻击依赖位置的接口机制分析
+│   └── 10_pair                      卷积与局部 BN gamma 配对保护比较
 ├── test/                            未进入 Lab 或正式实验的编号测试
 │   └── MS/
-│       └── 01_cross                 40 个 Conv/BN gamma 的 CHW 交叉残差测试入口
+│       ├── 01_cross                 40/16 项残差、有效秩与 Product 前缀诊断入口
+│       └── 02                       同输入算子的表征传输测试入口
 └── docs/                            参考论文
 ```

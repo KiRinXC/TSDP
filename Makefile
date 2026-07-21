@@ -43,6 +43,7 @@ unit:
 results:
 	PYTHONDONTWRITEBYTECODE=1 "$(PYTHON)" verify/verify_ms_results.py
 	PYTHONDONTWRITEBYTECODE=1 "$(PYTHON)" verify/verify_lab.py
+	PYTHONDONTWRITEBYTECODE=1 "$(PYTHON)" verify/verify_test.py
 
 check: gpu unit verify results
 
