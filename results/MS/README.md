@@ -10,6 +10,23 @@ results/MS/<model>/<dataset>/
 
 当前正式协议先从 500 条 query 中按 seed 42 与固定 offset 100 拆出 400 条训练样本和 100 条 validation 样本。soft 攻击按 validation soft cross-entropy、hard 攻击按 validation hard cross-entropy 选择最早的最优 `best.pth`；`eval_ms` 不参与选模，只在 checkpoint 固定后完整评估一次。普通正式策略与 soft 黑盒使用 `soft_query_validation_best_v1`，label-only 黑盒使用 `hard_query_validation_best_v1`。正式 surrogate 不保存 `end.pth`。
 
+## 总体结论
+
+当前正式结果首先说明，保护参数量不是决定 MS 抑制效果的充分条件。只保护分类头
+`0.4569%` 参数就明显强于成本接近的浅层保护，而 TensorShield 以 `8.9934%` 参数
+取得 `0.1728/0.1865/2.694492`，又明显强于相近成本的完整层和大权重 baseline；
+这支持优先寻找分类头、关键路径和状态闭包，而不是只增加受保护参数比例。
+
+其次，TensorShield 是当前普通固定 victim 下最强的低比例正式策略，但仍未达到
+soft 黑盒 `0.1390/0.1463/3.039817`。全局大权重策略需要约 80% 以上参数才接近该
+边界，说明它能形成稳定剂量效应，却不是高效的低成本选择方法。任何部分保护点偶然
+低于 soft 黑盒都只能解释为当前 surrogate 的优化或选模负迁移；攻击者始终可以忽略
+暴露状态并回退到同接口黑盒，不能据此声称信息意义上强于黑盒。
+
+最后，hard-label 黑盒比 soft-posterior 黑盒更难攻击，说明查询输出能力本身是必须
+单独控制的实验变量。TEESlice 改变了 victim 结构与训练过程，只能作为独立复现结果，
+不能并入普通 ResNet18 固定 victim 的同条件成本排序。
+
 ## ResNet18+CIFAR-100 上下界
 
 | 保护策略 | 查询输出 | artifact_id | best epoch | accuracy | fidelity | posterior KL |

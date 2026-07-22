@@ -39,6 +39,7 @@ from selector import (  # noqa: E402
 
 EXPECTED_MASK_SHA256 = "1e3aa38124f084dd39eab42a4d3f1ddf1ca86807812796c66a8318c05e7aa2cb"
 LAB04_ROOT = ROOT / "lab" / "04_tensorshield"
+LAB06_ROOT = ROOT / "lab" / "06_weight"
 
 
 def load_lab04_module(script_name: str):
@@ -75,6 +76,27 @@ def load_lab04_window_module():
 
 def load_lab04_ablation_module():
     return load_lab04_module("ablate")
+
+
+def load_lab06_candidate_module():
+    """隔离加载迁移后的 Lab06 多种子候选入口。"""
+    module_name = "_tsdp_lab06_weight_candidate_test"
+    loaded = sys.modules.get(module_name)
+    if loaded is not None:
+        return loaded
+    specification = importlib.util.spec_from_file_location(
+        module_name, LAB06_ROOT / "candidate.py"
+    )
+    if specification is None or specification.loader is None:
+        raise RuntimeError("无法加载 Lab06 candidate.py。")
+    module = importlib.util.module_from_spec(specification)
+    sys.modules[module_name] = module
+    try:
+        specification.loader.exec_module(module)
+    except Exception:
+        sys.modules.pop(module_name, None)
+        raise
+    return module
 
 
 class TensorShieldRankTests(unittest.TestCase):
@@ -244,7 +266,7 @@ class TensorShieldAblationTests(unittest.TestCase):
 
 class TensorShieldCandidateTests(unittest.TestCase):
     def test_four_multiseed_strategies_are_controlled_comparisons(self):
-        candidate = load_lab04_module("candidate")
+        candidate = load_lab06_candidate_module()
         model = imagenet_models.resnet18(num_classes=100)
         selected, kept_weights, bn_gamma = candidate.build_candidate(model)
         drop06, drop06_weights, drop06_gamma = (

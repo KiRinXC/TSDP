@@ -31,33 +31,37 @@ TSDP/
 │   ├── MS/                          surrogate 原始指标与 run 索引
 │   ├── lab/                         Lab 实验结果与可视化
 │   │   ├── 01_kmeans                ResNet18+CIFAR-100 特征聚类
-│   │   ├── 02_head                  全保护/随机保护的分类头与权重消融
+│   │   ├── 02_head                  分类头、权重训练方式与 TensorShield Top-10 trainability 消融
 │   │   ├── 03_baseline              普通 MS 策略、双黑盒参考线与 TEESlice 独立点总览
-│   │   ├── 04_tensorshield          TensorShield 前缀、四策略十种子候选及消融
-│   │   ├── 05_state                 State 语义结果与 BN gamma 分组消融
-│   │   ├── 06_weight                TensorShield Top-k 的遗漏 weight 语义闭包结果
-│   │   ├── 07_structure             ResNet18 结构、conv1 依赖与对应 conv2 替换结果
-│   │   ├── 08_leakage               泄露状态利用强度与 MS 负迁移结果
-│   │   ├── 09_mechanism             攻击依赖位置的接口机制分析结果
-│   │   └── 10_pair                  卷积与局部 BN gamma 配对保护结果
-│   └── test/                        编号测试的独立结果
-│       └── MS/
-│           └── 01_cross             40/16 项残差、有效秩与 Product 前缀诊断结果
+│   │   ├── 04_tensorshield          TensorShield 前缀、删除消融与位置窗口结果
+│   │   ├── 05_state                 State 类型与参数语义分类结果
+│   │   ├── 06_weight                遗漏 weight 语义闭包与多种子候选结果
+│   │   ├── 07_bn                    BN gamma 分组 drop/add 结果
+│   │   ├── 08_structure             结构、条件依赖、位置替换与局部配对结果
+│   │   └── 09_leakage               泄露状态利用强度与 MS 负迁移结果
+│   └── playground/                  编号探索的独立结果
+│       ├── 01_raw                   40 项四路原始 weight 输出与残差乘积
+│       ├── 02_rank                  all/main/bn 有效秩与秩乘积结果
+│       ├── 03_feature               all/main/bn 特征图归一化残差乘积
+│       ├── 04_param                 all/main/bn 参数量归一化残差乘积
+│       └── 05_diagnose              BN/Conv 同源联合与跨归一化交叉保护诊断
 ├── models/                          统一模型结构及 TEESlice slice/backbone 接口
-├── verify/                          环境/GPU、数据协议及 MS/Lab/Test 结果验证
+├── verify/                          环境/GPU、数据协议及 MS/Lab/Playground 结果验证
 ├── lab/                             小型验证实验
 │   ├── 01_kmeans                    ResNet18+CIFAR-100 特征聚类
-│   ├── 02_head                      分类头与权重训练方式消融
+│   ├── 02_head                      分类头、权重训练方式与 TensorShield Top-10 trainability 消融
 │   ├── 03_baseline                  MS 策略保护比例、双黑盒参考线与三项指标总览
-│   ├── 04_tensorshield              TensorShield 前缀、四策略十种子候选与集合验证
-│   ├── 05_state                     State 语义保护与 BN gamma 分组消融
-│   ├── 06_weight                    TensorShield Top-k 的遗漏 weight 语义闭包验证
-│   ├── 07_structure                 ResNet18 结构、conv1 依赖与对应 conv2 替换验证
-│   ├── 08_leakage                   泄露状态利用强度与 MS 负迁移验证
-│   ├── 09_mechanism                 攻击依赖位置的接口机制分析
-│   └── 10_pair                      卷积与局部 BN gamma 配对保护比较
-├── test/                            未进入 Lab 或正式实验的编号测试
-│   └── MS/
-│       └── 01_cross                 40/16 项残差、有效秩与 Product 前缀诊断入口
+│   ├── 04_tensorshield              TensorShield 前缀、删除消融与位置窗口验证
+│   ├── 05_state                     State 类型与参数语义分类
+│   ├── 06_weight                    遗漏 weight 语义闭包与多种子候选验证
+│   ├── 07_bn                        BN gamma 分组 drop/add 验证
+│   ├── 08_structure                 结构、条件依赖、位置替换与局部配对验证
+│   └── 09_leakage                   泄露状态利用强度与 MS 负迁移验证
+├── playground/                      未进入 Lab 或正式实验的编号探索
+│   ├── 01_raw                       四路原始 weight 输出提取
+│   ├── 02_rank                      all/main/bn 有效秩派生分析
+│   ├── 03_feature                   all/main/bn 特征图归一化残差分析
+│   ├── 04_param                     all/main/bn 参数量归一化残差分析
+│   └── 05_diagnose                  BN/Conv 联合与交叉 Top-5 单种子诊断
 └── docs/                            参考论文
 ```

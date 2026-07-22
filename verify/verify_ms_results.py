@@ -265,6 +265,15 @@ def validate_index(ordinary_artifacts: set[str]) -> None:
         raise ValueError("正式 metrics.tsv 仍引用非 best checkpoint。")
 
 
+def validate_result_readmes() -> None:
+    overview = (ROOT / "results" / "MS" / "README.md").read_text(encoding="utf-8")
+    teeslice = (RESULTS_ROOT / "teeslice" / "README.md").read_text(encoding="utf-8")
+    if "## 总体结论" not in overview:
+        raise ValueError("results/MS/README.md 缺少正式结果的总体结论。")
+    if "## 实验结论" not in teeslice:
+        raise ValueError("TEESlice 结果 README 缺少明确实验结论。")
+
+
 def main() -> int:
     ordinary_artifacts, all_artifacts = expected_artifacts()
     actual_artifacts = {
@@ -283,6 +292,7 @@ def main() -> int:
         raise ValueError("普通正式 artifact 没有共享同一个 query train 划分。")
     validate_teeslice()
     validate_index(ordinary_artifacts)
+    validate_result_readmes()
     print(
         f"[OK] formal MS results: ordinary={len(ordinary_artifacts)} "
         f"standalone=1 protocol={ATTACK_PROTOCOL_VERSION}"

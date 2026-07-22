@@ -1,11 +1,6 @@
-# 实验 05：State、参数语义与 BN Gamma 消融
+# 实验 05：State 与参数语义
 
 本实验在 `ResNet18+CIFAR-100` 上分别只保护一种 `state_dict` 条目类型或参数语义组，观察不同状态不可见时的 MS 效果。各组都是相互独立的保护方案，不构成累计保护序列。
-
-在原十八组语义实验之外，`gamma.py` 固定 Lab04 最终候选中的五个前中层
-`conv1.weight` 和完整分类头，只改变 20 个 BN gamma，用十个独立 seed 判断不同
-功能位置的 gamma 对完整保护闭包分别有什么贡献。该消融与原 `run.py` 使用独立产物，
-不会覆盖原十八组结果。
 
 ## 固定协议
 
@@ -96,81 +91,6 @@ protected_state_byte_ratio     受保护 tensor payload 字节数 / 全部 state
 
 完整运行会覆盖同一语义入口，十八组均独立按统一协议训练。
 
-## BN Gamma 分组消融
-
-20 个 `nn.BatchNorm2d.weight` 按计算图功能位置互斥地分成四组：
-
-```text
-stem          bn1.weight，1 个 state、64 个参数
-block_bn1     八个 BasicBlock 的 bn1.weight，8 个 state、1,920 个参数
-block_bn2     八个 BasicBlock 的 bn2.weight，8 个 state、1,920 个参数
-downsample    三个 downsample.1.weight，3 个 state、896 个参数
-```
-
-固定基础保护集合为：
-
-```text
-layer1.0.conv1.weight
-layer1.1.conv1.weight
-layer2.0.conv1.weight
-layer2.1.conv1.weight
-layer3.0.conv1.weight
-last_linear.weight
-last_linear.bias
-```
-
-在此基础上只比较六种 gamma 配置：`No gamma`、`All 20 gamma`，以及分别从全部
-gamma 中删除 `Stem`、`Block BN1`、`Block BN2`、`Downsample BN`。这是一项
-leave-one-group-out 消融；它衡量每组在完整跨层尺度闭包中的条件贡献，不把单组
-保护效果误当成可加贡献。
-
-`gamma_add.py` 进行与上述 drop 消融对偶的 add-one-group 比较。它仍固定五个
-`conv1.weight` 和完整分类头，但以 `No gamma` 为起点，分别只加入 Stem、全部
-BasicBlock BN1、全部 BasicBlock BN2 或全部 Downsample BN gamma。该实验只运行
-seed 42，不用于声明跨 seed 稳定性，也不把四组结果相加推断联合闭包。
-
-实验固定使用 seed 43–52。每个新 case 都按相同 seed 重放 canonical surrogate
-初始化和 400/100 query 划分，最多训练 100 epoch，以 query-validation soft
-cross-entropy 选择最早 best checkpoint，固定后对 `eval_ms` 评估一次。完全相同的
-`All 20 gamma` 和 matched soft 黑盒结果严格核对 mask、划分、victim、posterior
-与协议后复用 `results/lab/04_tensorshield/candidate.json`；hard-label 黑盒读取正式
-seed-42 结果，只作为图中的补充参考线。
-
-运行前核对分组、mask、来源与十种子划分：
-
-```bash
-"$HOME/venvs/dl-py310-torch210-cu121/bin/python" \
-  lab/05_state/gamma.py --dry-run
-```
-
-执行完整消融：
-
-```bash
-"$HOME/venvs/dl-py310-torch210-cu121/bin/python" \
-  lab/05_state/gamma.py
-```
-
-执行 seed-42 add-one-group 实验：
-
-```bash
-"$HOME/venvs/dl-py310-torch210-cu121/bin/python" \
-  lab/05_state/gamma_add.py
-```
-
-运行前只核对五个 add mask：
-
-```bash
-"$HOME/venvs/dl-py310-torch210-cu121/bin/python" \
-  lab/05_state/gamma_add.py --dry-run
-```
-
-已有完整结果时，可以核对并复用五类新训练 case，只重建聚合与图片：
-
-```bash
-"$HOME/venvs/dl-py310-torch210-cu121/bin/python" \
-  lab/05_state/gamma.py --resume
-```
-
 ## 输出
 
 ```text
@@ -181,14 +101,4 @@ results/lab/05_state/accuracy.png               保护存储比例与 accuracy
 results/lab/05_state/fidelity.png               保护存储比例与 fidelity
 results/lab/05_state/posterior_kl.png            保护存储比例与 posterior KL
 results/lab/05_state/<group>_mask.pt             各组的 122-unit 紧凑保护掩码
-results/lab/05_state/gamma.json                   六种 gamma 配置的十种子结果与配对效应
-results/lab/05_state/gamma.tsv                    六种配置的 60 个 MS 原始点
-results/lab/05_state/gamma_history.tsv            六种配置共 6,000 轮训练与验证日志
-results/lab/05_state/gamma.png                    三指标十种子 BN gamma 消融图
-results/lab/05_state/gamma_<case>_mask.pt         六种配置的紧凑保护掩码
-results/lab/05_state/gamma_add.json               No gamma 与四类单独加入的 seed-42 结果
-results/lab/05_state/gamma_add.tsv                五种 add 配置的原始指标与基线差值
-results/lab/05_state/gamma_add_history.tsv        五种配置共 500 轮训练与验证日志
-results/lab/05_state/gamma_add.png                三指标 add-one-group 柱状图
-results/lab/05_state/gamma_add_<case>_mask.pt     五种 add 配置的紧凑保护掩码
 ```

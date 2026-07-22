@@ -1,0 +1,4 @@
+case	best_epoch	trainable_public_param_count	trainable_victim_param_count	trainable_head_param_count	trainable_parameter_count	frozen_parameter_count	surrogate_acc	fidelity	posterior_kl
+public_frozen_victim_train	93	0	10218048	51300	10269348	958464	0.1835	0.1986	2.655571717834473
+public_train_victim_frozen	77	958464	0	51300	1009764	10218048	0.1203	0.1285	3.070843305206299
+joint_finetune	93	958464	10218048	51300	11227812	0	0.1728	0.1865	2.694492276763916

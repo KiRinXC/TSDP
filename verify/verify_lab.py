@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""核对当前 Lab02–10 的统一 MS 协议与结果产物。"""
+"""核对当前 Lab02–09 的统一 MS 协议与结果产物。"""
 
 from __future__ import annotations
 
@@ -21,6 +21,7 @@ if str(TRAIN_ROOT) not in sys.path:
     sys.path.insert(0, str(TRAIN_ROOT))
 
 from defense import load_protection_mask, protection_mask_sha256  # noqa: E402
+from selector import PUBLISHED_RESNET18_C100_STATES  # noqa: E402
 
 
 ATTACK_PROTOCOL = "soft_query_validation_best_v1"
@@ -307,6 +308,200 @@ def validate_lab02() -> None:
         raise ValueError("Lab02 八组分类头配置不完整。")
 
 
+def validate_lab02_top10_trainability() -> None:
+    json_path = "results/lab/02_head/top10_trainability.json"
+    history_path = "results/lab/02_head/top10_trainability_history.tsv"
+    payload = load_json(json_path)
+    validate_protocol(payload, json_path)
+    cases = (
+        "public_frozen_victim_train",
+        "public_train_victim_frozen",
+        "joint_finetune",
+    )
+    if (
+        payload.get("experiment") != "02_tensorshield_top10_trainability"
+        or payload.get("scientific_status")
+        != "seed42_trainability_ablation_not_multiseed"
+        or payload.get("seed") != SEED
+        or payload.get("evaluation_seeds") != [SEED]
+        or tuple(payload.get("case_order", ())) != cases
+    ):
+        raise ValueError("Lab02 Top-10 trainability 没有固定为 seed 42 的三组消融。")
+
+    protection = payload.get("top10_protection")
+    expected_mask_sha256 = (
+        "1e3aa38124f084dd39eab42a4d3f1ddf1ca86807812796c66a8318c05e7aa2cb"
+    )
+    if (
+        not isinstance(protection, dict)
+        or protection.get("defense") != "tensorshield"
+        or protection.get("protected_unit_count") != 11
+        or protection.get("protected_param_count") != 1_009_764
+        or protection.get("total_param_count") != 11_227_812
+        or protection.get("classifier_protected") is not True
+        or protection.get("head_mode") != "replace"
+        or protection.get("protection_mask_sha256") != expected_mask_sha256
+        or tuple(protection.get("protected_states", ()))
+        != PUBLISHED_RESNET18_C100_STATES
+        or protection.get("replacement_head_states")
+        != ["last_linear.weight", "last_linear.bias"]
+        or protection.get("replacement_head_initialization") != "same_seed_random"
+        or protection.get("replacement_head_trainable_in_all_cases") is not True
+    ):
+        raise ValueError("Lab02 Top-10 保护集合、成本或替换头语义不正确。")
+
+    randomization = payload.get("randomization")
+    if not isinstance(randomization, dict):
+        raise ValueError("Lab02 Top-10 trainability 缺少随机初始化元数据。")
+    shared_initial_sha256 = randomization.get("shared_initial_state_sha256")
+    if not isinstance(shared_initial_sha256, str) or len(shared_initial_sha256) != 64:
+        raise ValueError("Lab02 Top-10 trainability 的共同初始状态哈希无效。")
+
+    expected_trainability = {
+        "public_frozen_victim_train": {
+            "public_protected_backbone": 0,
+            "victim_exposed": 10_218_048,
+            "replacement_head": 51_300,
+            "trainable": 10_269_348,
+            "frozen": 958_464,
+            "mask_sha256": (
+                "45767667ff0d119bfd34f5af1f5f64cb15bf7d8a5216769d9d4d4258da882e17"
+            ),
+        },
+        "public_train_victim_frozen": {
+            "public_protected_backbone": 958_464,
+            "victim_exposed": 0,
+            "replacement_head": 51_300,
+            "trainable": 1_009_764,
+            "frozen": 10_218_048,
+            "mask_sha256": expected_mask_sha256,
+        },
+        "joint_finetune": {
+            "public_protected_backbone": 958_464,
+            "victim_exposed": 10_218_048,
+            "replacement_head": 51_300,
+            "trainable": 11_227_812,
+            "frozen": 0,
+            "mask_sha256": (
+                "7e96847f0f89f6d4552091505464c9f18f4dd5ab49b3fb6a1a51195e275c1fa7"
+            ),
+        },
+    }
+    results = payload.get("results")
+    if (
+        not isinstance(results, list)
+        or len(results) != len(cases)
+        or tuple(row.get("case") for row in results if isinstance(row, dict)) != cases
+    ):
+        raise ValueError("Lab02 Top-10 trainability 的三组结果不完整或顺序错误。")
+    selected_epochs: dict[tuple[str, ...], int] = {}
+    result_by_case: dict[str, dict[str, object]] = {}
+    for row in results:
+        case = str(row["case"])
+        validate_result(row, f"{json_path}:{case}")
+        if row.get("head_mode") != "replace" or row.get(
+            "replacement_head_trainable"
+        ) is not True:
+            raise ValueError(f"Lab02 Top-10 {case} 没有统一使用可训练替换头。")
+        trainability = row.get("trainability")
+        expected = expected_trainability[case]
+        if not isinstance(trainability, dict):
+            raise ValueError(f"Lab02 Top-10 {case} 缺少 trainability 元数据。")
+        if (
+            trainability.get("case") != case
+            or trainability.get("initial_state_sha256") != shared_initial_sha256
+            or trainability.get("trainability_mask_sha256")
+            != expected["mask_sha256"]
+            or trainability.get("trainable_parameter_count_by_source")
+            != {
+                "public_protected_backbone": expected["public_protected_backbone"],
+                "victim_exposed": expected["victim_exposed"],
+                "replacement_head": expected["replacement_head"],
+            }
+            or trainability.get("trainable_parameter_count") != expected["trainable"]
+            or trainability.get("frozen_parameter_count") != expected["frozen"]
+        ):
+            raise ValueError(f"Lab02 Top-10 {case} 的训练/冻结参数计数不正确。")
+        if trainability.get("parameter_count_by_source") != {
+            "public_protected_backbone": 958_464,
+            "victim_exposed": 10_218_048,
+            "replacement_head": 51_300,
+        }:
+            raise ValueError(f"Lab02 Top-10 {case} 的参数来源分组不正确。")
+        selected_epochs[(case,)] = int(row["primary"]["epoch"])
+        result_by_case[case] = row
+
+    validate_history(
+        history_path,
+        key_fields=("case",),
+        expected_epochs={(case,): EPOCHS for case in cases},
+        selected_epochs=selected_epochs,
+    )
+    data_rows = read_tsv("results/lab/02_head/top10_trainability.tsv")
+    if [row["case"] for row in data_rows] != list(cases):
+        raise ValueError("Lab02 Top-10 trainability.tsv 的三组顺序不正确。")
+    for data_row in data_rows:
+        case = data_row["case"]
+        source = result_by_case[case]
+        trainability = source["trainability"]
+        trainable = trainability["trainable_parameter_count_by_source"]
+        integer_pairs = {
+            "best_epoch": source["primary"]["epoch"],
+            "trainable_public_param_count": trainable["public_protected_backbone"],
+            "trainable_victim_param_count": trainable["victim_exposed"],
+            "trainable_head_param_count": trainable["replacement_head"],
+            "trainable_parameter_count": trainability["trainable_parameter_count"],
+            "frozen_parameter_count": trainability["frozen_parameter_count"],
+        }
+        for field, value in integer_pairs.items():
+            if int(data_row[field]) != value:
+                raise ValueError(f"Lab02 Top-10 TSV {case}.{field} 与 JSON 不一致。")
+        for field in ("surrogate_acc", "fidelity", "posterior_kl"):
+            assert_close(
+                float(data_row[field]),
+                float(source["result"][field]),
+                f"Lab02 Top-10 TSV {case}.{field}",
+            )
+
+    outputs = payload.get("outputs")
+    expected_outputs = {
+        "data": "results/lab/02_head/top10_trainability.tsv",
+        "history": history_path,
+        "plot": "results/lab/02_head/top10_trainability.png",
+    }
+    if outputs != expected_outputs:
+        raise ValueError("Lab02 Top-10 trainability 输出索引不正确。")
+    for relative_path in expected_outputs.values():
+        path = ROOT / relative_path
+        if not path.is_file() or path.stat().st_size == 0:
+            raise ValueError(f"Lab02 Top-10 输出缺失或为空：{relative_path}")
+
+    references = payload.get("references")
+    if not isinstance(references, dict) or set(references) != {
+        "no_protection",
+        "soft_full_protection",
+        "hard_blackbox",
+    }:
+        raise ValueError("Lab02 Top-10 三条正式参考线不完整。")
+    for name, reference in references.items():
+        path = Path(str(reference.get("path", "")))
+        if not path.is_file() or sha256_file(path) != reference.get("sha256"):
+            raise ValueError(f"Lab02 Top-10 参考线 {name} 已与正式结果漂移。")
+
+    joint = result_by_case["joint_finetune"]
+    top10 = load_json("results/lab/04_tensorshield/metrics.json")["results"][9]
+    if top10.get("case") != "top_10":
+        raise ValueError("Lab04 TensorShield Top-10 索引已经漂移。")
+    for field in ("surrogate_acc", "fidelity", "posterior_kl"):
+        assert_close(
+            float(joint["result"][field]),
+            float(top10["result"][field]),
+            f"Lab02 joint_finetune 与正式 Top-10 的 {field}",
+        )
+    if joint["primary"] != top10["primary"]:
+        raise ValueError("Lab02 joint_finetune 与正式 Top-10 的选模结果不一致。")
+
+
 def validate_lab03() -> None:
     manifest = load_json("results/lab/03_baseline/manifest.json")
     if (
@@ -398,7 +593,6 @@ def validate_lab04() -> None:
         expected_result_count=18,
         trained_filter=lambda row: row["case"] != "full_top12",
     )
-    candidate = validate_candidate()
     validate_source_hashes(
         ablation["source"],
         (("prefix_metrics", "prefix_metrics_sha256"),),
@@ -408,21 +602,12 @@ def validate_lab04() -> None:
         ROOT / str(ablation["source"]["prefix_metrics"])
     ):
         raise ValueError("Lab04 ablation 没有引用当前前缀结果。")
-    validate_source_hashes(
-        candidate["source"],
-        (
-            ("lab04_metrics", "lab04_metrics_sha256"),
-            ("lab04_ablation", "lab04_ablation_sha256"),
-            ("lab06_metrics", "lab06_metrics_sha256"),
-        ),
-        "Lab04 candidate",
-    )
     del prefix
 
 
 def validate_candidate() -> dict[str, object]:
-    json_path = "results/lab/04_tensorshield/candidate.json"
-    history_path = "results/lab/04_tensorshield/candidate_history.tsv"
+    json_path = "results/lab/06_weight/candidate.json"
+    history_path = "results/lab/06_weight/candidate_history.tsv"
     payload = load_json(json_path)
     seeds = tuple(range(43, 53))
     strategy_cases = (
@@ -454,13 +639,13 @@ def validate_candidate() -> dict[str, object]:
         )
         != strategy_cases
     ):
-        raise ValueError("Lab04 candidate 没有使用独立 seed 43–52。")
+        raise ValueError("Lab06 candidate 没有使用独立 seed 43–52。")
 
     partitions = payload.get("query_partitions")
     if not isinstance(partitions, dict) or set(partitions) != {
         str(seed) for seed in seeds
     }:
-        raise ValueError("Lab04 candidate 的十种子 query 划分不完整。")
+        raise ValueError("Lab06 candidate 的十种子 query 划分不完整。")
     train_hashes: set[str] = set()
     for seed in seeds:
         partition = partitions[str(seed)]
@@ -471,7 +656,7 @@ def validate_candidate() -> dict[str, object]:
             or partition.get("seed") != seed
             or partition.get("seed_offset") != 100
         ):
-            raise ValueError(f"Lab04 candidate seed {seed} 的 query 划分无效。")
+            raise ValueError(f"Lab06 candidate seed {seed} 的 query 划分无效。")
         train_indices = set(partition.get("train_source_indices", ()))
         validation_indices = set(partition.get("validation_source_indices", ()))
         if (
@@ -479,10 +664,10 @@ def validate_candidate() -> dict[str, object]:
             or len(validation_indices) != QUERY_VALIDATION
             or train_indices & validation_indices
         ):
-            raise ValueError(f"Lab04 candidate seed {seed} 的 query 划分发生泄漏。")
+            raise ValueError(f"Lab06 candidate seed {seed} 的 query 划分发生泄漏。")
         train_hashes.add(str(partition.get("train_source_indices_sha256")))
     if len(train_hashes) != len(seeds):
-        raise ValueError("Lab04 candidate 的十个 query-train 划分不唯一。")
+        raise ValueError("Lab06 candidate 的十个 query-train 划分不唯一。")
 
     results = payload.get("results")
     expected_keys = {
@@ -491,7 +676,7 @@ def validate_candidate() -> dict[str, object]:
         for case in all_cases
     }
     if not isinstance(results, list) or len(results) != len(expected_keys):
-        raise ValueError("Lab04 candidate 应包含四策略和黑盒各十组结果。")
+        raise ValueError("Lab06 candidate 应包含四策略和黑盒各十组结果。")
     keys: set[tuple[str, str]] = set()
     selected_epochs: dict[tuple[str, ...], int] = {}
     result_by_key: dict[tuple[int, str], dict[str, object]] = {}
@@ -500,12 +685,12 @@ def validate_candidate() -> dict[str, object]:
         case = str(row.get("case", ""))
         key = (str(seed), case)
         if key in keys:
-            raise ValueError(f"Lab04 candidate 重复结果：{key}")
+            raise ValueError(f"Lab06 candidate 重复结果：{key}")
         keys.add(key)
         if seed not in seeds or case not in set(all_cases):
-            raise ValueError(f"Lab04 candidate 含未知结果：{key}")
+            raise ValueError(f"Lab06 candidate 含未知结果：{key}")
         if row.get("query_partition_seed") != seed:
-            raise ValueError(f"Lab04 candidate {key} 的 query seed 不一致。")
+            raise ValueError(f"Lab06 candidate {key} 的 query seed 不一致。")
         randomization = row.get("randomization")
         if (
             not isinstance(randomization, dict)
@@ -515,7 +700,7 @@ def validate_candidate() -> dict[str, object]:
             or randomization.get("query_sampler_seed") != seed
             or randomization.get("reset_before_surrogate_initialization") is not True
         ):
-            raise ValueError(f"Lab04 candidate {key} 的随机轨迹不一致。")
+            raise ValueError(f"Lab06 candidate {key} 的随机轨迹不一致。")
         validate_result(row, f"{json_path}:{key}")
         protection = row.get("protection", {})
         if case in expected_costs:
@@ -524,16 +709,16 @@ def validate_candidate() -> dict[str, object]:
                 protection.get("protected_unit_count") != expected_units
                 or protection.get("protected_param_count") != expected_params
             ):
-                raise ValueError(f"Lab04 candidate {key} 的保护成本不正确。")
+                raise ValueError(f"Lab06 candidate {key} 的保护成本不正确。")
         elif (
             protection.get("protected_param_count")
             != protection.get("total_param_count")
         ):
-            raise ValueError(f"Lab04 candidate {key} 不是完整保护对照。")
+            raise ValueError(f"Lab06 candidate {key} 不是完整保护对照。")
         selected_epochs[key] = int(row["primary"]["epoch"])
         result_by_key[(seed, case)] = row
     if keys != expected_keys:
-        raise ValueError("Lab04 candidate 的 seed/case 笛卡尔积不完整。")
+        raise ValueError("Lab06 candidate 的 seed/case 笛卡尔积不完整。")
     validate_masks(results, json_path)
     validate_history(
         history_path,
@@ -548,7 +733,7 @@ def validate_candidate() -> dict[str, object]:
         or aggregate.get("seed_count") != len(seeds)
         or aggregate.get("sample_standard_deviation_ddof") != 1
     ):
-        raise ValueError("Lab04 candidate 的聚合协议不正确。")
+        raise ValueError("Lab06 candidate 的聚合协议不正确。")
     metrics = ("surrogate_acc", "fidelity", "posterior_kl")
     values_by_case: dict[str, dict[str, list[float]]] = {}
     for case in all_cases:
@@ -564,12 +749,12 @@ def validate_candidate() -> dict[str, object]:
             assert_close(
                 float(summary["mean"]),
                 statistics.mean(values),
-                f"Lab04 candidate {case}.{metric}.mean",
+                f"Lab06 candidate {case}.{metric}.mean",
             )
             assert_close(
                 float(summary["sample_std"]),
                 statistics.stdev(values),
-                f"Lab04 candidate {case}.{metric}.sample_std",
+                f"Lab06 candidate {case}.{metric}.sample_std",
             )
 
     comparison_specs = {
@@ -603,7 +788,7 @@ def validate_candidate() -> dict[str, object]:
             or comparison.get("definition") != "left_minus_right"
         ):
             raise ValueError(
-                f"Lab04 candidate {comparison_name} 的配对定义不正确。"
+                f"Lab06 candidate {comparison_name} 的配对定义不正确。"
             )
         counts = {
             "surrogate_acc": 0,
@@ -623,18 +808,18 @@ def validate_candidate() -> dict[str, object]:
             assert_close(
                 float(summary["mean"]),
                 statistics.mean(values),
-                f"Lab04 candidate {comparison_name}.{metric}.mean",
+                f"Lab06 candidate {comparison_name}.{metric}.mean",
             )
             assert_close(
                 float(summary["sample_std"]),
                 statistics.stdev(values),
-                f"Lab04 candidate {comparison_name}.{metric}.sample_std",
+                f"Lab06 candidate {comparison_name}.{metric}.sample_std",
             )
             for seed, value in zip(seeds, values):
                 assert_close(
                     float(summary["values_by_seed"][str(seed)]),
                     value,
-                    f"Lab04 candidate {comparison_name}.{metric}.seed{seed}",
+                    f"Lab06 candidate {comparison_name}.{metric}.seed{seed}",
                 )
         for index in range(len(seeds)):
             conditions = {
@@ -647,7 +832,7 @@ def validate_candidate() -> dict[str, object]:
                 counts[metric] += int(condition)
         if comparison.get("left_at_or_better_than_right_counts") != counts:
             raise ValueError(
-                f"Lab04 candidate {comparison_name} 的配对计数不正确。"
+                f"Lab06 candidate {comparison_name} 的配对计数不正确。"
             )
 
     expected_blackbox_counts = {}
@@ -681,9 +866,9 @@ def validate_candidate() -> dict[str, object]:
         aggregate.get("at_or_beyond_matched_blackbox_counts")
         != expected_blackbox_counts
     ):
-        raise ValueError("Lab04 candidate 的四策略黑盒计数不正确。")
+        raise ValueError("Lab06 candidate 的四策略黑盒计数不正确。")
 
-    data_rows = read_tsv("results/lab/04_tensorshield/candidate.tsv")
+    data_rows = read_tsv("results/lab/06_weight/candidate.tsv")
     expected_data_keys = [
         (seed, case) for seed in seeds for case in strategy_cases
     ]
@@ -691,7 +876,7 @@ def validate_candidate() -> dict[str, object]:
         (int(row["seed"]), row["case"]) for row in data_rows
     ]
     if actual_data_keys != expected_data_keys:
-        raise ValueError("Lab04 candidate.tsv 不是四策略 × 十 seed 的 40 行数据。")
+        raise ValueError("Lab06 candidate.tsv 不是四策略 × 十 seed 的 40 行数据。")
     return payload
 
 
@@ -702,12 +887,10 @@ def validate_lab05() -> None:
         key_fields=("protection_group",),
         expected_result_count=18,
     )
-    validate_lab05_gamma()
-    validate_lab05_gamma_add()
 
 
-def validate_lab05_gamma() -> None:
-    json_path = "results/lab/05_state/gamma.json"
+def validate_lab07_bn_drop() -> None:
+    json_path = "results/lab/07_bn/drop.json"
     payload = load_json(json_path)
     seeds = tuple(range(43, 53))
     cases = (
@@ -742,7 +925,7 @@ def validate_lab05_gamma() -> None:
         or tuple(payload.get("evaluation_seeds", ())) != seeds
         or tuple(payload.get("gamma_group_order", ())) != tuple(expected_groups)
     ):
-        raise ValueError("Lab05 gamma 的基础协议、seed 或分组顺序不正确。")
+        raise ValueError("Lab07 BN drop 的基础协议、seed 或分组顺序不正确。")
     training = payload.get("training", {})
     expected_training = {
         "max_epochs": EPOCHS,
@@ -762,19 +945,19 @@ def validate_lab05_gamma() -> None:
     }
     for field, expected in expected_training.items():
         if training.get(field) != expected:
-            raise ValueError(f"Lab05 gamma.training.{field} 不正确。")
+            raise ValueError(f"Lab07 BN drop.training.{field} 不正确。")
 
     gamma_groups = payload.get("gamma_groups", {})
     flattened = []
     for group, (expected_count, expected_params) in expected_groups.items():
         names = gamma_groups.get(group)
         if not isinstance(names, list) or len(names) != expected_count:
-            raise ValueError(f"Lab05 gamma 的 {group} 数量不正确。")
+            raise ValueError(f"Lab07 BN drop 的 {group} 数量不正确。")
         flattened.extend(names)
         if group == "downsample" and not all(
             name.endswith(".downsample.1.weight") for name in names
         ):
-            raise ValueError("Lab05 gamma 把非 downsample BN weight 放入 downsample 组。")
+            raise ValueError("Lab07 BN drop 把非 downsample BN weight 放入 downsample 组。")
         row = next(
             result
             for result in payload["results"]
@@ -785,9 +968,9 @@ def validate_lab05_gamma() -> None:
         }
         actual_params = sum(int(unit_by_name[name]["numel"]) for name in names)
         if actual_params != expected_params:
-            raise ValueError(f"Lab05 gamma 的 {group} 参数量不正确。")
+            raise ValueError(f"Lab07 BN drop 的 {group} 参数量不正确。")
     if len(flattened) != 20 or len(set(flattened)) != 20:
-        raise ValueError("Lab05 四类 gamma 没有互斥覆盖 20 个 state。")
+        raise ValueError("Lab07 BN drop 的四类 gamma 没有互斥覆盖 20 个 state。")
 
     source = payload.get("source_reuse", {})
     for path_field, hash_field in (
@@ -796,7 +979,7 @@ def validate_lab05_gamma() -> None:
     ):
         path = ROOT / str(source.get(path_field, ""))
         if not path.is_file() or sha256_file(path) != source.get(hash_field):
-            raise ValueError(f"Lab05 gamma 来源 {hash_field} 不一致。")
+            raise ValueError(f"Lab07 BN drop 来源 {hash_field} 不一致。")
     for path_field, hash_field in (
         ("victim_checkpoint", "victim_checkpoint_sha256"),
         ("official_weight", "official_weight_sha256"),
@@ -804,11 +987,11 @@ def validate_lab05_gamma() -> None:
     ):
         path = ROOT / str(payload.get(path_field, ""))
         if not path.is_file() or sha256_file(path) != payload.get(hash_field):
-            raise ValueError(f"Lab05 gamma.{hash_field} 不一致。")
+            raise ValueError(f"Lab07 BN drop.{hash_field} 不一致。")
     hard = payload.get("hard_blackbox", {})
     hard_path = ROOT / str(hard.get("path", ""))
     if not hard_path.is_file() or sha256_file(hard_path) != hard.get("sha256"):
-        raise ValueError("Lab05 gamma hard black-box 来源不一致。")
+        raise ValueError("Lab07 BN drop hard black-box 来源不一致。")
 
     partitions = payload.get("query_partitions", {})
     train_hashes = set()
@@ -821,21 +1004,21 @@ def validate_lab05_gamma() -> None:
             or partition.get("train_size") != QUERY_TRAIN
             or partition.get("validation_size") != QUERY_VALIDATION
         ):
-            raise ValueError(f"Lab05 gamma seed {seed} 的 query 划分不正确。")
+            raise ValueError(f"Lab07 BN drop seed {seed} 的 query 划分不正确。")
         train_hashes.add(partition.get("train_source_indices_sha256"))
     if len(train_hashes) != len(seeds):
-        raise ValueError("Lab05 gamma 十个 seed 没有十组唯一 query train 划分。")
+        raise ValueError("Lab07 BN drop 十个 seed 没有十组唯一 query train 划分。")
 
     results = payload.get("results")
     expected_keys = {(seed, case) for seed in seeds for case in cases}
     if not isinstance(results, list) or len(results) != len(expected_keys):
-        raise ValueError("Lab05 gamma 应包含六配置 × 十 seed 的 60 个结果。")
+        raise ValueError("Lab07 BN drop 应包含六配置 × 十 seed 的 60 个结果。")
     result_by_key = {}
     selected_epochs = {}
     for row in results:
         key = (int(row.get("seed", -1)), str(row.get("case", "")))
         if key in result_by_key or key not in expected_keys:
-            raise ValueError(f"Lab05 gamma 包含重复或未知结果：{key}。")
+            raise ValueError(f"Lab07 BN drop 包含重复或未知结果：{key}。")
         result_by_key[key] = row
         validate_result(row, f"{json_path}:{key}")
         randomization = row.get("randomization", {})
@@ -846,7 +1029,7 @@ def validate_lab05_gamma() -> None:
             or randomization.get("surrogate_initialization_seed") != key[0]
             or randomization.get("query_sampler_seed") != key[0]
         ):
-            raise ValueError(f"Lab05 gamma {key} 的随机轨迹不正确。")
+            raise ValueError(f"Lab07 BN drop {key} 的随机轨迹不正确。")
         protection = row.get("protection", {})
         gamma = row.get("gamma", {})
         actual_cost = (
@@ -856,31 +1039,31 @@ def validate_lab05_gamma() -> None:
             gamma.get("protected_param_count"),
         )
         if actual_cost != expected_cost[key[1]]:
-            raise ValueError(f"Lab05 gamma {key} 的保护统计不正确：{actual_cost}。")
+            raise ValueError(f"Lab07 BN drop {key} 的保护统计不正确：{actual_cost}。")
         if not protection.get("classifier_protected") or protection.get("head_mode") != "replace":
-            raise ValueError(f"Lab05 gamma {key} 没有固定完整分类头。")
+            raise ValueError(f"Lab07 BN drop {key} 没有固定完整分类头。")
         selected_epochs[(str(key[0]), key[1])] = int(row["primary"]["epoch"])
     if set(result_by_key) != expected_keys:
-        raise ValueError("Lab05 gamma 结果 key 不完整。")
-    validate_masks(results, "Lab05 gamma")
+        raise ValueError("Lab07 BN drop 结果 key 不完整。")
+    validate_masks(results, "Lab07 BN drop")
     expected_history = {
         (str(seed), case): EPOCHS for seed in seeds for case in cases
     }
     validate_history(
-        "results/lab/05_state/gamma_history.tsv",
+        "results/lab/07_bn/drop_history.tsv",
         key_fields=("seed", "case"),
         expected_epochs=expected_history,
         selected_epochs=selected_epochs,
     )
 
-    data_rows = read_tsv("results/lab/05_state/gamma.tsv")
+    data_rows = read_tsv("results/lab/07_bn/drop.tsv")
     if [(int(row["seed"]), row["case"]) for row in data_rows] != [
         (seed, case) for seed in seeds for case in cases
     ]:
-        raise ValueError("Lab05 gamma.tsv 行顺序或数量不正确。")
+        raise ValueError("Lab07 BN drop.tsv 行顺序或数量不正确。")
     aggregate = payload.get("aggregate", {})
     if aggregate.get("seed_count") != len(seeds):
-        raise ValueError("Lab05 gamma 聚合 seed 数不正确。")
+        raise ValueError("Lab07 BN drop 聚合 seed 数不正确。")
     metrics = ("surrogate_acc", "fidelity", "posterior_kl")
     for case in cases:
         for metric in metrics:
@@ -892,19 +1075,19 @@ def validate_lab05_gamma() -> None:
             assert_close(
                 float(summary["mean"]),
                 statistics.mean(values),
-                f"Lab05 gamma {case}.{metric}.mean",
+                f"Lab07 BN drop {case}.{metric}.mean",
             )
             assert_close(
                 float(summary["sample_std"]),
                 statistics.stdev(values),
-                f"Lab05 gamma {case}.{metric}.sample_std",
+                f"Lab07 BN drop {case}.{metric}.sample_std",
             )
     blackbox_by_seed = {
         int(seed): result
         for seed, result in payload["matched_soft_blackbox"]["results_by_seed"].items()
     }
     if set(blackbox_by_seed) != set(seeds):
-        raise ValueError("Lab05 gamma 缺少 matched soft 黑盒十种子结果。")
+        raise ValueError("Lab07 BN drop 缺少 matched soft 黑盒十种子结果。")
     expected_blackbox_counts = {}
     for case in cases:
         counts = {metric: 0 for metric in (*metrics, "all_three")}
@@ -924,7 +1107,7 @@ def validate_lab05_gamma() -> None:
         aggregate.get("at_or_beyond_matched_soft_blackbox_counts")
         != expected_blackbox_counts
     ):
-        raise ValueError("Lab05 gamma 的逐 seed 黑盒计数不正确。")
+        raise ValueError("Lab07 BN drop 的逐 seed 黑盒计数不正确。")
 
     effect_specs = {
         "all_minus_no_gamma": ("all_gamma", "no_gamma"),
@@ -940,7 +1123,7 @@ def validate_lab05_gamma() -> None:
             or effect.get("right_case") != right
             or effect.get("definition") != "left_minus_right"
         ):
-            raise ValueError(f"Lab05 gamma {name} 的配对定义不正确。")
+            raise ValueError(f"Lab07 BN drop {name} 的配对定义不正确。")
         differences = {
             metric: [
                 float(result_by_key[(seed, left)]["result"][metric])
@@ -954,12 +1137,12 @@ def validate_lab05_gamma() -> None:
             assert_close(
                 float(summary["mean"]),
                 statistics.mean(values),
-                f"Lab05 gamma {name}.{metric}.mean",
+                f"Lab07 BN drop {name}.{metric}.mean",
             )
             assert_close(
                 float(summary["sample_std"]),
                 statistics.stdev(values),
-                f"Lab05 gamma {name}.{metric}.sample_std",
+                f"Lab07 BN drop {name}.{metric}.sample_std",
             )
         harmed = {
             "surrogate_acc": sum(value > 0 for value in differences["surrogate_acc"]),
@@ -984,17 +1167,17 @@ def validate_lab05_gamma() -> None:
             ),
         }
         if effect.get("left_harms_protection_counts") != harmed:
-            raise ValueError(f"Lab05 gamma {name} 的反弹计数不正确。")
+            raise ValueError(f"Lab07 BN drop {name} 的反弹计数不正确。")
         if effect.get("left_improves_protection_counts") != improved:
-            raise ValueError(f"Lab05 gamma {name} 的改善计数不正确。")
-    plot = ROOT / "results/lab/05_state/gamma.png"
+            raise ValueError(f"Lab07 BN drop {name} 的改善计数不正确。")
+    plot = ROOT / "results/lab/07_bn/drop.png"
     if not plot.is_file() or plot.stat().st_size == 0:
-        raise ValueError("Lab05 gamma 消融图缺失或为空。")
+        raise ValueError("Lab07 BN drop 消融图缺失或为空。")
 
 
-def validate_lab05_gamma_add() -> None:
-    json_path = "results/lab/05_state/gamma_add.json"
-    history_path = "results/lab/05_state/gamma_add_history.tsv"
+def validate_lab07_bn_add() -> None:
+    json_path = "results/lab/07_bn/add.json"
+    history_path = "results/lab/07_bn/add_history.tsv"
     payload = load_json(json_path)
     validate_protocol(payload, json_path)
     cases = (
@@ -1023,7 +1206,7 @@ def validate_lab05_gamma_add() -> None:
         or tuple(payload.get("gamma_group_order", ()))
         != ("stem", "block_bn1", "block_bn2", "downsample")
     ):
-        raise ValueError("Lab05 gamma add 的 seed 或分组顺序不正确。")
+        raise ValueError("Lab07 BN add 的 seed 或分组顺序不正确。")
     validate_source_hashes(
         payload,
         (
@@ -1031,7 +1214,7 @@ def validate_lab05_gamma_add() -> None:
             ("official_weight", "official_weight_sha256"),
             ("posterior_path", "posterior_sha256"),
         ),
-        "Lab05 gamma add",
+        "Lab07 BN add",
     )
     gamma_groups = payload.get("gamma_groups", {})
     expected_group_counts = {
@@ -1044,17 +1227,17 @@ def validate_lab05_gamma_add() -> None:
     for group, count in expected_group_counts.items():
         names = gamma_groups.get(group)
         if not isinstance(names, list) or len(names) != count:
-            raise ValueError(f"Lab05 gamma add 的 {group} 数量不正确。")
+            raise ValueError(f"Lab07 BN add 的 {group} 数量不正确。")
         flattened.extend(names)
     if len(flattened) != 20 or len(set(flattened)) != 20:
-        raise ValueError("Lab05 gamma add 的四组没有互斥覆盖 20 个 gamma。")
+        raise ValueError("Lab07 BN add 的四组没有互斥覆盖 20 个 gamma。")
 
     results = payload.get("results")
     if (
         not isinstance(results, list)
         or [row.get("case") for row in results] != list(cases)
     ):
-        raise ValueError("Lab05 gamma add 不是五种配置的固定顺序结果。")
+        raise ValueError("Lab07 BN add 不是五种配置的固定顺序结果。")
     result_by_case = {}
     selected_epochs = {}
     for row in results:
@@ -1062,7 +1245,7 @@ def validate_lab05_gamma_add() -> None:
         result_by_case[case] = row
         validate_result(row, f"{json_path}:{case}")
         if row.get("added_gamma_group") != group_by_case[case]:
-            raise ValueError(f"Lab05 gamma add {case} 的 group 不正确。")
+            raise ValueError(f"Lab07 BN add {case} 的 group 不正确。")
         protection = row.get("protection", {})
         gamma = row.get("gamma", {})
         actual_cost = (
@@ -1076,7 +1259,7 @@ def validate_lab05_gamma_add() -> None:
             or not protection.get("classifier_protected")
             or protection.get("head_mode") != "replace"
         ):
-            raise ValueError(f"Lab05 gamma add {case} 的保护统计不正确。")
+            raise ValueError(f"Lab07 BN add {case} 的保护统计不正确。")
         units = protection.get("selected_units", ())
         if (
             sum(unit.get("role") == "fixed_conv1" for unit in units) != 5
@@ -1086,7 +1269,7 @@ def validate_lab05_gamma_add() -> None:
             or {unit["state_name"] for unit in units}
             != set(row.get("selected_states", ()))
         ):
-            raise ValueError(f"Lab05 gamma add {case} 的 unit 语义不正确。")
+            raise ValueError(f"Lab07 BN add {case} 的 unit 语义不正确。")
         randomization = row.get("randomization", {})
         if (
             randomization.get("surrogate_initialization")
@@ -1094,18 +1277,18 @@ def validate_lab05_gamma_add() -> None:
             or randomization.get("surrogate_initialization_seed") != SEED
             or randomization.get("query_sampler_seed") != SEED
         ):
-            raise ValueError(f"Lab05 gamma add {case} 的随机轨迹不正确。")
+            raise ValueError(f"Lab07 BN add {case} 的随机轨迹不正确。")
         selected_epochs[(case,)] = int(row["primary"]["epoch"])
-    validate_masks(results, "Lab05 gamma add")
+    validate_masks(results, "Lab07 BN add")
     validate_history(
         history_path,
         key_fields=("case",),
         expected_epochs={(case,): EPOCHS for case in cases},
         selected_epochs=selected_epochs,
     )
-    data_rows = read_tsv("results/lab/05_state/gamma_add.tsv")
+    data_rows = read_tsv("results/lab/07_bn/add.tsv")
     if [row["case"] for row in data_rows] != list(cases):
-        raise ValueError("Lab05 gamma_add.tsv 行顺序不正确。")
+        raise ValueError("Lab07 add.tsv 行顺序不正确。")
 
     baseline = result_by_case["no_gamma"]["result"]
     expected_effects = {}
@@ -1117,24 +1300,24 @@ def validate_lab05_gamma_add() -> None:
         }
     effects = payload.get("paired_effects")
     if set(effects) != set(expected_effects):
-        raise ValueError("Lab05 gamma add 的配对差集合不正确。")
+        raise ValueError("Lab07 BN add 的配对差集合不正确。")
     for name, expected in expected_effects.items():
         for metric, value in expected.items():
             assert_close(
                 float(effects[name][metric]),
                 value,
-                f"Lab05 gamma add {name}.{metric}",
+                f"Lab07 BN add {name}.{metric}",
             )
     outputs = payload.get("outputs", {})
     if outputs != {
-        "data": "results/lab/05_state/gamma_add.tsv",
-        "history": "results/lab/05_state/gamma_add_history.tsv",
-        "plot": "results/lab/05_state/gamma_add.png",
+        "data": "results/lab/07_bn/add.tsv",
+        "history": "results/lab/07_bn/add_history.tsv",
+        "plot": "results/lab/07_bn/add.png",
     }:
-        raise ValueError("Lab05 gamma add 输出索引不正确。")
+        raise ValueError("Lab07 BN add 输出索引不正确。")
     plot = ROOT / str(outputs["plot"])
     if not plot.is_file() or plot.stat().st_size == 0:
-        raise ValueError("Lab05 gamma add 指标图缺失或为空。")
+        raise ValueError("Lab07 BN add 指标图缺失或为空。")
 
 
 def validate_lab06() -> None:
@@ -1156,11 +1339,21 @@ def validate_lab06() -> None:
         ),
         "Lab06",
     )
+    candidate = validate_candidate()
+    validate_source_hashes(
+        candidate["source"],
+        (
+            ("lab04_metrics", "lab04_metrics_sha256"),
+            ("lab04_ablation", "lab04_ablation_sha256"),
+            ("lab06_metrics", "lab06_metrics_sha256"),
+        ),
+        "Lab06 candidate",
+    )
 
 
-def validate_lab07_dependency() -> None:
-    json_path = "results/lab/07_structure/dependency.json"
-    history_path = "results/lab/07_structure/dependency_history.tsv"
+def validate_lab08_dependency() -> None:
+    json_path = "results/lab/08_structure/dependency.json"
+    history_path = "results/lab/08_structure/dependency_history.tsv"
     payload = load_json(json_path)
     validate_protocol(payload, json_path, expected_seed=43)
     seeds = tuple(range(43, 53))
@@ -1180,11 +1373,11 @@ def validate_lab07_dependency() -> None:
         or payload.get("scientific_status")
         != "post_hoc_conditional_dependency_validation"
     ):
-        raise ValueError("Lab07 dependency 的 seeds 或科学状态不正确。")
+        raise ValueError("Lab08 dependency 的 seeds 或科学状态不正确。")
     validate_source_hashes(
         payload["source"],
-        (("lab04_candidate", "lab04_candidate_sha256"),),
-        "Lab07 dependency",
+        (("lab06_candidate", "lab06_candidate_sha256"),),
+        "Lab08 dependency",
     )
     results = payload.get("results")
     expected_keys = {
@@ -1193,7 +1386,7 @@ def validate_lab07_dependency() -> None:
         for case in all_cases
     }
     if not isinstance(results, list) or len(results) != len(expected_keys):
-        raise ValueError("Lab07 dependency 应包含六策略和黑盒各十组结果。")
+        raise ValueError("Lab08 dependency 应包含六策略和黑盒各十组结果。")
     keys = set()
     selected_epochs = {}
     result_by_key = {}
@@ -1202,38 +1395,38 @@ def validate_lab07_dependency() -> None:
         case = str(row.get("case", ""))
         key = (seed, case)
         if key in keys or key not in expected_keys:
-            raise ValueError(f"Lab07 dependency 包含重复或未知结果：{key}。")
+            raise ValueError(f"Lab08 dependency 包含重复或未知结果：{key}。")
         keys.add(key)
         validate_result(row, f"{json_path}:{key}")
         protection = row.get("protection", {})
         if case == base_case:
             expected_cost = (27, 645_924)
-            if row.get("origin") != "reused_lab04_candidate":
-                raise ValueError("Lab07 dependency 基础集合没有复用 Lab04。")
+            if row.get("origin") != "reused_lab06_candidate":
+                raise ValueError("Lab08 dependency 基础集合没有复用 Lab06。")
         elif case == blackbox_case:
             expected_cost = (122, 11_227_812)
-            if row.get("origin") != "reused_lab04_matched_blackbox":
-                raise ValueError("Lab07 dependency 黑盒没有复用 Lab04。")
+            if row.get("origin") != "reused_lab06_matched_blackbox":
+                raise ValueError("Lab08 dependency 黑盒没有复用 Lab06。")
         else:
             rank, unit, state, expected_units, expected_params = leave_one_out[case]
             expected_cost = (expected_units, expected_params)
             ablation = row.get("ablation", {})
             if (
-                row.get("origin") != "trained_lab07_leave_one_out"
+                row.get("origin") != "trained_lab08_leave_one_out"
                 or ablation.get("exposed_rank") != rank
                 or ablation.get("exposed_unit") != unit
                 or ablation.get("exposed_state") != state
             ):
-                raise ValueError(f"Lab07 dependency {key} 的暴露对象不正确。")
+                raise ValueError(f"Lab08 dependency {key} 的暴露对象不正确。")
         if (
             protection.get("protected_unit_count"),
             protection.get("protected_param_count"),
         ) != expected_cost:
-            raise ValueError(f"Lab07 dependency {key} 的保护成本不正确。")
+            raise ValueError(f"Lab08 dependency {key} 的保护成本不正确。")
         selected_epochs[(str(seed), case)] = int(row["primary"]["epoch"])
         result_by_key[key] = row
     if keys != expected_keys:
-        raise ValueError("Lab07 dependency 的 seed/case 笛卡尔积不完整。")
+        raise ValueError("Lab08 dependency 的 seed/case 笛卡尔积不完整。")
     validate_masks(results, json_path)
     trained_epochs = {
         key: value
@@ -1255,7 +1448,7 @@ def validate_lab07_dependency() -> None:
             or effect.get("right_case") != base_case
             or effect.get("definition") != "left_minus_right"
         ):
-            raise ValueError(f"Lab07 dependency {case} 的配对定义不正确。")
+            raise ValueError(f"Lab08 dependency {case} 的配对定义不正确。")
         for metric in ("surrogate_acc", "fidelity", "posterior_kl"):
             differences = [
                 float(result_by_key[(seed, case)]["result"][metric])
@@ -1266,14 +1459,14 @@ def validate_lab07_dependency() -> None:
             assert_close(
                 float(summary["mean"]),
                 statistics.mean(differences),
-                f"Lab07 dependency {case}.{metric}.mean",
+                f"Lab08 dependency {case}.{metric}.mean",
             )
             assert_close(
                 float(summary["sample_std"]),
                 statistics.stdev(differences),
-                f"Lab07 dependency {case}.{metric}.sample_std",
+                f"Lab08 dependency {case}.{metric}.sample_std",
             )
-    data_rows = read_tsv("results/lab/07_structure/dependency.tsv")
+    data_rows = read_tsv("results/lab/08_structure/dependency.tsv")
     expected_data_keys = [
         (seed, case)
         for seed in seeds
@@ -1283,18 +1476,18 @@ def validate_lab07_dependency() -> None:
         (int(row["seed"]), row["case"])
         for row in data_rows
     ] != expected_data_keys:
-        raise ValueError("Lab07 dependency.tsv 不是六策略 × 十 seed 的 60 行数据。")
+        raise ValueError("Lab08 dependency.tsv 不是六策略 × 十 seed 的 60 行数据。")
     for progress_path in (
-        "results/lab/07_structure/dependency_progress.json",
-        "results/lab/07_structure/dependency_progress_history.tsv",
+        "results/lab/08_structure/dependency_progress.json",
+        "results/lab/08_structure/dependency_progress_history.tsv",
     ):
         if (ROOT / progress_path).exists():
-            raise ValueError(f"Lab07 完成后仍残留进度文件：{progress_path}。")
+            raise ValueError(f"Lab08 完成后仍残留进度文件：{progress_path}。")
 
 
-def validate_lab07_swap() -> None:
-    json_path = "results/lab/07_structure/swap.json"
-    history_path = "results/lab/07_structure/swap_history.tsv"
+def validate_lab08_swap() -> None:
+    json_path = "results/lab/08_structure/swap.json"
+    history_path = "results/lab/08_structure/swap_history.tsv"
     payload = load_json(json_path)
     validate_protocol(payload, json_path, expected_seed=43)
     seeds = tuple(range(43, 53))
@@ -1319,9 +1512,9 @@ def validate_lab07_swap() -> None:
         blackbox_case: (122, 11_227_812),
     }
     expected_origins = {
-        conv1_case: "reused_lab04_conv1_candidate",
-        conv2_case: "trained_lab07_conv2_swap",
-        blackbox_case: "reused_lab04_matched_blackbox",
+        conv1_case: "reused_lab06_conv1_candidate",
+        conv2_case: "trained_lab08_conv2_swap",
+        blackbox_case: "reused_lab06_matched_blackbox",
     }
     if (
         tuple(payload.get("evaluation_seeds", ())) != seeds
@@ -1330,16 +1523,16 @@ def validate_lab07_swap() -> None:
         or payload.get("attack_initialization")
         != "full_exposed_victim_state_only"
     ):
-        raise ValueError("Lab07 swap 的 seeds、科学状态或攻击初始化不正确。")
+        raise ValueError("Lab08 swap 的 seeds、科学状态或攻击初始化不正确。")
     validate_source_hashes(
         payload["source"],
         (
-            ("lab04_candidate", "lab04_candidate_sha256"),
+            ("lab06_candidate", "lab06_candidate_sha256"),
             ("victim_checkpoint", "victim_checkpoint_sha256"),
             ("official_weight", "official_weight_sha256"),
             ("posterior_path", "posterior_sha256"),
         ),
-        "Lab07 swap",
+        "Lab08 swap",
     )
     protection_sets = payload.get("protection_sets", {})
     if (
@@ -1348,7 +1541,7 @@ def validate_lab07_swap() -> None:
         or tuple(protection_sets.get(conv2_case, {}).get("weight_names", ()))
         != conv2_weights
     ):
-        raise ValueError("Lab07 swap 的 conv1/conv2 一一替换集合不正确。")
+        raise ValueError("Lab08 swap 的 conv1/conv2 一一替换集合不正确。")
     shared = protection_sets.get("shared", {})
     bn_gamma = tuple(shared.get("bn_gamma", ()))
     if (
@@ -1357,7 +1550,7 @@ def validate_lab07_swap() -> None:
         or len(bn_gamma) != 20
         or any(not state_name.endswith(".weight") for state_name in bn_gamma)
     ):
-        raise ValueError("Lab07 swap 没有固定分类头和全部 20 个 BN gamma。")
+        raise ValueError("Lab08 swap 没有固定分类头和全部 20 个 BN gamma。")
     results = payload.get("results")
     expected_order = [
         (seed, case)
@@ -1372,7 +1565,7 @@ def validate_lab07_swap() -> None:
         ]
         != expected_order
     ):
-        raise ValueError("Lab07 swap 不是三组 × 十 seed 的固定顺序结果。")
+        raise ValueError("Lab08 swap 不是三组 × 十 seed 的固定顺序结果。")
     result_by_key = {}
     selected_epochs = {}
     for row in results:
@@ -1389,7 +1582,7 @@ def validate_lab07_swap() -> None:
             )
             != expected_costs[case]
         ):
-            raise ValueError(f"Lab07 swap {key} 的来源或保护成本不正确。")
+            raise ValueError(f"Lab08 swap {key} 的来源或保护成本不正确。")
         if case == conv2_case:
             ablation = row.get("ablation", {})
             if (
@@ -1398,7 +1591,7 @@ def validate_lab07_swap() -> None:
                 or ablation.get("shared_protection")
                 != "head_weight_bias_and_all_bn_gamma"
             ):
-                raise ValueError(f"Lab07 swap {key} 的替换定义不正确。")
+                raise ValueError(f"Lab08 swap {key} 的替换定义不正确。")
             selected_epochs[(str(seed), case)] = int(row["primary"]["epoch"])
         result_by_key[key] = row
     validate_masks(results, json_path)
@@ -1418,18 +1611,18 @@ def validate_lab07_swap() -> None:
         "last_linear.bias",
     }
     if len(conv2_mask) != 122:
-        raise ValueError("Lab07 swap conv2 mask 的 state 注册表无效。")
+        raise ValueError("Lab08 swap conv2 mask 的 state 注册表无效。")
     for state_name, mask in conv2_mask.items():
         should_protect = state_name in expected_protected_states
         if bool(mask.all()) != should_protect or (
             not should_protect and bool(mask.any())
         ):
-            raise ValueError(f"Lab07 swap conv2 mask 的 {state_name} 不正确。")
+            raise ValueError(f"Lab08 swap conv2 mask 的 {state_name} 不正确。")
     if (
         protection_mask_sha256(conv2_mask)
         != protection_sets[conv2_case].get("protection_mask_sha256")
     ):
-        raise ValueError("Lab07 swap protection_sets 中的 conv2 mask 哈希不正确。")
+        raise ValueError("Lab08 swap protection_sets 中的 conv2 mask 哈希不正确。")
 
     aggregate = payload.get("aggregate", {})
     groups = aggregate.get("groups", {})
@@ -1443,12 +1636,12 @@ def validate_lab07_swap() -> None:
             assert_close(
                 float(summary["mean"]),
                 statistics.mean(values),
-                f"Lab07 swap {case}.{metric}.mean",
+                f"Lab08 swap {case}.{metric}.mean",
             )
             assert_close(
                 float(summary["sample_std"]),
                 statistics.stdev(values),
-                f"Lab07 swap {case}.{metric}.sample_std",
+                f"Lab08 swap {case}.{metric}.sample_std",
             )
             differences = [
                 float(result_by_key[(seed, conv2_case)]["result"][metric])
@@ -1459,39 +1652,39 @@ def validate_lab07_swap() -> None:
             assert_close(
                 float(paired["mean"]),
                 statistics.mean(differences),
-                f"Lab07 swap paired.{metric}.mean",
+                f"Lab08 swap paired.{metric}.mean",
             )
             assert_close(
                 float(paired["sample_std"]),
                 statistics.stdev(differences),
-                f"Lab07 swap paired.{metric}.sample_std",
+                f"Lab08 swap paired.{metric}.sample_std",
             )
-    data_rows = read_tsv("results/lab/07_structure/swap.tsv")
+    data_rows = read_tsv("results/lab/08_structure/swap.tsv")
     if [
         (int(row["seed"]), row["case"])
         for row in data_rows
     ] != expected_order:
-        raise ValueError("Lab07 swap.tsv 不是三组 × 十 seed 的固定顺序数据。")
+        raise ValueError("Lab08 swap.tsv 不是三组 × 十 seed 的固定顺序数据。")
     if len(read_tsv(history_path)) != len(seeds) * EPOCHS:
-        raise ValueError("Lab07 swap history 不是十组共 1,000 轮。")
+        raise ValueError("Lab08 swap history 不是十组共 1,000 轮。")
     for output in (
-        "results/lab/07_structure/swap.png",
-        "results/lab/07_structure/swap_conv2_mask.pt",
+        "results/lab/08_structure/swap.png",
+        "results/lab/08_structure/swap_conv2_mask.pt",
     ):
         path = ROOT / output
         if not path.is_file() or path.stat().st_size == 0:
-            raise ValueError(f"Lab07 swap 产物缺失或为空：{output}。")
+            raise ValueError(f"Lab08 swap 产物缺失或为空：{output}。")
     for progress_path in (
-        "results/lab/07_structure/swap_progress.json",
-        "results/lab/07_structure/swap_progress_history.tsv",
+        "results/lab/08_structure/swap_progress.json",
+        "results/lab/08_structure/swap_progress_history.tsv",
     ):
         if (ROOT / progress_path).exists():
-            raise ValueError(f"Lab07 swap 完成后仍残留进度文件：{progress_path}。")
+            raise ValueError(f"Lab08 swap 完成后仍残留进度文件：{progress_path}。")
 
 
-def validate_lab08() -> None:
-    json_path = "results/lab/08_leakage/metrics.json"
-    history_path = "results/lab/08_leakage/history.tsv"
+def validate_lab09_leakage() -> None:
+    json_path = "results/lab/09_leakage/metrics.json"
+    history_path = "results/lab/09_leakage/history.tsv"
     payload = load_json(json_path)
     validate_protocol(payload, json_path, expected_seed=43)
 
@@ -1505,7 +1698,7 @@ def validate_lab08() -> None:
         or tuple(payload.get("trained_strengths", ())) != (0.25, 0.5, 0.75)
         or payload.get("scientific_status") != "mechanism_validation_not_selector"
     ):
-        raise ValueError("Lab08 的 seed、利用强度或科学状态不正确。")
+        raise ValueError("Lab09 的 seed、利用强度或科学状态不正确。")
     definition = payload.get("utilization_definition", {})
     expected_definition = {
         "protected_state": "same_seed_public_or_random_initialization",
@@ -1516,15 +1709,15 @@ def validate_lab08() -> None:
             "public_state_and_full_exposed_victim_state_for_all_lambda",
     }
     if definition != expected_definition:
-        raise ValueError("Lab08 的利用强度定义已经漂移。")
+        raise ValueError("Lab09 的利用强度定义已经漂移。")
 
     validate_source_hashes(
         payload["source"],
         (
-            ("lab04_candidate", "lab04_candidate_sha256"),
-            ("lab04_history", "lab04_history_sha256"),
+            ("lab06_candidate", "lab06_candidate_sha256"),
+            ("lab06_history", "lab06_history_sha256"),
         ),
-        "Lab08",
+        "Lab09",
     )
     protection = payload.get("system_protection", {})
     expected_mask_hash = "6364e56dfa7bbc8f9acc4f33fa403c5639880b06ce4d602cfdaeaf5ac1cd3272"
@@ -1534,16 +1727,16 @@ def validate_lab08() -> None:
         or protection.get("protected_param_count") != 645_924
         or protection.get("protection_mask_sha256") != expected_mask_hash
     ):
-        raise ValueError("Lab08 的固定系统保护集合不正确。")
+        raise ValueError("Lab09 的固定系统保护集合不正确。")
     mask_path = ROOT / str(protection.get("mask", ""))
     if not mask_path.is_file():
         raise FileNotFoundError(mask_path)
     if protection_mask_sha256(load_protection_mask(mask_path)) != expected_mask_hash:
-        raise ValueError("Lab08 的固定系统保护 mask 哈希不一致。")
+        raise ValueError("Lab09 的固定系统保护 mask 哈希不一致。")
 
     query_partitions = payload.get("query_partitions")
     if not isinstance(query_partitions, dict) or set(query_partitions) != set(map(str, seeds)):
-        raise ValueError("Lab08 缺少十种子 query 划分。")
+        raise ValueError("Lab09 缺少十种子 query 划分。")
     for seed in seeds:
         partition = query_partitions[str(seed)]
         train_indices = set(partition.get("train_source_indices", ()))
@@ -1557,12 +1750,12 @@ def validate_lab08() -> None:
             or len(validation_indices) != QUERY_VALIDATION
             or train_indices & validation_indices
         ):
-            raise ValueError(f"Lab08 seed {seed} 的 query 划分不正确。")
+            raise ValueError(f"Lab09 seed {seed} 的 query 划分不正确。")
 
     expected_keys = {(seed, case) for seed in seeds for case in cases}
     results = payload.get("results")
     if not isinstance(results, list) or len(results) != len(expected_keys):
-        raise ValueError("Lab08 应包含五强度 × 十 seed 的 50 组结果。")
+        raise ValueError("Lab09 应包含五强度 × 十 seed 的 50 组结果。")
     result_by_key = {}
     selected_epochs = {}
     hashes_by_seed: dict[int, set[str]] = defaultdict(set)
@@ -1571,32 +1764,32 @@ def validate_lab08() -> None:
         case = str(row.get("case", ""))
         key = (seed, case)
         if key not in expected_keys or key in result_by_key:
-            raise ValueError(f"Lab08 包含重复或未知结果：{key}。")
+            raise ValueError(f"Lab09 包含重复或未知结果：{key}。")
         validate_result(row, f"{json_path}:{key}")
         if (
             float(row.get("utilization_strength", -1.0)) != strengths[case]
             or row.get("query_partition_seed") != seed
         ):
-            raise ValueError(f"Lab08 {key} 的强度或 query seed 不正确。")
+            raise ValueError(f"Lab09 {key} 的强度或 query seed 不正确。")
         if case == "lambda_000":
-            expected_origin = "reused_lab04_matched_blackbox"
+            expected_origin = "reused_lab06_matched_blackbox"
             expected_source = "soft_full_protection"
         elif case == "lambda_100":
-            expected_origin = "reused_lab04_hybrid"
+            expected_origin = "reused_lab06_hybrid"
             expected_source = "candidate_drop_05_06_08_10_bn_gamma"
         else:
-            expected_origin = "trained_lab08_intermediate"
+            expected_origin = "trained_lab09_intermediate"
             expected_source = None
             selected_epochs[(str(seed), case)] = int(row["primary"]["epoch"])
         if row.get("origin") != expected_origin or row.get("source_case") != expected_source:
-            raise ValueError(f"Lab08 {key} 的端点/训练来源不正确。")
+            raise ValueError(f"Lab09 {key} 的端点/训练来源不正确。")
         row_protection = row.get("system_protection", {})
         if (
             row_protection.get("protected_unit_count") != 27
             or row_protection.get("protected_param_count") != 645_924
             or row_protection.get("protection_mask_sha256") != expected_mask_hash
         ):
-            raise ValueError(f"Lab08 {key} 的系统保护成本不正确。")
+            raise ValueError(f"Lab09 {key} 的系统保护成本不正确。")
         randomization = row.get("randomization", {})
         if (
             randomization.get("surrogate_initialization")
@@ -1605,7 +1798,7 @@ def validate_lab08() -> None:
             or randomization.get("query_sampler_seed") != seed
             or randomization.get("reset_before_surrogate_initialization") is not True
         ):
-            raise ValueError(f"Lab08 {key} 的随机初始化轨迹不正确。")
+            raise ValueError(f"Lab09 {key} 的随机初始化轨迹不正确。")
         attack = row.get("attack_initialization", {})
         state_hash = attack.get("state_sha256")
         expected_nonfloating = (
@@ -1617,19 +1810,19 @@ def validate_lab08() -> None:
             or not isinstance(state_hash, str)
             or len(state_hash) != 64
         ):
-            raise ValueError(f"Lab08 {key} 的攻击初始化元数据不正确。")
+            raise ValueError(f"Lab09 {key} 的攻击初始化元数据不正确。")
         hashes_by_seed[seed].add(state_hash)
         selected_train = row.get("selected_epoch_train", {})
         if not all(
             math.isfinite(float(selected_train.get(field, math.nan)))
             for field in ("query_loss", "query_match")
         ):
-            raise ValueError(f"Lab08 {key} 的选中轮训练指标无效。")
+            raise ValueError(f"Lab09 {key} 的选中轮训练指标无效。")
         result_by_key[key] = row
     if set(result_by_key) != expected_keys:
-        raise ValueError("Lab08 的 seed/强度笛卡尔积不完整。")
+        raise ValueError("Lab09 的 seed/强度笛卡尔积不完整。")
     if any(len(hashes_by_seed[seed]) != len(cases) for seed in seeds):
-        raise ValueError("Lab08 同一 seed 的五个利用强度未产生五个唯一初始状态。")
+        raise ValueError("Lab09 同一 seed 的五个利用强度未产生五个唯一初始状态。")
 
     validate_history(
         history_path,
@@ -1640,18 +1833,18 @@ def validate_lab08() -> None:
 
     probes = payload.get("initialization_probes")
     if not isinstance(probes, list) or len(probes) != len(expected_keys):
-        raise ValueError("Lab08 应包含 50 个 epoch-0 初始化探针。")
+        raise ValueError("Lab09 应包含 50 个 epoch-0 初始化探针。")
     probe_by_key = {}
     for row in probes:
         key = (int(row.get("seed", -1)), str(row.get("case", "")))
         if key not in expected_keys or key in probe_by_key:
-            raise ValueError(f"Lab08 包含重复或未知探针：{key}。")
+            raise ValueError(f"Lab09 包含重复或未知探针：{key}。")
         if (
             float(row.get("utilization_strength", -1.0)) != strengths[key[1]]
             or row.get("state_sha256")
             != result_by_key[key]["attack_initialization"]["state_sha256"]
         ):
-            raise ValueError(f"Lab08 {key} 的探针没有对应到结果初始状态。")
+            raise ValueError(f"Lab09 {key} 的探针没有对应到结果初始状态。")
         for field in (
             "train_loss",
             "train_match",
@@ -1660,16 +1853,16 @@ def validate_lab08() -> None:
             "validation_match",
         ):
             if not math.isfinite(float(row.get(field, math.nan))):
-                raise ValueError(f"Lab08 {key}.{field} 不是有限值。")
+                raise ValueError(f"Lab09 {key}.{field} 不是有限值。")
         probe_by_key[key] = row
 
     expected_order = [(seed, case) for seed in seeds for case in cases]
-    data_rows = read_tsv("results/lab/08_leakage/data.tsv")
-    probe_rows = read_tsv("results/lab/08_leakage/probe.tsv")
+    data_rows = read_tsv("results/lab/09_leakage/data.tsv")
+    probe_rows = read_tsv("results/lab/09_leakage/probe.tsv")
     if [(int(row["seed"]), row["case"]) for row in data_rows] != expected_order:
-        raise ValueError("Lab08 data.tsv 不是 seed-major 的 50 行结果。")
+        raise ValueError("Lab09 data.tsv 不是 seed-major 的 50 行结果。")
     if [(int(row["seed"]), row["case"]) for row in probe_rows] != expected_order:
-        raise ValueError("Lab08 probe.tsv 不是 seed-major 的 50 行探针。")
+        raise ValueError("Lab09 probe.tsv 不是 seed-major 的 50 行探针。")
     for row in data_rows:
         key = (int(row["seed"]), row["case"])
         result = result_by_key[key]
@@ -1685,13 +1878,13 @@ def validate_lab08() -> None:
             ("posterior_kl", result["result"]["posterior_kl"]),
         )
         for field, expected in numeric_pairs:
-            assert_close(float(row[field]), float(expected), f"Lab08 data.tsv:{key}.{field}")
+            assert_close(float(row[field]), float(expected), f"Lab09 data.tsv:{key}.{field}")
         if (
             row["origin"] != result["origin"]
             or row["state_sha256"]
             != result["attack_initialization"]["state_sha256"]
         ):
-            raise ValueError(f"Lab08 data.tsv:{key} 的来源或状态哈希不正确。")
+            raise ValueError(f"Lab09 data.tsv:{key} 的来源或状态哈希不正确。")
     for row in probe_rows:
         key = (int(row["seed"]), row["case"])
         probe = probe_by_key[key]
@@ -1703,16 +1896,16 @@ def validate_lab08() -> None:
             "validation_kl",
             "validation_match",
         ):
-            assert_close(float(row[field]), float(probe[field]), f"Lab08 probe.tsv:{key}.{field}")
+            assert_close(float(row[field]), float(probe[field]), f"Lab09 probe.tsv:{key}.{field}")
         if row["state_sha256"] != probe["state_sha256"]:
-            raise ValueError(f"Lab08 probe.tsv:{key} 的状态哈希不正确。")
+            raise ValueError(f"Lab09 probe.tsv:{key} 的状态哈希不正确。")
 
     aggregate = payload.get("aggregate", {})
     if (
         aggregate.get("seed_count") != len(seeds)
         or aggregate.get("sample_standard_deviation_ddof") != 1
     ):
-        raise ValueError("Lab08 聚合的 seed 数或标准差约定不正确。")
+        raise ValueError("Lab09 聚合的 seed 数或标准差约定不正确。")
 
     def validate_summary(summary, values, label):
         expected = {
@@ -1743,20 +1936,20 @@ def validate_lab08() -> None:
     }
     groups = aggregate.get("groups", {})
     if set(groups) != set(cases):
-        raise ValueError("Lab08 聚合缺少五个利用强度。")
+        raise ValueError("Lab09 聚合缺少五个利用强度。")
     for case in cases:
         if groups[case].get("utilization_strength") != strengths[case]:
-            raise ValueError(f"Lab08 {case} 的聚合强度不正确。")
+            raise ValueError(f"Lab09 {case} 的聚合强度不正确。")
         for metric, getter in group_sources.items():
             values = [
                 float(getter(result_by_key[(seed, case)], probe_by_key[(seed, case)]))
                 for seed in seeds
             ]
-            validate_summary(groups[case][metric], values, f"Lab08 aggregate.{case}.{metric}")
+            validate_summary(groups[case][metric], values, f"Lab09 aggregate.{case}.{metric}")
 
     paired = aggregate.get("paired_vs_blackbox", {})
     if set(paired) != set(cases[1:]):
-        raise ValueError("Lab08 缺少四个相对黑盒配对比较。")
+        raise ValueError("Lab09 缺少四个相对黑盒配对比较。")
     for case in cases[1:]:
         comparison = paired[case]
         if (
@@ -1764,7 +1957,7 @@ def validate_lab08() -> None:
             or comparison.get("right_case") != "lambda_000"
             or comparison.get("definition") != "left_minus_blackbox"
         ):
-            raise ValueError(f"Lab08 {case} 的配对定义不正确。")
+            raise ValueError(f"Lab09 {case} 的配对定义不正确。")
         for metric in ("surrogate_acc", "fidelity", "posterior_kl"):
             values = [
                 float(result_by_key[(seed, case)]["result"][metric])
@@ -1772,12 +1965,12 @@ def validate_lab08() -> None:
                 for seed in seeds
             ]
             summary = comparison["metrics"][metric]
-            validate_summary(summary, values, f"Lab08 paired.{case}.{metric}")
+            validate_summary(summary, values, f"Lab09 paired.{case}.{metric}")
             for seed, value in zip(seeds, values):
                 assert_close(
                     float(summary["values_by_seed"][str(seed)]),
                     value,
-                    f"Lab08 paired.{case}.{metric}.seed{seed}",
+                    f"Lab09 paired.{case}.{metric}.seed{seed}",
                 )
         validation_values = [
             float(result_by_key[(seed, case)]["selection"]["validation_loss"])
@@ -1788,10 +1981,10 @@ def validate_lab08() -> None:
         validate_summary(
             validation_summary,
             validation_values,
-            f"Lab08 paired.{case}.selected_validation_loss",
+            f"Lab09 paired.{case}.selected_validation_loss",
         )
         if validation_summary.get("worse_count") != sum(value > 0 for value in validation_values):
-            raise ValueError(f"Lab08 {case} 的 validation worse_count 不正确。")
+            raise ValueError(f"Lab09 {case} 的 validation worse_count 不正确。")
         final_worse = {
             str(seed): (
                 float(result_by_key[(seed, case)]["result"]["surrogate_acc"])
@@ -1807,7 +2000,7 @@ def validate_lab08() -> None:
             comparison.get("all_final_metrics_worse_by_seed") != final_worse
             or comparison.get("all_final_metrics_worse_count") != sum(final_worse.values())
         ):
-            raise ValueError(f"Lab08 {case} 的三指标黑盒判定不正确。")
+            raise ValueError(f"Lab09 {case} 的三指标黑盒判定不正确。")
 
     adaptive = aggregate.get("adaptive_attacker", {})
     if (
@@ -1815,7 +2008,7 @@ def validate_lab08() -> None:
         != "minimum_query_validation_soft_cross_entropy_per_seed"
         or adaptive.get("tie_break") != "lower_utilization_strength"
     ):
-        raise ValueError("Lab08 的适应性攻击选择规则不正确。")
+        raise ValueError("Lab09 的适应性攻击选择规则不正确。")
     chosen_rows = []
     chosen_counts = {case: 0 for case in cases}
     for seed in seeds:
@@ -1829,343 +2022,43 @@ def validate_lab08() -> None:
         chosen_counts[chosen_case] += 1
         chosen_rows.append((seed, chosen_case))
     if adaptive.get("chosen_case_counts") != chosen_counts:
-        raise ValueError("Lab08 适应性攻击的强度计数不正确。")
+        raise ValueError("Lab09 适应性攻击的强度计数不正确。")
     adaptive_rows = adaptive.get("rows", ())
     if [
         (int(row["seed"]), row["case"])
         for row in adaptive_rows
     ] != chosen_rows:
-        raise ValueError("Lab08 适应性攻击没有仅按 validation loss 逐 seed 选取。")
+        raise ValueError("Lab09 适应性攻击没有仅按 validation loss 逐 seed 选取。")
     for metric in ("surrogate_acc", "fidelity", "posterior_kl"):
         values = [
             float(result_by_key[(seed, case)]["result"][metric])
             for seed, case in chosen_rows
         ]
-        validate_summary(adaptive[metric], values, f"Lab08 adaptive.{metric}")
+        validate_summary(adaptive[metric], values, f"Lab09 adaptive.{metric}")
 
     outputs = payload.get("outputs", {})
     expected_outputs = {
-        "data": "results/lab/08_leakage/data.tsv",
+        "data": "results/lab/09_leakage/data.tsv",
         "history": history_path,
-        "probe": "results/lab/08_leakage/probe.tsv",
-        "plot": "results/lab/08_leakage/metrics.png",
-    }
-    if outputs != expected_outputs:
-        raise ValueError("Lab08 输出索引不正确。")
-    plot_path = ROOT / expected_outputs["plot"]
-    if not plot_path.is_file() or plot_path.stat().st_size == 0:
-        raise ValueError("Lab08 指标图缺失或为空。")
-    for progress_path in (
-        "results/lab/08_leakage/progress.json",
-        "results/lab/08_leakage/progress_history.tsv",
-    ):
-        if (ROOT / progress_path).exists():
-            raise ValueError(f"Lab08 完成后仍残留进度文件：{progress_path}。")
-
-
-def validate_lab09() -> None:
-    json_path = "results/lab/09_mechanism/metrics.json"
-    payload = load_json(json_path)
-    seeds = tuple(range(43, 53))
-    strengths = (0.0, 0.25, 0.5, 0.75, 1.0)
-    cases = tuple(f"lambda_{int(strength * 100):03d}" for strength in strengths)
-    groups = (
-        "layer1_0_conv1",
-        "layer1_1_conv1",
-        "layer2_0_conv1",
-        "layer2_1_conv1",
-        "layer3_0_conv1",
-        "bn_gamma",
-        "head",
-    )
-    blocks = tuple(
-        f"layer{stage}.{block}"
-        for stage in range(1, 5)
-        for block in range(2)
-    )
-    seam_variants = (
-        "conv1_weight",
-        "bn1_gamma",
-        "conv1_weight_bn1_gamma",
-        "conv2_weight",
-        "bn2_gamma",
-        "conv2_weight_bn2_gamma",
-    )
-    bn_groups = ("stem", "block_bn1", "block_bn2", "downsample")
-    expected = {
-        "schema_version": 1,
-        "analysis_protocol": "forward_causal_interface_v1",
-        "scientific_status": "post_hoc_mechanism_analysis_not_selector",
-        "dataset": "c100",
-        "victim_model": "resnet18",
-        "query_budget": 500,
-        "analysis_split": "query_validation",
-        "analysis_count_per_seed": 100,
-        "uses_eval_ms": False,
-        "trains_surrogate": False,
-        "primary_metric": "posterior_kl_to_victim",
-    }
-    for field, value in expected.items():
-        if payload.get(field) != value:
-            raise ValueError(f"Lab09.{field}={payload.get(field)!r}，期望 {value!r}。")
-    if tuple(payload.get("evaluation_seeds", ())) != seeds:
-        raise ValueError("Lab09 的十种子不正确。")
-    validate_source_hashes(
-        payload["source"],
-        (
-            ("lab04_candidate", "lab04_candidate_sha256"),
-            ("lab07_dependency", "lab07_dependency_sha256"),
-            ("lab08_metrics", "lab08_metrics_sha256"),
-            ("victim_checkpoint", "victim_checkpoint_sha256"),
-            ("official_weight", "official_weight_sha256"),
-            ("posterior_path", "posterior_sha256"),
-        ),
-        "Lab09",
-    )
-    protection = payload.get("system_protection", {})
-    if (
-        protection.get("source_case") != "candidate_drop_05_06_08_10_bn_gamma"
-        or protection.get("protected_state_count") != 27
-        or protection.get("protected_param_count") != 645_924
-        or tuple(protection.get("groups", ())) != groups
-    ):
-        raise ValueError("Lab09 的固定系统保护七组不正确。")
-    query_partitions = payload.get("query_partitions", {})
-    if set(query_partitions) != set(map(str, seeds)):
-        raise ValueError("Lab09 缺少十种子 query 划分。")
-    for seed in seeds:
-        partition = query_partitions[str(seed)]
-        if (
-            partition.get("seed") != seed
-            or partition.get("seed_offset") != 100
-            or partition.get("train_size") != QUERY_TRAIN
-            or partition.get("validation_size") != QUERY_VALIDATION
-            or set(partition.get("train_source_indices", ()))
-            & set(partition.get("validation_source_indices", ()))
-        ):
-            raise ValueError(f"Lab09 seed {seed} 的 query 划分不正确。")
-
-    results = payload.get("results", {})
-    lambda_rows = results.get("lambda")
-    lattice_rows = results.get("lattice")
-    attribution_rows = results.get("attribution")
-    seam_rows = results.get("seam")
-    bn_rows = results.get("bn")
-    expected_lengths = (
-        (lambda_rows, 50, "lambda"),
-        (lattice_rows, 1_280, "lattice"),
-        (attribution_rows, 70, "attribution"),
-        (seam_rows, 480, "seam"),
-        (bn_rows, 160, "bn"),
-    )
-    for rows, length, label in expected_lengths:
-        if not isinstance(rows, list) or len(rows) != length:
-            raise ValueError(f"Lab09 {label} 结果数量不正确。")
-
-    lambda_order = [(seed, case) for seed in seeds for case in cases]
-    if [
-        (int(row["seed"]), row["case"])
-        for row in lambda_rows
-    ] != lambda_order:
-        raise ValueError("Lab09 lambda 不是五强度 × 十 seed 的固定顺序。")
-    lab08_payload = load_json("results/lab/08_leakage/metrics.json")
-    lab08_hashes = {
-        (int(row["seed"]), row["case"]):
-            row["attack_initialization"]["state_sha256"]
-        for row in lab08_payload["results"]
-    }
-    lambda_by_key = {}
-    for row in lambda_rows:
-        key = (int(row["seed"]), row["case"])
-        if (
-            float(row["utilization_strength"])
-            != strengths[cases.index(row["case"])]
-            or row["state_sha256"] != lab08_hashes[key]
-        ):
-            raise ValueError(f"Lab09 lambda {key} 没有复用 Lab08 初始状态。")
-        for field in (
-            "soft_ce",
-            "posterior_kl",
-            "fidelity",
-            "prediction_entropy",
-            "feature_rms",
-            "feature_l2",
-            "logit_rms",
-            "norm_matched_soft_ce",
-            "norm_matched_posterior_kl",
-            "norm_matched_fidelity",
-            "norm_matched_prediction_entropy",
-            "norm_matched_logit_rms",
-        ):
-            if not math.isfinite(float(row[field])):
-                raise ValueError(f"Lab09 lambda {key}.{field} 不是有限值。")
-        lambda_by_key[key] = row
-
-    lattice_order = [(seed, subset) for seed in seeds for subset in range(128)]
-    if [
-        (int(row["seed"]), int(row["subset"]))
-        for row in lattice_rows
-    ] != lattice_order:
-        raise ValueError("Lab09 lattice 不是 128 组合 × 十 seed 的固定顺序。")
-    lattice_by_key = {
-        (int(row["seed"]), int(row["subset"])): row
-        for row in lattice_rows
-    }
-    attribution_order = [(seed, group) for seed in seeds for group in groups]
-    if [
-        (int(row["seed"]), row["group"])
-        for row in attribution_rows
-    ] != attribution_order:
-        raise ValueError("Lab09 attribution 不是七组 × 十 seed 的固定顺序。")
-    attribution_by_key = {
-        (int(row["seed"]), row["group"]): row
-        for row in attribution_rows
-    }
-    for seed in seeds:
-        assert_close(
-            float(lattice_by_key[(seed, 0)]["posterior_kl"]),
-            float(lambda_by_key[(seed, "lambda_100")]["posterior_kl"]),
-            f"Lab09 seed {seed} 混合端点",
-        )
-        victim_kl = float(payload["victim_controls"][str(seed)]["posterior_kl"])
-        assert_close(
-            float(lattice_by_key[(seed, 127)]["posterior_kl"]),
-            victim_kl,
-            f"Lab09 seed {seed} victim 端点",
-        )
-        shapley_sum = sum(
-            float(attribution_by_key[(seed, group)]["shapley_kl_recovery"])
-            for group in groups
-        )
-        assert_close(
-            shapley_sum,
-            float(lattice_by_key[(seed, 0)]["posterior_kl"]) - victim_kl,
-            f"Lab09 seed {seed} 七组 Shapley 闭合",
-        )
-
-    seam_order = [
-        (seed, block, variant)
-        for seed in seeds
-        for block in blocks
-        for variant in seam_variants
-    ]
-    if [
-        (int(row["seed"]), row["block"], row["variant"])
-        for row in seam_rows
-    ] != seam_order:
-        raise ValueError("Lab09 seam 不是八块 × 六干预 × 十 seed 的固定顺序。")
-    bn_order = [(seed, subset) for seed in seeds for subset in range(16)]
-    if [
-        (int(row["seed"]), int(row["subset"]))
-        for row in bn_rows
-    ] != bn_order:
-        raise ValueError("Lab09 bn 不是 16 组合 × 十 seed 的固定顺序。")
-    bn_by_key = {
-        (int(row["seed"]), int(row["subset"])): row
-        for row in bn_rows
-    }
-    gamma_hidden_subset = 127 ^ (1 << groups.index("bn_gamma"))
-    for seed in seeds:
-        victim_kl = float(payload["victim_controls"][str(seed)]["posterior_kl"])
-        assert_close(
-            float(bn_by_key[(seed, 0)]["posterior_kl"]),
-            victim_kl,
-            f"Lab09 seed {seed} BN 空端点",
-        )
-        assert_close(
-            float(bn_by_key[(seed, 15)]["posterior_kl"]),
-            float(lattice_by_key[(seed, gamma_hidden_subset)]["posterior_kl"]),
-            f"Lab09 seed {seed} BN 全 public 端点",
-        )
-
-    aggregate = payload.get("aggregate", {})
-    if (
-        aggregate.get("seed_count") != 10
-        or aggregate.get("sample_standard_deviation_ddof") != 1
-        or tuple(aggregate.get("lambda", ())) != cases
-        or tuple(aggregate.get("attribution", ())) != groups
-        or tuple(aggregate.get("bn_attribution", ())) != bn_groups
-    ):
-        raise ValueError("Lab09 聚合索引不正确。")
-    for case in cases:
-        rows = [row for row in lambda_rows if row["case"] == case]
-        for metric in (
-            "posterior_kl",
-            "norm_matched_posterior_kl",
-            "feature_rms",
-            "logit_rms",
-        ):
-            values = [float(row[metric]) for row in rows]
-            summary = aggregate["lambda"][case][metric]
-            assert_close(
-                float(summary["mean"]),
-                statistics.mean(values),
-                f"Lab09 aggregate.{case}.{metric}.mean",
-            )
-            assert_close(
-                float(summary["sample_std"]),
-                statistics.stdev(values),
-                f"Lab09 aggregate.{case}.{metric}.std",
-            )
-    alignment = aggregate.get("lab07_alignment", {})
-    if alignment.get("status") != "five_post_hoc_points_not_selector_or_significance_test":
-        raise ValueError("Lab09 没有保留五点相关的后验限制。")
-    mechanism = [
-        float(row["lab09_hide_alone_kl_damage"])
-        for row in alignment["rows"]
-    ]
-    for metric in (
-        "lab07_accuracy_rebound",
-        "lab07_fidelity_rebound",
-        "lab07_kl_rebound",
-    ):
-        expected_correlation = statistics.correlation(
-            mechanism,
-            [float(row[metric]) for row in alignment["rows"]],
-        )
-        assert_close(
-            float(alignment["pearson"][metric]),
-            expected_correlation,
-            f"Lab09 alignment.{metric}",
-        )
-
-    outputs = payload.get("outputs", {})
-    expected_outputs = {
-        "lambda": "results/lab/09_mechanism/lambda.tsv",
-        "lattice": "results/lab/09_mechanism/lattice.tsv",
-        "attribution": "results/lab/09_mechanism/attribution.tsv",
-        "seam": "results/lab/09_mechanism/seam.tsv",
-        "bn": "results/lab/09_mechanism/bn.tsv",
-        "plot": "results/lab/09_mechanism/metrics.png",
+        "probe": "results/lab/09_leakage/probe.tsv",
+        "plot": "results/lab/09_leakage/metrics.png",
     }
     if outputs != expected_outputs:
         raise ValueError("Lab09 输出索引不正确。")
-    tsv_specs = (
-        ("lambda", lambda_order, ("seed", "case")),
-        ("lattice", lattice_order, ("seed", "subset")),
-        ("attribution", attribution_order, ("seed", "group")),
-        ("seam", seam_order, ("seed", "block", "variant")),
-        ("bn", bn_order, ("seed", "subset")),
-    )
-    for output, expected_order, fields in tsv_specs:
-        rows = read_tsv(expected_outputs[output])
-        actual_order = [
-            tuple(
-                int(row[field]) if field in {"seed", "subset"} else row[field]
-                for field in fields
-            )
-            for row in rows
-        ]
-        if actual_order != expected_order:
-            raise ValueError(f"Lab09 {output}.tsv 的行顺序不正确。")
     plot_path = ROOT / expected_outputs["plot"]
     if not plot_path.is_file() or plot_path.stat().st_size == 0:
         raise ValueError("Lab09 指标图缺失或为空。")
+    for progress_path in (
+        "results/lab/09_leakage/progress.json",
+        "results/lab/09_leakage/progress_history.tsv",
+    ):
+        if (ROOT / progress_path).exists():
+            raise ValueError(f"Lab09 完成后仍残留进度文件：{progress_path}。")
 
 
-def validate_lab10() -> None:
-    json_path = "results/lab/10_pair/metrics.json"
-    history_path = "results/lab/10_pair/history.tsv"
+def validate_lab08_pair() -> None:
+    json_path = "results/lab/08_structure/pair.json"
+    history_path = "results/lab/08_structure/pair_history.tsv"
     payload = load_json(json_path)
     validate_protocol(payload, json_path)
     cases = ("conv1_bn2", "conv2_bn1")
@@ -2197,7 +2090,7 @@ def validate_lab10() -> None:
         }
         != expected_states
     ):
-        raise ValueError("Lab10 的 seed、block 或两种配对策略定义不正确。")
+        raise ValueError("Lab08 pair 的 seed、block 或两种配对策略定义不正确。")
     validate_source_hashes(
         payload,
         (
@@ -2205,20 +2098,20 @@ def validate_lab10() -> None:
             ("official_weight", "official_weight_sha256"),
             ("posterior_path", "posterior_sha256"),
         ),
-        "Lab10",
+        "Lab08 pair",
     )
     results = payload.get("results")
     if (
         not isinstance(results, list)
         or [row.get("case") for row in results] != list(cases)
     ):
-        raise ValueError("Lab10 不是两种策略的固定顺序结果。")
+        raise ValueError("Lab08 pair 不是两种策略的固定顺序结果。")
     selected_epochs = {}
     for row in results:
         case = str(row["case"])
         validate_result(row, f"{json_path}:{case}")
         if tuple(row.get("selected_states", ())) != expected_states[case]:
-            raise ValueError(f"Lab10 {case} 的 selected_states 不正确。")
+            raise ValueError(f"Lab08 pair {case} 的 selected_states 不正确。")
         protection = row.get("protection", {})
         actual_cost = (
             protection.get("protected_unit_count"),
@@ -2229,7 +2122,7 @@ def validate_lab10() -> None:
             or not protection.get("classifier_protected")
             or protection.get("head_mode") != "replace"
         ):
-            raise ValueError(f"Lab10 {case} 的保护成本或分类头模式不正确。")
+            raise ValueError(f"Lab08 pair {case} 的保护成本或分类头模式不正确。")
         units = protection.get("selected_units", ())
         if (
             len(units) != 12
@@ -2238,7 +2131,7 @@ def validate_lab10() -> None:
             or sum(unit.get("role") == "paired_bn_gamma" for unit in units) != 5
             or sum(unit.get("role") == "fixed_head" for unit in units) != 2
         ):
-            raise ValueError(f"Lab10 {case} 的 unit 语义不正确。")
+            raise ValueError(f"Lab08 pair {case} 的 unit 语义不正确。")
         randomization = row.get("randomization", {})
         if (
             randomization.get("surrogate_initialization")
@@ -2246,61 +2139,65 @@ def validate_lab10() -> None:
             or randomization.get("surrogate_initialization_seed") != SEED
             or randomization.get("query_sampler_seed") != SEED
         ):
-            raise ValueError(f"Lab10 {case} 的随机轨迹不正确。")
+            raise ValueError(f"Lab08 pair {case} 的随机轨迹不正确。")
         selected_epochs[(case,)] = int(row["primary"]["epoch"])
-    validate_masks(results, "Lab10")
+    validate_masks(results, "Lab08 pair")
     validate_history(
         history_path,
         key_fields=("case",),
         expected_epochs={(case,): EPOCHS for case in cases},
         selected_epochs=selected_epochs,
     )
-    data_rows = read_tsv("results/lab/10_pair/data.tsv")
+    data_rows = read_tsv("results/lab/08_structure/pair.tsv")
     if [row["case"] for row in data_rows] != list(cases):
-        raise ValueError("Lab10 data.tsv 行顺序不正确。")
+        raise ValueError("Lab08 pair data.tsv 行顺序不正确。")
     outputs = payload.get("outputs", {})
     if outputs != {
-        "data": "results/lab/10_pair/data.tsv",
-        "history": "results/lab/10_pair/history.tsv",
-        "plot": "results/lab/10_pair/metrics.png",
+        "data": "results/lab/08_structure/pair.tsv",
+        "history": "results/lab/08_structure/pair_history.tsv",
+        "plot": "results/lab/08_structure/pair.png",
     }:
-        raise ValueError("Lab10 输出索引不正确。")
+        raise ValueError("Lab08 pair 输出索引不正确。")
     plot = ROOT / str(outputs["plot"])
     if not plot.is_file() or plot.stat().st_size == 0:
-        raise ValueError("Lab10 指标图缺失或为空。")
+        raise ValueError("Lab08 pair 指标图缺失或为空。")
 
 
 def validate_readmes() -> None:
     for relative_path in (
+        "results/lab/01_kmeans/README.md",
         "results/lab/02_head/README.md",
         "results/lab/03_baseline/README.md",
         "results/lab/04_tensorshield/README.md",
         "results/lab/05_state/README.md",
         "results/lab/06_weight/README.md",
-        "results/lab/07_structure/README.md",
-        "results/lab/08_leakage/README.md",
-        "results/lab/09_mechanism/README.md",
-        "results/lab/10_pair/README.md",
+        "results/lab/07_bn/README.md",
+        "results/lab/08_structure/README.md",
+        "results/lab/09_leakage/README.md",
     ):
         text = (ROOT / relative_path).read_text(encoding="utf-8")
         forbidden = ("固定第 100 轮", "主要结果统一读取第 100 轮", "eval_ms 选择 best")
         if any(token in text for token in forbidden):
             raise ValueError(f"{relative_path} 仍描述失效的 end/eval_ms 选模协议。")
+        if "## 实验结论" not in text:
+            raise ValueError(f"{relative_path} 缺少面向实验结果的明确结论。")
 
 
 def main() -> int:
     validate_lab02()
+    validate_lab02_top10_trainability()
     validate_lab03()
     validate_lab04()
     validate_lab05()
     validate_lab06()
-    validate_lab07_dependency()
-    validate_lab07_swap()
-    validate_lab08()
-    validate_lab09()
-    validate_lab10()
+    validate_lab07_bn_drop()
+    validate_lab07_bn_add()
+    validate_lab08_dependency()
+    validate_lab08_swap()
+    validate_lab08_pair()
+    validate_lab09_leakage()
     validate_readmes()
-    print("[OK] Lab02–10 的统一协议、结果、mask 与配对统计均有效。")
+    print("[OK] Lab02–09 的统一协议、结果、mask 与配对统计均有效。")
     return 0
 
 

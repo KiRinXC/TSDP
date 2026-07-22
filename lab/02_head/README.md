@@ -48,3 +48,47 @@ surrogate 初始化   formal_victim_then_public_v1
 results/lab/02_head/metrics.json  八组保护计划、选模信息与单次 eval_ms 原始指标
 results/lab/02_head/history.tsv   八组逐 epoch 的 query train/validation 记录
 ```
+
+## TensorShield Top-10 trainability 消融
+
+该子实验固定 TensorShield Top-10 的 11 个 protected unit（10 个作者 weight 与
+`last_linear.bias`），并统一使用 `replace` 分类头。由于 replace 会重新创建
+`Linear(512,100)`，victim 分类头不复制；新任务头在三个 case 中都使用 seed-42
+随机初始化并保持可训练。Top-10 的正式保护成本仍按 11 个 unit、1,009,764 个
+参数和 8.9934% 记录。
+
+三个 case 从完全相同的 `formal_victim_then_public_v1` 初始化开始，唯一改变的是
+state-level trainability mask；BN running state 也随同一 mask 冻结或训练：
+
+```text
+public_frozen_victim_train
+    Top-10 public protected state 冻结；其余 victim 暴露 state 训练；替换头训练
+
+public_train_victim_frozen
+    Top-10 public protected state 训练；其余 victim 暴露 state 冻结；替换头训练
+
+joint_finetune
+    public protected state、victim 暴露 state 和替换头全部训练
+```
+
+该消融只使用 seed 42，不扩展到十随机种子。训练仍使用 500 条 soft query 的
+400/100 划分、最多 100 epoch、validation-best 选模，并在 checkpoint 固定后只评估
+一次 `eval_ms`。
+
+运行：
+
+```bash
+"$HOME/venvs/dl-py310-torch210-cu121/bin/python" \
+  lab/02_head/top10.py --dry-run
+"$HOME/venvs/dl-py310-torch210-cu121/bin/python" \
+  lab/02_head/top10.py
+```
+
+输出：
+
+```text
+results/lab/02_head/top10_trainability.json
+results/lab/02_head/top10_trainability.tsv
+results/lab/02_head/top10_trainability_history.tsv
+results/lab/02_head/top10_trainability.png
+```
