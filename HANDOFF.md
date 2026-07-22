@@ -352,16 +352,6 @@ TEESlice 结果只在 `results/MS/resnet18/c100/teeslice/` 保存，并标记为
   0.1579/0.1664/2.781295；相对纯 Conv Top-6 的 0.1519/0.1626/2.794303 三项回退。
   局部 affine 绑定不能替代 Lab04 的全部 20 个 BN gamma 跨层闭包。当前按要求不执行
   对应 BN affine 的十种子配对验证，也不保留该多 seed 入口或结果。
-- `test/MS/02`：已在与 Test01 相同的 500 张 query 和 40 个 Conv/BN affine
-  候选上计算“相同 victim 输入”的高斯二阶表征传输分数。分类头因
-  ImageNet/CIFAR 类别坐标不对应而固定为私有边界，不进入 backbone 排名。
-  Test02 与 Test01 的 Spearman/Kendall 为 `0.596998/0.458974`，Top-5/10 只重合
-  `1/2` 项；`layer4.1.bn2` 在两种定义下均位于前五。但对称二阶能量归一化
-  会把 `layer3.1` 的四个低能量算子推到前四，既没有聚集已有五个后验
-  `conv1`，也无法表达全部 BN affine 的跨层闭包。因此当前单算子相对 RT 只是
-  可解释的局部表征迁移量，还不是最终保护位置选择器。该测试同样不生成
-  mask、不训练 surrogate，也不读取 `eval_ms`。
-
 Lab 结果不能混入正式主实验索引，但也不能以“清理历史”为由删除仍承担独立结论的 Lab。
 
 ## 5. 当前卡在哪里

@@ -279,7 +279,7 @@ PYTHONDONTWRITEBYTECODE=1 \
   test/MS/01_cross/weights.py --dry-run
 ```
 
-只核对 Product 排序、40 个前缀 mask、正式参考线和输入协议：
+只核对 Product 排序、`Top-0` 至 `Top-40` 共 41 个前缀 mask、正式参考线和输入协议：
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 \
@@ -296,8 +296,8 @@ results/test/MS/01_cross/README.md
 results/test/MS/01_cross/metrics.json
 results/test/MS/01_cross/all.tsv
 results/test/MS/01_cross/main.tsv
-results/test/MS/01_cross/all_*.png       九张
-results/test/MS/01_cross/main_*.png      九张
+results/test/MS/01_cross/all_<metric>.png       九张数据指标图
+results/test/MS/01_cross/main_<metric>.png      九张数据指标图
 ```
 
 诊断性前缀扫描额外输出：

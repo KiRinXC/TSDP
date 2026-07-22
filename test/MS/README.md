@@ -8,5 +8,4 @@
 
 ```text
 01_cross    ResNet18 的 40/16 项残差与有效秩，以及 Product 前缀 MS 诊断
-02          相同 victim 输入下的任务特定表征传输排名
 ```

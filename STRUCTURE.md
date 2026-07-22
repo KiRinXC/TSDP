@@ -42,8 +42,7 @@ TSDP/
 │   │   └── 10_pair                  卷积与局部 BN gamma 配对保护结果
 │   └── test/                        编号测试的独立结果
 │       └── MS/
-│           ├── 01_cross             40/16 项残差、有效秩与 Product 前缀诊断结果
-│           └── 02                   同输入算子的表征传输排名与 Test01 对照
+│           └── 01_cross             40/16 项残差、有效秩与 Product 前缀诊断结果
 ├── models/                          统一模型结构及 TEESlice slice/backbone 接口
 ├── verify/                          环境/GPU、数据协议及 MS/Lab/Test 结果验证
 ├── lab/                             小型验证实验
@@ -59,7 +58,6 @@ TSDP/
 │   └── 10_pair                      卷积与局部 BN gamma 配对保护比较
 ├── test/                            未进入 Lab 或正式实验的编号测试
 │   └── MS/
-│       ├── 01_cross                 40/16 项残差、有效秩与 Product 前缀诊断入口
-│       └── 02                       同输入算子的表征传输测试入口
+│       └── 01_cross                 40/16 项残差、有效秩与 Product 前缀诊断入口
 └── docs/                            参考论文
 ```

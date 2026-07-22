@@ -278,8 +278,8 @@ Lab 验证实验/
         ├── metrics.json              协议、模型/数据哈希、正确性、40/16 项指标
         ├── all.tsv                   全部 40 个候选的九项指标
         ├── main.tsv                  16 个主分支卷积的九项指标
-        ├── all_*.png                 全部 40 项的九张单指标图
-        ├── main_*.png                16 项的九张单指标图
+        ├── all_<metric>.png          全部 40 项的九张单指标图
+        ├── main_<metric>.png         16 项的九张单指标图
         ├── sweep.json/tsv            Product 前缀、停止点、最佳点与三项 MS 原始指标
         ├── sweep_history.tsv         已运行前缀的逐轮 query train/validation 指标
         ├── sweep.png                 40 项 accuracy 前缀曲线与三条参考线
@@ -289,22 +289,5 @@ Lab 验证实验/
         ├── main_affine_sweep.json/tsv Main Conv+对应 BN affine 前缀与三项 MS 原始指标
         ├── main_affine_sweep_history.tsv  Conv+affine 扫描的逐轮训练/验证指标
         └── main_affine_sweep.png     Conv+affine accuracy 前缀曲线与三条参考线
-└── test/MS/02/
-    ├── 读取 query_pool_ms 按 query_rank 排序的固定 500 张 CIFAR-100 图片
-    ├── 读取官方 ImageNet ResNet18 public 权重与 victim best.pth
-    ├── 分类头 weight/bias 固定为私有边界，不进入 backbone 排名
-    ├── 候选与 Test01 一致：全部 20 个 Conv weight 与 20 个 BN affine 参数组
-    ├── Conv 将同一 victim 自然输入分别交给 public/victim weight
-    ├── BN affine 固定 victim 标准化输入，同时替换 public/victim gamma 与 beta
-    ├── 将 N×C×H×W 整理为 (N×H×W)×C 并累积 float64 均值/协方差
-    ├── 计算对称二阶能量归一化的高斯 Wasserstein 表征传输分数
-    ├── 生成 40 项、16 个主分支卷积及 Test01 逐项排名对照
-    ├── 不生成保护 mask，不训练 surrogate，也不读取 eval_ms
-    └── results/test/MS/02/
-        ├── metrics.json              协议、模型/数据哈希、正确性、排名与 Test01 统计
-        ├── weights.tsv/png           40 个候选的表征传输排名与图
-        ├── weights_conv/bn.tsv       两类候选的类别内排名
-        ├── tensors.tsv/png           16 个 BasicBlock 主分支卷积的抽取表和图
-        └── comparison.tsv/png        Test02 RT 与 Test01 交叉残差排名对照
 
 ```

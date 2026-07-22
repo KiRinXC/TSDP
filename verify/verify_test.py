@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""核对 Test01/Test02 的 BN affine 协议、来源哈希、数据表和图片。"""
+"""核对 Test01 的 BN affine 协议、来源哈希、数据表和图片。"""
 
 from __future__ import annotations
 
@@ -13,7 +13,12 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 TEST01 = ROOT / "results" / "test" / "MS" / "01_cross"
-TEST02 = ROOT / "results" / "test" / "MS" / "02"
+MAIN_MODULES = tuple(
+    f"layer{stage}.{block}.conv{conv}"
+    for stage in range(1, 5)
+    for block in range(2)
+    for conv in range(1, 3)
+)
 METRICS = (
     "cross_abs_mean",
     "natural_abs_mean",
@@ -25,6 +30,26 @@ METRICS = (
     "rank_gap_uu_pp_mean",
     "product_score",
 )
+METRIC_FILES = (
+    "cross",
+    "natural",
+    "cross_rank",
+    "rank_gap_vv_vp",
+    "rank_gap_pv_pp",
+    "rank_interaction",
+    "natural_rank",
+    "rank_gap_uu_pp",
+    "product",
+)
+CORRECTNESS_LIMITS = {
+    "max_conv_public_hook_error": 1e-6,
+    "max_conv_victim_hook_error": 1e-6,
+    "max_conv_compact_identity_error": 2e-5,
+    "max_bn_affine_public_hook_error": 2e-6,
+    "max_bn_affine_victim_hook_error": 2e-6,
+    "max_bn_affine_compact_identity_error": 2e-6,
+    "max_stem_compact_cross_abs": 0.0,
+}
 
 
 def load_json(path: Path) -> dict[str, object]:
@@ -42,6 +67,11 @@ def sha256_file(path: Path) -> str:
         for chunk in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
+
+
+def hash_integer_sequence(values: list[int]) -> str:
+    encoded = json.dumps(values, separators=(",", ":")).encode("ascii")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def require_file(relative_path: str) -> Path:
@@ -105,6 +135,96 @@ def validate_table_against_json(
             )
 
 
+def validate_data_sources(payload: dict[str, object]) -> None:
+    models = payload.get("models", {})
+    for role in ("public", "victim"):
+        metadata = models.get(role, {})
+        checkpoint = require_file(str(metadata.get("checkpoint")))
+        if metadata.get("checkpoint_sha256") != sha256_file(checkpoint):
+            raise ValueError(f"Test01 的 {role} checkpoint SHA256 不正确。")
+
+    manifest = load_json(ROOT / "dataset" / "MS" / "c100" / "manifest.json")
+    if manifest.get("query", {}).get("split") != "query_pool_ms":
+        raise ValueError("CIFAR-100 MS manifest 没有指向 query_pool_ms。")
+    split_rows = [
+        row
+        for row in read_tsv(ROOT / "dataset" / "MS" / "c100" / "splits.tsv")
+        if row["split"] == "query_pool_ms"
+    ]
+    split_rows.sort(key=lambda row: int(row["query_rank"]))
+    expected_indices = [int(row["source_index"]) for row in split_rows[:500]]
+    data = payload.get("data", {})
+    actual_indices = [int(value) for value in data.get("source_indices", [])]
+    if (
+        data.get("split") != "query_pool_ms"
+        or data.get("count") != 500
+        or len(expected_indices) != 500
+        or len(set(expected_indices)) != 500
+        or actual_indices != expected_indices
+        or data.get("source_indices_sha256") != hash_integer_sequence(expected_indices)
+    ):
+        raise ValueError("Test01 的固定 500-query 前缀与 MS split 不一致。")
+
+
+def validate_main_extraction(
+    all_rows: list[dict[str, object]],
+    main_rows: list[dict[str, object]],
+    selection: dict[str, object],
+) -> None:
+    if tuple(selection.get("main_modules", ())) != MAIN_MODULES:
+        raise ValueError("Test01 的 main module 清单不正确。")
+    if tuple(str(row["module"]) for row in main_rows) != MAIN_MODULES:
+        raise ValueError("Test01 main 结果的模块顺序不正确。")
+    all_by_module = {str(row["module"]): row for row in all_rows}
+    for row in main_rows:
+        source = all_by_module[str(row["module"])]
+        if int(row["all_index"]) != int(source["index"]):
+            raise ValueError(f"Test01 main/{row['module']} 的 all_index 不正确。")
+        for field, value in source.items():
+            if field == "index":
+                continue
+            if row.get(field) != value:
+                raise ValueError(
+                    f"Test01 main/{row['module']}/{field} 不是 all.tsv 的直接抽取值。"
+                )
+
+
+def validate_correctness(payload: dict[str, object]) -> None:
+    correctness = payload.get("correctness", {})
+    expected_counts = {
+        "captured_candidate_count": 40.0,
+        "captured_conv_count": 20.0,
+        "captured_bn_affine_count": 20.0,
+    }
+    for field, expected in expected_counts.items():
+        if float(correctness.get(field, -1.0)) != expected:
+            raise ValueError(f"Test01 correctness/{field} 不正确。")
+    for field, limit in CORRECTNESS_LIMITS.items():
+        value = float(correctness.get(field, math.inf))
+        if not math.isfinite(value) or value < 0.0 or value > limit:
+            raise ValueError(
+                f"Test01 correctness/{field}={value} 超出容差 {limit}。"
+            )
+
+
+def expected_rank_rows(source: Path) -> list[dict[str, str]]:
+    return sorted(
+        read_tsv(source),
+        key=lambda row: (-abs(float(row["product_score"])), row["weight_state"]),
+    )
+
+
+def expected_rank_group(row: dict[str, str]) -> tuple[str, ...]:
+    if row["operator_type"] == "conv_weight":
+        return (row["weight_state"],)
+    if (
+        row["operator_type"] != "bn_affine"
+        or row["bias_state"] != f"{row['module']}.bias"
+    ):
+        raise ValueError(f"无法重建 Test01 候选组：{row}")
+    return row["weight_state"], row["bias_state"]
+
+
 def validate_sweep(
     prefix: str,
     *,
@@ -122,6 +242,33 @@ def validate_sweep(
         or ranking.get("source_sha256") != sha256_file(source)
     ):
         raise ValueError(f"{prefix} 的排名来源或 SHA256 不正确。")
+    ranked_rows = expected_rank_rows(source)
+    ranked_states = [row["weight_state"] for row in ranked_rows]
+    expected_rank_sha256 = hashlib.sha256(
+        "\n".join(ranked_states).encode("utf-8")
+    ).hexdigest()
+    if (
+        ranking.get("count") != len(ranked_rows)
+        or ranking.get("state_names") != ranked_states
+        or ranking.get("sha256") != expected_rank_sha256
+        or len(ranking.get("rows", [])) != len(ranked_rows)
+    ):
+        raise ValueError(f"{prefix} 没有按 source product_score 重建完整排名。")
+    for stored, expected in zip(ranking["rows"], ranked_rows):
+        if (
+            stored.get("module") != expected["module"]
+            or stored.get("state_name") != expected["weight_state"]
+            or tuple(stored.get("state_names", ())) != expected_rank_group(expected)
+            or stored.get("operator_type") != expected["operator_type"]
+            or int(stored.get("parameter_count", -1))
+            != int(expected["parameter_count"])
+        ):
+            raise ValueError(f"{prefix}/{expected['module']} 的排名候选组不正确。")
+        assert_close(
+            float(stored["product_score"]),
+            float(expected["product_score"]),
+            f"{prefix}/{expected['module']}/product_score",
+        )
     stopping = payload.get("stopping", {})
     if (
         stopping.get("first_rebound_top_k") != expected_rebound
@@ -147,9 +294,59 @@ def validate_sweep(
     for item in results:
         if item["result"].get("eval_passes") != 1:
             raise ValueError(f"{prefix}/{item['case']} 不是单次 eval_ms。")
+        top_k = int(item["top_k"])
+        selected_rows = ranked_rows[:top_k]
+        expected_rank_states = [row["weight_state"] for row in selected_rows]
+        if item.get("selected_rank_states") != expected_rank_states:
+            raise ValueError(f"{prefix}/{item['case']} 的排名前缀不正确。")
+        new_row = ranked_rows[top_k - 1] if top_k else None
+        if item.get("new_state") != (
+            None if new_row is None else new_row["weight_state"]
+        ):
+            raise ValueError(f"{prefix}/{item['case']} 的新增候选不正确。")
+        if new_row is not None:
+            assert_close(
+                float(item["new_product_score"]),
+                float(new_row["product_score"]),
+                f"{prefix}/{item['case']}/new_product_score",
+            )
         units = item["protection"].get("selected_units", [])
+        ranked_unit_states = [
+            state
+            for row in selected_rows
+            for state in expected_rank_group(row)
+        ]
+        expected_paired_modules: list[str] = []
+        expected_paired_states: list[str] = []
+        if paired_affine:
+            for state_name in expected_rank_states:
+                module = state_name.rsplit(".", 1)[0]
+                parent, conv_name = module.rsplit(".", 1)
+                bn_module = f"{parent}.bn{conv_name[-1]}"
+                expected_paired_modules.append(bn_module)
+                expected_paired_states.extend(
+                    (f"{bn_module}.weight", f"{bn_module}.bias")
+                )
+            if item.get("paired_bn_modules") != expected_paired_modules:
+                raise ValueError(f"{prefix}/{item['case']} 的 paired BN 模块不正确。")
+        expected_unit_states = [
+            "last_linear.weight",
+            "last_linear.bias",
+            *ranked_unit_states,
+            *expected_paired_states,
+        ]
+        actual_unit_states = [str(unit["state_name"]) for unit in units]
+        if actual_unit_states != expected_unit_states:
+            raise ValueError(f"{prefix}/{item['case']} 的完整保护 state 集合不正确。")
+        protection = item["protection"]
+        if (
+            int(protection.get("protected_unit_count", -1)) != len(units)
+            or int(protection.get("protected_param_count", -1))
+            != sum(int(unit["numel"]) for unit in units)
+        ):
+            raise ValueError(f"{prefix}/{item['case']} 的保护计数与 state 元数据不一致。")
         affine_units = [unit for unit in units if unit.get("role") == "paired_bn_affine"]
-        if paired_affine and len(affine_units) != 2 * int(item["top_k"]):
+        if paired_affine and len(affine_units) != 2 * top_k:
             raise ValueError(f"{prefix}/{item['case']} 的 paired affine state 数量不正确。")
         if not paired_affine and affine_units:
             raise ValueError(f"{prefix}/{item['case']} 意外包含 paired affine state。")
@@ -165,6 +362,20 @@ def validate_sweep(
         rows = by_case[str(item["case"])]
         if [int(row["epoch"]) for row in rows] != list(range(1, 101)):
             raise ValueError(f"{prefix}/{item['case']} 不是完整 100 epoch。")
+        if any(
+            int(row["query_count"]) != 400
+            or int(row["validation_count"]) != 100
+            for row in rows
+        ):
+            raise ValueError(f"{prefix}/{item['case']} 不是固定 400/100 query 划分。")
+        earliest_minimum = min(
+            rows,
+            key=lambda row: (float(row["validation_loss"]), int(row["epoch"])),
+        )
+        if int(item["primary"]["epoch"]) != int(earliest_minimum["epoch"]):
+            raise ValueError(
+                f"{prefix}/{item['case']} 不是最早的最低 validation-loss epoch。"
+            )
         best_epochs = [
             int(row["epoch"])
             for row in rows
@@ -172,6 +383,37 @@ def validate_sweep(
         ]
         if int(item["primary"]["epoch"]) not in best_epochs:
             raise ValueError(f"{prefix}/{item['case']} 的 primary epoch 未标为 best。")
+
+    data_rows = read_tsv(TEST01 / f"{prefix}.tsv")
+    if len(data_rows) != len(results):
+        raise ValueError(f"{prefix}.tsv 与 JSON 结果点数不一致。")
+    for table_row, item in zip(data_rows, results):
+        if (
+            table_row["case"] != str(item["case"])
+            or int(table_row["top_k"]) != int(item["top_k"])
+            or int(table_row["protected_unit_count"])
+            != int(item["protection"]["protected_unit_count"])
+            or int(table_row["protected_param_count"])
+            != int(item["protection"]["protected_param_count"])
+            or int(table_row["best_epoch"]) != int(item["primary"]["epoch"])
+        ):
+            raise ValueError(f"{prefix}.tsv/{item['case']} 与 JSON 元数据不一致。")
+        for table_field, json_field in (
+            ("protected_param_ratio", "protected_param_ratio"),
+            ("surrogate_acc", "surrogate_acc"),
+            ("fidelity", "fidelity"),
+            ("posterior_kl", "posterior_kl"),
+        ):
+            source_mapping = (
+                item["protection"]
+                if table_field == "protected_param_ratio"
+                else item["result"]
+            )
+            assert_close(
+                float(table_row[table_field]),
+                float(source_mapping[json_field]),
+                f"{prefix}.tsv/{item['case']}/{table_field}",
+            )
 
     outputs = payload.get("outputs", {})
     for field in ("data", "history", "plot"):
@@ -197,10 +439,28 @@ def validate_test01() -> None:
         or "beta_v" not in str(selection.get("bn_natural_formula"))
     ):
         raise ValueError("Test01 的候选计数或 BN affine 公式元数据不正确。")
+    expected_metric_formulas = {
+        "cross_abs_mean": "mean_image(mean_chw(abs(I)))",
+        "natural_abs_mean": "mean_image(mean_chw(abs(z_vv-z_pp)))",
+        "cross_rank_mean": "mean_image(r(I))",
+        "rank_gap_vv_vp_mean": "mean_image(r(z_vv)-r(z_vp))",
+        "rank_gap_pv_pp_mean": "mean_image(r(z_pv)-r(z_pp))",
+        "rank_interaction_mean": (
+            "mean_image((r(z_vv)-r(z_vp))-(r(z_pv)-r(z_pp)))"
+        ),
+        "natural_rank_mean": "mean_image(r(z_vv-z_pp))",
+        "rank_gap_uu_pp_mean": "mean_image(r(z_vv)-r(z_pp))",
+        "product_score": "cross_abs_mean*natural_abs_mean",
+    }
+    if payload.get("metrics") != expected_metric_formulas:
+        raise ValueError("Test01 metrics.json 的九项公式与当前协议不一致。")
+    validate_data_sources(payload)
+    validate_correctness(payload)
     all_rows = payload["results"]["all"]
     main_rows = payload["results"]["main"]
     validate_affine_rows(all_rows, label="Test01 all")
     validate_affine_rows(main_rows, label="Test01 main", expect_main=True)
+    validate_main_extraction(all_rows, main_rows, selection)
     all_path = TEST01 / "all.tsv"
     main_path = TEST01 / "main.tsv"
     validate_table_against_json(all_path, all_rows, METRICS)
@@ -212,10 +472,34 @@ def validate_test01() -> None:
             f"Test01/{row['module']}/product_score",
         )
     outputs = payload.get("outputs", {})
-    if len(outputs) != 20:
-        raise ValueError("Test01 数据侧输出索引不是 2 张表和 18 张图。")
+    expected_outputs = {
+        "all": "results/test/MS/01_cross/all.tsv",
+        "main": "results/test/MS/01_cross/main.tsv",
+        **{
+            f"{scope}_{metric}": (
+                f"results/test/MS/01_cross/{scope}_{metric}.png"
+            )
+            for scope in ("all", "main")
+            for metric in METRIC_FILES
+        },
+    }
+    if outputs != expected_outputs:
+        raise ValueError("Test01 数据侧输出索引不是当前 2 张表和 18 张指标图。")
     for relative_path in outputs.values():
         require_file(str(relative_path))
+    expected_all_images = {f"all_{metric}.png" for metric in METRIC_FILES}
+    actual_all_images = {path.name for path in TEST01.glob("all_*.png")}
+    expected_main_images = {f"main_{metric}.png" for metric in METRIC_FILES}
+    actual_main_images = {
+        path.name
+        for path in TEST01.glob("main_*.png")
+        if path.name not in {"main_sweep.png", "main_affine_sweep.png"}
+    }
+    if (
+        actual_all_images != expected_all_images
+        or actual_main_images != expected_main_images
+    ):
+        raise ValueError("Test01 的 18 张数据指标图包含缺失或未索引的旧图片。")
 
     validate_sweep(
         "sweep",
@@ -254,94 +538,16 @@ def validate_test01() -> None:
         raise ValueError(f"Test01 仍保留失效产物：{invalid}")
 
 
-def correlation(left: list[float], right: list[float]) -> float:
-    left_mean = sum(left) / len(left)
-    right_mean = sum(right) / len(right)
-    numerator = sum(
-        (a - left_mean) * (b - right_mean) for a, b in zip(left, right)
-    )
-    denominator = math.sqrt(sum((a - left_mean) ** 2 for a in left)) * math.sqrt(
-        sum((b - right_mean) ** 2 for b in right)
-    )
-    return numerator / denominator
-
-
-def kendall_tau(left: list[int], right: list[int]) -> float:
-    concordant = 0
-    discordant = 0
-    for first in range(len(left) - 1):
-        for second in range(first + 1, len(left)):
-            product = (left[first] - left[second]) * (
-                right[first] - right[second]
-            )
-            concordant += product > 0
-            discordant += product < 0
-    return (concordant - discordant) / (concordant + discordant)
-
-
-def validate_test02() -> None:
-    payload = load_json(TEST02 / "metrics.json")
-    if (
-        payload.get("protocol")
-        != "same_victim_input_gaussian_representation_transport_bn_affine_v2"
-        or payload.get("scientific_status")
-        != "data_only_operator_selector_no_ms_feedback"
-    ):
-        raise ValueError("Test02 的 BN affine 协议不正确。")
-    selection = payload.get("selection", {})
-    if (
-        selection.get("candidate_count") != 40
-        or selection.get("conv_weight_count") != 20
-        or selection.get("bn_affine_count") != 20
-        or selection.get("bn_affine_states_per_candidate") != ["weight", "bias"]
-        or "beta_p" not in str(selection.get("bn_affine_intervention"))
-    ):
-        raise ValueError("Test02 的候选计数或 BN affine 干预不正确。")
-    rows = payload.get("results", [])
-    validate_affine_rows(rows, label="Test02")
-    if [int(row["rank"]) for row in rows] != list(range(1, 41)):
-        raise ValueError("Test02 的 RT rank 不是 1–40。")
-    validate_table_against_json(
-        TEST02 / "weights.tsv",
-        rows,
-        (
-            "mean_transport",
-            "covariance_transport",
-            "wasserstein2",
-            "symmetric_second_moment",
-            "rt_score",
-        ),
-    )
-    comparison = payload.get("test01_comparison", {})
-    source = TEST01 / "all.tsv"
-    if (
-        comparison.get("source") != str(source.relative_to(ROOT))
-        or comparison.get("source_sha256") != sha256_file(source)
-    ):
-        raise ValueError("Test02 的 Test01 对照来源或 SHA256 不正确。")
-    comparison_rows = read_tsv(TEST02 / "comparison.tsv")
-    rt_ranks = [int(row["rt_rank"]) for row in comparison_rows]
-    cross_ranks = [int(row["cross_rank"]) for row in comparison_rows]
-    assert_close(
-        float(comparison["spearman_rank_correlation"]),
-        correlation([float(value) for value in rt_ranks], [float(value) for value in cross_ranks]),
-        "Test02 Spearman",
-    )
-    assert_close(
-        float(comparison["kendall_rank_correlation"]),
-        kendall_tau(rt_ranks, cross_ranks),
-        "Test02 Kendall",
-    )
-    for relative_path in payload.get("outputs", {}).values():
-        require_file(str(relative_path))
-
-
 def validate_readmes() -> None:
     paths = (
+        "test/MS/README.md",
         "test/MS/01_cross/README.md",
-        "test/MS/02/README.md",
+        "results/test/MS/README.md",
         "results/test/MS/01_cross/README.md",
-        "results/test/MS/02/README.md",
+        "STRUCTURE.md",
+        "FLOW.md",
+        "HANDOFF.md",
+        "verify/README.md",
     )
     forbidden = (
         "20 个 Conv/BN gamma",
@@ -349,19 +555,29 @@ def validate_readmes() -> None:
         "main_gamma_sweep",
         "main_affine_seeds",
         "test/MS/01_cross/seeds.py",
+        "test/MS/02",
+        "results/test/MS/02",
+        "Test02",
+        "main_*.png      九张",
+        "40 个前缀 mask",
     )
     for relative_path in paths:
         text = (ROOT / relative_path).read_text(encoding="utf-8")
         for token in forbidden:
             if token in text:
                 raise ValueError(f"{relative_path} 仍包含失效描述：{token}")
+    for removed_path in (
+        ROOT / "test" / "MS" / "02",
+        ROOT / "results" / "test" / "MS" / "02",
+    ):
+        if removed_path.exists():
+            raise ValueError(f"已删除的 Test02 路径仍然存在：{removed_path}")
 
 
 def main() -> int:
     validate_test01()
-    validate_test02()
     validate_readmes()
-    print("[OK] Test01/Test02 的 BN affine 协议、来源哈希、表格与图片均有效。")
+    print("[OK] Test01 的 BN affine 协议、来源哈希、表格与图片均有效。")
     return 0
 
 
