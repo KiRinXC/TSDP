@@ -18,6 +18,9 @@ __pycache__/
 /playground/**/*.pt
 /results/playground/**/*.pt
 
+# 本地临时实验及其全部产物
+/temp/
+
 # Common local/editor files
 .ipynb_checkpoints/
 .DS_Store
