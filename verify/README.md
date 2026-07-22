@@ -26,7 +26,9 @@ train/validation、主结果不是最早的 validation-best、单个 case 多次
 Lab02 的 TensorShield Top-10 trainability 消融会额外核对仅使用 seed 42、三组
 共享初始状态、替换头始终可训练、public/victim 两侧参数计数，以及 joint finetune
 与 Lab04 正式 Top-10 的 best epoch 和三个指标逐值一致。
-Lab07 会核对四类 BN gamma 的十种子 drop 和 seed-42 add 对偶实验。
+Lab07 会核对四类 BN gamma 的十种子 drop、seed-42 add 对偶实验，以及 Feature Conv
+Top-5 加三个 downsample Conv 与 Stem BN1 的单 seed mask、PG03/PG05 来源、100 轮
+history、一次最终评估和双黑盒参考线。
 Lab08 还会核对五个 `conv1.weight` 的 seed 43–52 leave-one-out 笛卡尔积、六组
 固定 mask 与保护成本、50 组共 5,000 轮 history、逐 seed 配对差值及 Lab06
 基础集合/黑盒来源哈希；同时核对将五个 `conv1` 一一换成对应 `conv2` 的十种子
@@ -41,7 +43,12 @@ Playground 验证会核对 PG01 的 20 个 Conv weight 与 20 个 BN gamma、500
 及乘积分数，核对同样三套独立排名，以及各自 9 张 all/main/bn 图。PG05 会核对
 seed-42 八组 Top-5 来源、两组同源 BN+Conv 并集、两个跨归一化交叉并集、固定分类头、
 canonical 初始化、400/100 validation-best、八个 mask、800 轮 history、单次
-eval_ms 结果及 soft 黑盒引用。
+eval_ms 结果及 soft 黑盒引用。PG06 会重算 `sqrt(feature_count×parameter_count)`
+对称分母、三套独立排名和 9 张图，并逐项核对其乘积分数平方等于 PG03 与 PG04
+乘积分数之积。PG07 会核对固定分类头、Stem BN1 与三个 downsample Conv，PG03
+Feature main 连续 Top-k 的嵌套 mask、每组 canonical 初始化和 100 轮 history、逐组
+单次 `eval_ms`、首次任一指标反弹早停、soft/hard 黑盒引用、达到 Top-5 时与 Lab07
+相同的 mask，以及两张曲线图。
 
 `make verify` 默认检查四个公开数据集的 canonical layout 和 `dataset/MS/` 划分协议，但跳过公开数据压缩包的 MD5。需要同时核对压缩包时使用 `make verify VERIFY_ARGS=""`。旧的 `dataset/query/` 已退出当前协议，不再由验证器读取；MS query 只由 `dataset/MS/<dataset>/manifest.json` 指向 `splits.tsv` 中的 `query_pool_ms`。
 

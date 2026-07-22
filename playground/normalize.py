@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""PG03/PG04 共用的残差归一化派生入口。"""
+"""PG03/PG04/PG06 共用的残差归一化派生入口。"""
 
 from __future__ import annotations
 
+import math
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -39,20 +40,47 @@ DATA_FIELDS = (
 
 
 def run_normalization(mode: str) -> int:
-    if mode not in {"feature", "param"}:
+    if mode not in {"feature", "param", "mix"}:
         raise ValueError(f"未知归一化模式：{mode}")
     manifest = load_raw_manifest()
     raw_rows = load_raw_rows()
-    normalizer_field = "feature_count" if mode == "feature" else "parameter_count"
-    output_id = "03_feature" if mode == "feature" else "04_param"
-    experiment = (
-        "03_feature_normalized_residual_product"
-        if mode == "feature"
-        else "04_parameter_normalized_residual_product"
-    )
+    specs = {
+        "feature": {
+            "output_id": "03_feature",
+            "experiment": "03_feature_normalized_residual_product",
+            "normalizer_name": "feature_count",
+            "normalization_label": "feature_count (C×H×W)",
+            "title_prefix": "Feature-normalized",
+        },
+        "param": {
+            "output_id": "04_param",
+            "experiment": "04_parameter_normalized_residual_product",
+            "normalizer_name": "parameter_count",
+            "normalization_label": "weight parameter_count",
+            "title_prefix": "Parameter-normalized",
+        },
+        "mix": {
+            "output_id": "06_mix",
+            "experiment": "06_feature_parameter_mixed_residual_product",
+            "normalizer_name": "sqrt_feature_count_x_parameter_count",
+            "normalization_label": "sqrt(feature_count × parameter_count)",
+            "title_prefix": "Feature-parameter mixed-normalized",
+        },
+    }
+    spec = specs[mode]
+    output_id = str(spec["output_id"])
+    experiment = str(spec["experiment"])
+    normalizer_name = str(spec["normalizer_name"])
     rows: list[dict[str, object]] = []
     for source in raw_rows:
-        normalizer = int(source[normalizer_field])
+        feature_count = int(source["feature_count"])
+        parameter_count = int(source["parameter_count"])
+        if mode == "feature":
+            normalizer = float(feature_count)
+        elif mode == "param":
+            normalizer = float(parameter_count)
+        else:
+            normalizer = math.sqrt(feature_count * parameter_count)
         if normalizer <= 0:
             raise ValueError(f"{source['state_name']} 的归一化分母不是正数。")
         raw_cross = float(source["raw_cross_l1"])
@@ -66,10 +94,12 @@ def run_normalization(mode: str) -> int:
                 "operator_type": source["operator_type"],
                 "module": source["module"],
                 "state_name": source["state_name"],
-                "parameter_count": int(source["parameter_count"]),
-                "feature_count": int(source["feature_count"]),
-                "normalizer_name": normalizer_field,
-                "normalizer_value": normalizer,
+                "parameter_count": parameter_count,
+                "feature_count": feature_count,
+                "normalizer_name": normalizer_name,
+                "normalizer_value": (
+                    int(normalizer) if mode in {"feature", "param"} else normalizer
+                ),
                 "raw_cross_l1": raw_cross,
                 "raw_natural_l1": raw_natural,
                 "cross_residual": cross,
@@ -96,20 +126,21 @@ def run_normalization(mode: str) -> int:
         raise ValueError(f"{output_id} BN gamma scope 应为 20 项。")
     output_root = ROOT / "results" / "playground" / output_id
     output_root.mkdir(parents=True, exist_ok=True)
-    write_tsv(output_root / "data.tsv", rows, DATA_FIELDS)
+    all_filename = "all.tsv" if mode == "mix" else "data.tsv"
+    write_tsv(output_root / all_filename, rows, DATA_FIELDS)
     write_tsv(output_root / "main.tsv", main_rows, DATA_FIELDS)
     write_tsv(output_root / "bn.tsv", bn_rows, DATA_FIELDS)
-    normalization_label = (
-        "feature_count (C×H×W)" if mode == "feature" else "weight parameter_count"
-    )
-    title_prefix = "Feature-normalized" if mode == "feature" else "Parameter-normalized"
+    normalization_label = str(spec["normalization_label"])
+    title_prefix = str(spec["title_prefix"])
     plot_specs = (
         ("cross_residual", "cross", f"{title_prefix} cross residual", f"raw_cross_l1 / {normalization_label}"),
         ("natural_residual", "natural", f"{title_prefix} natural residual", f"raw_natural_l1 / {normalization_label}"),
         ("product_score", "product", f"{title_prefix} cross × natural score", "cross_residual × natural_residual"),
     )
     outputs: dict[str, str] = {
-        "data": f"results/playground/{output_id}/data.tsv",
+        "all" if mode == "mix" else "data": (
+            f"results/playground/{output_id}/{all_filename}"
+        ),
         "main": f"results/playground/{output_id}/main.tsv",
         "bn": f"results/playground/{output_id}/bn.tsv",
     }
@@ -142,14 +173,37 @@ def run_normalization(mode: str) -> int:
         "main_candidate_count": len(main_rows),
         "bn_candidate_count": len(bn_rows),
         "candidate_rule": manifest["candidate_rule"],
-        "normalization": {
-            "mode": mode,
-            "denominator_field": normalizer_field,
-            "cross_residual": f"raw_cross_l1/{normalizer_field}",
-            "natural_residual": f"raw_natural_l1/{normalizer_field}",
-            "product_score": "cross_residual*natural_residual",
-            "primary_score": "product_score",
-        },
+        "normalization": (
+            {
+                "mode": mode,
+                "denominator_field": normalizer_name,
+                "cross_residual": f"raw_cross_l1/{normalizer_name}",
+                "natural_residual": f"raw_natural_l1/{normalizer_name}",
+                "product_score": "cross_residual*natural_residual",
+                "primary_score": "product_score",
+            }
+            if mode in {"feature", "param"}
+            else {
+                "mode": mode,
+                "denominator_fields": ["feature_count", "parameter_count"],
+                "symmetric_denominator": normalizer_name,
+                "cross_residual": (
+                    "raw_cross_l1/sqrt(feature_count*parameter_count)"
+                ),
+                "natural_residual": (
+                    "raw_natural_l1/sqrt(feature_count*parameter_count)"
+                ),
+                "product_score": (
+                    "raw_cross_l1*raw_natural_l1/"
+                    "(feature_count*parameter_count)"
+                ),
+                "score_identity": (
+                    "mix_product_score=sqrt(feature_product_score*"
+                    "parameter_product_score)"
+                ),
+                "primary_score": "product_score",
+            }
+        ),
         "ranking": "product_score_descending_then_state_name_ascending",
         "scope_ranks_independent": True,
         "ranking_scopes": {

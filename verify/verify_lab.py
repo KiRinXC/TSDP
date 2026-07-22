@@ -1320,6 +1320,200 @@ def validate_lab07_bn_add() -> None:
         raise ValueError("Lab07 BN add 指标图缺失或为空。")
 
 
+def validate_lab07_feature() -> None:
+    json_path = "results/lab/07_bn/feature.json"
+    history_path = "results/lab/07_bn/feature_history.tsv"
+    payload = load_json(json_path)
+    validate_protocol(payload, json_path)
+    if (
+        payload.get("experiment") != "07_feature_conv_downsample_stem_bn1"
+        or payload.get("scientific_status")
+        != "single_seed_diagnostic_no_multi_seed_claim"
+        or payload.get("seed") != SEED
+    ):
+        raise ValueError("Lab07 Feature Conv 扩展的实验标识或 seed 不正确。")
+    validate_source_hashes(
+        payload,
+        (
+            ("victim_checkpoint", "victim_checkpoint_sha256"),
+            ("official_weight", "official_weight_sha256"),
+            ("posterior_path", "posterior_sha256"),
+        ),
+        "Lab07 Feature Conv 扩展",
+    )
+    rank_source = payload.get("feature_rank_source", {})
+    validate_source_hashes(
+        rank_source,
+        (("metrics", "metrics_sha256"), ("main", "main_sha256")),
+        "Lab07 Feature Conv 排名来源",
+    )
+    rank_metrics = load_json(str(rank_source["metrics"]))
+    rank_rows = read_tsv(str(rank_source["main"]))
+    if (
+        rank_metrics.get("experiment")
+        != "03_feature_normalized_residual_product"
+        or rank_metrics.get("seed") != SEED
+        or len(rank_rows) != 16
+        or [int(row["product_rank"]) for row in rank_rows] != list(range(1, 17))
+    ):
+        raise ValueError("Lab07 Feature Conv 排名来源协议不正确。")
+    feature_states = tuple(row["state_name"] for row in rank_rows[:5])
+    expected_feature_states = (
+        "layer2.0.conv1.weight",
+        "layer1.1.conv1.weight",
+        "layer1.0.conv1.weight",
+        "layer3.0.conv1.weight",
+        "layer2.1.conv1.weight",
+    )
+    if (
+        feature_states != expected_feature_states
+        or rank_source.get("top5_states") != list(feature_states)
+    ):
+        raise ValueError("Lab07 没有使用当前 PG03 Feature main Top-5。")
+
+    pg05_source = payload.get("pg05_reference_source", {})
+    validate_source_hashes(
+        pg05_source,
+        (("path", "sha256"),),
+        "Lab07 Feature Conv PG05 参考",
+    )
+    pg05 = load_json(str(pg05_source["path"]))
+    current_references = [
+        row
+        for row in pg05.get("results", ())
+        if row.get("case") == "feature_main_top5"
+    ]
+    reference = payload.get("reference")
+    if len(current_references) != 1 or reference != current_references[0]:
+        raise ValueError("Lab07 Feature Conv 基线不是当前 PG05 唯一参考。")
+
+    expected_downsample = [
+        "layer2.0.downsample.0.weight",
+        "layer3.0.downsample.0.weight",
+        "layer4.0.downsample.0.weight",
+    ]
+    added_states = payload.get("added_states", {})
+    if (
+        added_states.get("downsample_conv") != expected_downsample
+        or added_states.get("stem_bn1_gamma") != "bn1.weight"
+    ):
+        raise ValueError("Lab07 Feature Conv 扩展的 downsample 或 Stem BN1 定义不正确。")
+
+    trained = payload.get("result")
+    if not isinstance(trained, dict):
+        raise ValueError("Lab07 Feature Conv 扩展缺少训练结果。")
+    validate_result(trained, f"{json_path}:result")
+    protection = trained.get("protection", {})
+    expected_states = (
+        *feature_states,
+        *expected_downsample,
+        "bn1.weight",
+        "last_linear.weight",
+        "last_linear.bias",
+    )
+    if (
+        trained.get("case") != "feature_conv5_downsample_stem_bn1"
+        or tuple(trained.get("selected_states", ())) != expected_states
+        or protection.get("protected_unit_count") != 11
+        or protection.get("protected_param_count") != 813_220
+        or not protection.get("classifier_protected")
+        or protection.get("head_mode") != "replace"
+        or protection.get("protection_mask_sha256")
+        != "887d0843a03dbfc5c99f364fa3f2008e05c7ae4ebfda65c0e79082c1ca261813"
+    ):
+        raise ValueError("Lab07 Feature Conv 扩展的结果集合或保护统计不正确。")
+    roles = {
+        "feature_conv_top5": (5, 589_824),
+        "added_downsample_conv": (3, 172_032),
+        "added_stem_bn1_gamma": (1, 64),
+        "fixed_head": (2, 51_300),
+    }
+    units = protection.get("selected_units", ())
+    for role, expected in roles.items():
+        role_units = [unit for unit in units if unit.get("role") == role]
+        actual = (
+            len(role_units),
+            sum(int(unit.get("numel", 0)) for unit in role_units),
+        )
+        if actual != expected:
+            raise ValueError(f"Lab07 Feature Conv 扩展 {role} 统计不正确。")
+    validate_masks([trained], "Lab07 Feature Conv 扩展")
+    selected_epoch = int(trained["primary"]["epoch"])
+    validate_history(
+        history_path,
+        key_fields=("case",),
+        expected_epochs={("feature_conv5_downsample_stem_bn1",): EPOCHS},
+        selected_epochs={("feature_conv5_downsample_stem_bn1",): selected_epoch},
+    )
+
+    reference_result = reference["result"]
+    result = trained["result"]
+    expected_effect = {
+        metric: float(result[metric]) - float(reference_result[metric])
+        for metric in ("surrogate_acc", "fidelity", "posterior_kl")
+    }
+    effect = payload.get("effect_vs_feature_conv5", {})
+    for metric, value in expected_effect.items():
+        assert_close(float(effect[metric]), value, f"Lab07 Feature Conv {metric} effect")
+    data_rows = read_tsv("results/lab/07_bn/feature.tsv")
+    if (
+        [row["origin"] for row in data_rows] != ["reused_pg05", "trained_lab07"]
+        or [row["case"] for row in data_rows]
+        != ["feature_main_top5", "feature_conv5_downsample_stem_bn1"]
+    ):
+        raise ValueError("Lab07 Feature Conv feature.tsv 的来源或顺序不正确。")
+    for data, metrics, differences in (
+        (
+            data_rows[0],
+            reference_result,
+            {"surrogate_acc": 0.0, "fidelity": 0.0, "posterior_kl": 0.0},
+        ),
+        (data_rows[1], result, expected_effect),
+    ):
+        for metric in ("surrogate_acc", "fidelity", "posterior_kl"):
+            assert_close(
+                float(data[metric]),
+                float(metrics[metric]),
+                f"Lab07 Feature Conv data {metric}",
+            )
+        for field, metric in (
+            ("accuracy_minus_feature_conv5", "surrogate_acc"),
+            ("fidelity_minus_feature_conv5", "fidelity"),
+            ("posterior_kl_minus_feature_conv5", "posterior_kl"),
+        ):
+            assert_close(
+                float(data[field]),
+                float(differences[metric]),
+                f"Lab07 Feature Conv data {field}",
+            )
+
+    bounds = payload.get("bounds", {})
+    for name, artifact, label_mode in (
+        ("full_protection", "full_protection", "soft"),
+        ("hard_blackbox", "hard_blackbox", "hard"),
+    ):
+        bound = bounds.get(name, {})
+        path = Path(str(bound.get("path", "")))
+        if (
+            bound.get("artifact_id") != artifact
+            or bound.get("label_mode") != label_mode
+            or not path.is_file()
+            or sha256_file(path) != bound.get("sha256")
+        ):
+            raise ValueError(f"Lab07 Feature Conv 的 {name} 参考不正确。")
+    outputs = payload.get("outputs")
+    if outputs != {
+        "data": "results/lab/07_bn/feature.tsv",
+        "history": "results/lab/07_bn/feature_history.tsv",
+        "plot": "results/lab/07_bn/feature.png",
+        "mask": "results/lab/07_bn/feature_mask.pt",
+    }:
+        raise ValueError("Lab07 Feature Conv 扩展输出索引不正确。")
+    plot = ROOT / str(outputs["plot"])
+    if not plot.is_file() or plot.stat().st_size == 0:
+        raise ValueError("Lab07 Feature Conv 扩展图缺失或为空。")
+
+
 def validate_lab06() -> None:
     payload = validate_experiment(
         "results/lab/06_weight/metrics.json",
@@ -2192,6 +2386,7 @@ def main() -> int:
     validate_lab06()
     validate_lab07_bn_drop()
     validate_lab07_bn_add()
+    validate_lab07_feature()
     validate_lab08_dependency()
     validate_lab08_swap()
     validate_lab08_pair()

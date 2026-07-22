@@ -156,9 +156,11 @@ Lab 验证实验/
 │   ├── drop.py 将 20 个 BN gamma 分为 Stem、Block BN1、Block BN2 与 Downsample
 │   ├── 以 seed 43–52 执行 No/All gamma 和四种 leave-one-group-out
 │   ├── add.py 以 seed 42 从 No gamma 分别加入四类 gamma
+│   ├── feature.py 固定 Feature Conv Top-5，再加入三个 downsample Conv 与 Stem BN1
 │   └── results/lab/07_bn/
 │       ├── drop.json/tsv/history.tsv/png 与六组 mask
-│       └── add.json/tsv/history.tsv/png 与五组 mask
+│       ├── add.json/tsv/history.tsv/png 与五组 mask
+│       └── feature.json/tsv/history.tsv/png 与单组 mask
 ├── lab/08_structure/
 │   ├── run.py 展开 ResNet18 逐算子与 122 个 state unit
 │   ├── dependency.py 以十个 seed 逐一暴露固定集合中的五个 conv1
@@ -196,16 +198,28 @@ Lab 验证实验/
 │   ├── 对 all 40 项、main 16 项与 BN gamma 20 项分别重排
 │   └── results/playground/03_feature/  metrics/data/main/bn 与 9 张 all/main/bn 图
 ├── playground/04_param/
-    ├── 将 PG01 两项残差总量分别除以 numel(weight)
-    ├── 以归一化 cross × natural 为保护效率代理
-    ├── 对 all 40 项、main 16 项与 BN gamma 20 项分别重排
-    └── results/playground/04_param/  metrics/data/main/bn 与 9 张 all/main/bn 图
-└── playground/05_diagnose/
-    ├── 读取 PG03/PG04 的 bn/main 独立排名并各取 Top-5
-    ├── 每种归一化分别构造 BN、main Conv 与二者 10 项并集，共六组
-    ├── 另构造 Feature Conv+Parameter BN 与 Feature BN+Parameter Conv 两个交叉组
-    ├── 八组共同固定保护分类头，使用 seed-42 soft-query validation-best 协议训练
+│   ├── 将 PG01 两项残差总量分别除以 numel(weight)
+│   ├── 以归一化 cross × natural 为保护效率代理
+│   ├── 对 all 40 项、main 16 项与 BN gamma 20 项分别重排
+│   └── results/playground/04_param/  metrics/data/main/bn 与 9 张 all/main/bn 图
+├── playground/05_diagnose/
+│   ├── 读取 PG03/PG04 的 bn/main 独立排名并各取 Top-5
+│   ├── 每种归一化分别构造 BN、main Conv 与二者 10 项并集，共六组
+│   ├── 另构造 Feature Conv+Parameter BN 与 Feature BN+Parameter Conv 两个交叉组
+│   ├── 八组共同固定保护分类头，使用 seed-42 soft-query validation-best 协议训练
+│   ├── checkpoint 固定后每组只在完整 eval_ms 上评估一次
+│   ├── 图中读取正式 full_protection soft-posterior 黑盒参考线
+│   └── results/playground/05_diagnose/  metrics/data/history、八个 mask 与三指标图
+├── playground/06_mix/
+│   ├── 将 PG01 两项残差分别除以 sqrt(C×H×W×numel(weight))
+│   ├── 以归一化 cross × natural 为特征量与参数量联合分数
+│   ├── 对 all 40 项、main 16 项与 BN gamma 20 项分别重排
+│   └── results/playground/06_mix/  metrics/all/main/bn 与 9 张 all/main/bn 图
+└── playground/07_topk/
+    ├── 固定替换分类头、Stem BN1 gamma 与三个 downsample Conv
+    ├── 读取 PG03 Feature main 排名并按顺序形成最多 Top-0–16 的嵌套 mask
+    ├── 每组独立重放 seed-42 canonical 初始化并按 query validation 选模
+    ├── 任一指标相对前一级反弹时保留反弹点并停止后续 Top-k
     ├── checkpoint 固定后每组只在完整 eval_ms 上评估一次
-    ├── 图中读取正式 full_protection soft-posterior 黑盒参考线
-    └── results/playground/05_diagnose/  metrics/data/history、八个 mask 与三指标图
+    └── results/playground/07_topk/  metrics/data/history、实际 case mask 与两张 Top-k 曲线
 ```

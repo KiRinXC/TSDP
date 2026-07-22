@@ -261,6 +261,10 @@ TEESlice 结果只在 `results/MS/resnet18/c100/teeslice/` 保存，并标记为
   Block BN2 或 Downsample 会稳定反弹；删除 Block BN1 反而改善，应该解释为固定拼接
   失配，而不是主动泄露 BN1 的安全性。seed-42 add 实验的保护改善排序为
   Downsample > Block BN2 > Stem >> Block BN1，单组仍不能替代跨层 gamma 闭包。
+  另一个 seed-42 case 固定同一组 Feature Conv Top-5，加入三个 downsample Conv 与
+  Stem `bn1.weight` 后由 `0.1798/0.1947/2.642482` 改善为
+  `0.1285/0.1384/3.000704`（7.2429%）；accuracy/fidelity 越过 soft 黑盒但 KL
+  尚差 `0.039113`。该联合 case 不能分离四个新增 state 的单独贡献。
 - `lab/08_structure`：统一保存逐 unit 结构表、五个 conv1 条件依赖、对应 conv2
   替换和局部卷积/BN 配对。rank-9 `layer3.0.conv1.weight` 的十种子平均反弹最大，
   rank-2 次之。把五个 conv1 换成对应 conv2 后，即使保护比例从 5.7529% 增至
@@ -300,6 +304,17 @@ TEESlice 结果只在 `results/MS/resnet18/c100/teeslice/` 保存，并标记为
   （`2.4297%`），只新增 320 个 gamma 参数就比 Parameter Conv 改善
   `-0.0377/-0.0422/+0.163538`。八组均未达到 soft 黑盒，不能写成多随机种子稳定
   结论。旧 `05_prefix` 代码和产物保持删除。
+- `playground/06_mix`：两项原始残差分别除以
+  `sqrt(C×H×W×numel(weight))` 后相乘，主分数等于 PG03/PG04 乘积分数的几何平均。
+  all 前十项仍全部为 BN gamma；BN Top-5 与 main Top-5 集合均和 PG04 完全一致，
+  因而 PG05 已覆盖对应联合 mask。BN Top-10 只用 Feature BN 第一名
+  `layer4.1.bn2.weight` 替换 PG04 的 `layer2.1.bn1.weight`，当前没有新增保护训练。
+- `playground/07_topk`：固定替换分类头、Stem BN1 gamma 与三个 downsample Conv，
+  按 PG03 Feature main 排名从 Top-0 顺序增加 Conv，并在任一指标相对前一级
+  反弹时保留触发点后早停。Top-6 首次三项都越过 soft 黑盒，为
+  `0.1180/0.1279/3.058497`（17.7494%）。Top-7 相对 Top-6 的 accuracy/fidelity
+  分别反弹 `+0.0005/+0.0011`，触发早停，因而 Top-8–16 不进入结果；Top-6 是反弹
+  前的推荐停止点。Top-5 mask 和三个指标均逐值复现 Lab07；全部结论仅限 seed 42。
 Lab 结果不能混入正式主实验索引，但也不能以“清理历史”为由删除仍承担独立结论的 Lab。
 
 ## 5. 当前卡在哪里
@@ -418,7 +433,7 @@ make verify
 make results
 ```
 
-TSDP 只认 `~/venvs/dl-py310-torch210-cu121`。`requirements.txt` 保存直接依赖，`requirements.lock.txt` 保存完整解析版本；不得退回系统 `/usr/bin/python3`。`make gpu` 会严格核对 WSL GPU 桥接并运行真实 CUDA 前向和反向计算，正式实验前必须通过。当前 `make unit` 应通过 43 个测试，`make results` 应通过正式 MS、Lab02-09 与 Playground01-05 的协议、来源哈希、all/main/bn 数据、mask、history 及图片核对。运行后清理任何意外生成的 `__pycache__` 和 `*.pyc`。
+TSDP 只认 `~/venvs/dl-py310-torch210-cu121`。`requirements.txt` 保存直接依赖，`requirements.lock.txt` 保存完整解析版本；不得退回系统 `/usr/bin/python3`。`make gpu` 会严格核对 WSL GPU 桥接并运行真实 CUDA 前向和反向计算，正式实验前必须通过。当前 `make unit` 应通过 43 个测试，`make results` 应通过正式 MS、Lab02-09 与 Playground01-06 的协议、来源哈希、all/main/bn 数据、mask、history 及图片核对。运行后清理任何意外生成的 `__pycache__` 和 `*.pyc`。
 
 ### 普通 baseline
 

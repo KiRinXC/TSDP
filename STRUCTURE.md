@@ -36,7 +36,7 @@ TSDP/
 │   │   ├── 04_tensorshield          TensorShield 前缀、删除消融与位置窗口结果
 │   │   ├── 05_state                 State 类型与参数语义分类结果
 │   │   ├── 06_weight                遗漏 weight 语义闭包与多种子候选结果
-│   │   ├── 07_bn                    BN gamma 分组 drop/add 结果
+│   │   ├── 07_bn                    BN gamma 分组及 Feature Conv 扩展结果
 │   │   ├── 08_structure             结构、条件依赖、位置替换与局部配对结果
 │   │   └── 09_leakage               泄露状态利用强度与 MS 负迁移结果
 │   └── playground/                  编号探索的独立结果
@@ -44,7 +44,9 @@ TSDP/
 │       ├── 02_rank                  all/main/bn 有效秩与秩乘积结果
 │       ├── 03_feature               all/main/bn 特征图归一化残差乘积
 │       ├── 04_param                 all/main/bn 参数量归一化残差乘积
-│       └── 05_diagnose              BN/Conv 同源联合与跨归一化交叉保护诊断
+│       ├── 05_diagnose              BN/Conv 同源联合与跨归一化交叉保护诊断
+│       ├── 06_mix                   all/main/bn 特征量与参数量联合归一化残差乘积
+│       └── 07_topk                  固定结构依赖状态后的 Feature Conv Top-k 反弹曲线
 ├── models/                          统一模型结构及 TEESlice slice/backbone 接口
 ├── verify/                          环境/GPU、数据协议及 MS/Lab/Playground 结果验证
 ├── lab/                             小型验证实验
@@ -54,7 +56,7 @@ TSDP/
 │   ├── 04_tensorshield              TensorShield 前缀、删除消融与位置窗口验证
 │   ├── 05_state                     State 类型与参数语义分类
 │   ├── 06_weight                    遗漏 weight 语义闭包与多种子候选验证
-│   ├── 07_bn                        BN gamma 分组 drop/add 验证
+│   ├── 07_bn                        BN gamma 分组及 Feature Conv 扩展验证
 │   ├── 08_structure                 结构、条件依赖、位置替换与局部配对验证
 │   └── 09_leakage                   泄露状态利用强度与 MS 负迁移验证
 ├── playground/                      未进入 Lab 或正式实验的编号探索
@@ -62,6 +64,8 @@ TSDP/
 │   ├── 02_rank                      all/main/bn 有效秩派生分析
 │   ├── 03_feature                   all/main/bn 特征图归一化残差分析
 │   ├── 04_param                     all/main/bn 参数量归一化残差分析
-│   └── 05_diagnose                  BN/Conv 联合与交叉 Top-5 单种子诊断
+│   ├── 05_diagnose                  BN/Conv 联合与交叉 Top-5 单种子诊断
+│   ├── 06_mix                       all/main/bn 特征量与参数量联合归一化分析
+│   └── 07_topk                      固定结构依赖状态后的 Feature Conv Top-k 反弹扫描
 └── docs/                            参考论文
 ```

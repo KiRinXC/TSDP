@@ -1,0 +1,3 @@
+origin	case	label	best_epoch	protected_unit_count	protected_param_count	protected_param_ratio	protection_mask_sha256	surrogate_acc	fidelity	posterior_kl	accuracy_minus_feature_conv5	fidelity_minus_feature_conv5	posterior_kl_minus_feature_conv5
+reused_pg05	feature_main_top5	Feature Conv Top-5	94	7	641124	0.05710141922575832	f5f5222c876b055df2163e8eab197284c21a7d7697956dafa0d3ee4ff2344247	0.1798	0.1947	2.642481948852539	0.0	0.0	0.0
+trained_lab07	feature_conv5_downsample_stem_bn1	Feature Conv Top-5 + 3 downsample Conv + Stem BN1	93	11	813220	0.07242907166596661	887d0843a03dbfc5c99f364fa3f2008e05c7ae4ebfda65c0e79082c1ca261813	0.1285	0.1384	3.000703907775879	-0.051299999999999985	-0.05630000000000002	0.3582219589233402

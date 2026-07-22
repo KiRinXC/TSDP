@@ -14,6 +14,10 @@ __pycache__/
 # 本地 MS 派生产物，可由正式脚本重新生成
 /dataset/MS/*/
 
+# Playground 本地 PyTorch 产物
+/playground/**/*.pt
+/results/playground/**/*.pt
+
 # Common local/editor files
 .ipynb_checkpoints/
 .DS_Store

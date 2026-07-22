@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""核对 PG01–PG05 原始输出、派生排名与 Top-5 保护诊断。"""
+"""核对 PG01–PG07 原始输出、派生排名与保护诊断。"""
 
 from __future__ import annotations
 
@@ -30,6 +30,8 @@ PG02 = PG_ROOT / "02_rank"
 PG03 = PG_ROOT / "03_feature"
 PG04 = PG_ROOT / "04_param"
 PG05 = PG_ROOT / "05_diagnose"
+PG06 = PG_ROOT / "06_mix"
+PG07 = PG_ROOT / "07_topk"
 MAIN_MODULES = tuple(
     f"layer{stage}.{block}.conv{conv}"
     for stage in range(1, 5)
@@ -58,6 +60,13 @@ PG05_CASE_SPECS = {
     "cross_feature_bn_param_conv": ("feature_bn+param_conv", "cross_bn_main"),
 }
 HEAD_STATES = ("last_linear.weight", "last_linear.bias")
+PG07_STRUCTURAL_STATES = (
+    "bn1.weight",
+    "layer2.0.downsample.0.weight",
+    "layer3.0.downsample.0.weight",
+    "layer4.0.downsample.0.weight",
+)
+PG07_FIXED_STATES = (*PG07_STRUCTURAL_STATES, *HEAD_STATES)
 
 
 def load_json(path: Path) -> dict[str, object]:
@@ -801,6 +810,468 @@ def validate_pg05() -> None:
         raise ValueError("PG05 存在未登记图片。")
 
 
+def validate_mixed_normalization(raw_rows: list[dict[str, str]]) -> None:
+    payload = load_json(PG06 / "metrics.json")
+    normalization = payload.get("normalization", {})
+    if (
+        payload.get("schema_version") != 1
+        or payload.get("experiment")
+        != "06_feature_parameter_mixed_residual_product"
+        or payload.get("candidate_count") != 40
+        or payload.get("main_candidate_count") != 16
+        or payload.get("bn_candidate_count") != 20
+        or normalization.get("mode") != "mix"
+        or normalization.get("denominator_fields")
+        != ["feature_count", "parameter_count"]
+        or normalization.get("symmetric_denominator")
+        != "sqrt_feature_count_x_parameter_count"
+        or normalization.get("primary_score") != "product_score"
+        or payload.get("scope_ranks_independent") is not True
+        or payload.get("ranking_scopes") != {"all": 40, "main": 16, "bn": 20}
+    ):
+        raise ValueError("PG06 的联合归一化协议不正确。")
+    if (
+        payload.get("source", {}).get("manifest_sha256")
+        != sha256_file(PG01 / "manifest.json")
+        or payload.get("source", {}).get("data_sha256")
+        != sha256_file(PG01 / "data.tsv")
+    ):
+        raise ValueError("PG06 没有引用当前 PG01 原始来源。")
+
+    feature_by_scope = {
+        "all": {row["state_name"]: row for row in read_tsv(PG03 / "data.tsv")},
+        "main": {row["state_name"]: row for row in read_tsv(PG03 / "main.tsv")},
+        "bn": {row["state_name"]: row for row in read_tsv(PG03 / "bn.tsv")},
+    }
+    param_by_scope = {
+        "all": {row["state_name"]: row for row in read_tsv(PG04 / "data.tsv")},
+        "main": {row["state_name"]: row for row in read_tsv(PG04 / "main.tsv")},
+        "bn": {row["state_name"]: row for row in read_tsv(PG04 / "bn.tsv")},
+    }
+    scopes = {
+        "all": (read_tsv(PG06 / "all.tsv"), raw_rows),
+        "main": (
+            read_tsv(PG06 / "main.tsv"),
+            [row for row in raw_rows if row["module"] in MAIN_MODULES],
+        ),
+        "bn": (
+            read_tsv(PG06 / "bn.tsv"),
+            [row for row in raw_rows if row["operator_type"] == "bn_gamma"],
+        ),
+    }
+    normalizer_name = "sqrt_feature_count_x_parameter_count"
+    for scope, (rows, source_rows) in scopes.items():
+        expected_count = len(source_rows)
+        if [int(row["product_rank"]) for row in rows] != list(
+            range(1, expected_count + 1)
+        ):
+            raise ValueError(f"PG06 {scope} 的 product 排名不完整。")
+
+        def expected_product(source: dict[str, str]) -> float:
+            denominator_squared = int(source["feature_count"]) * int(
+                source["parameter_count"]
+            )
+            return (
+                float(source["raw_cross_l1"])
+                * float(source["raw_natural_l1"])
+                / denominator_squared
+            )
+
+        expected_rows = sorted(
+            source_rows,
+            key=lambda row: (-expected_product(row), row["state_name"]),
+        )
+        if [row["state_name"] for row in rows] != [
+            row["state_name"] for row in expected_rows
+        ]:
+            raise ValueError(f"PG06 {scope} 没有在自身候选集内独立排序。")
+        for row, source in zip(rows, expected_rows, strict=True):
+            feature_count = int(source["feature_count"])
+            parameter_count = int(source["parameter_count"])
+            denominator = math.sqrt(feature_count * parameter_count)
+            cross = float(source["raw_cross_l1"]) / denominator
+            natural = float(source["raw_natural_l1"]) / denominator
+            product = cross * natural
+            for field in (
+                "candidate_index",
+                "unit_index",
+                "operator_type",
+                "module",
+                "state_name",
+                "parameter_count",
+                "feature_count",
+                "raw_cross_l1",
+                "raw_natural_l1",
+            ):
+                if row[field] != source[field]:
+                    raise ValueError(
+                        f"PG06 {scope}/{row['state_name']}/{field} "
+                        "与 PG01 原始来源不一致。"
+                    )
+            if row["normalizer_name"] != normalizer_name:
+                raise ValueError(
+                    f"PG06 {scope}/{row['state_name']} 的分母名称不正确。"
+                )
+            assert_close(
+                denominator,
+                float(row["normalizer_value"]),
+                f"PG06 {scope}/{row['state_name']} denominator",
+            )
+            assert_close(
+                cross,
+                float(row["cross_residual"]),
+                f"PG06 {scope}/{row['state_name']} cross",
+            )
+            assert_close(
+                natural,
+                float(row["natural_residual"]),
+                f"PG06 {scope}/{row['state_name']} natural",
+            )
+            assert_close(
+                product,
+                float(row["product_score"]),
+                f"PG06 {scope}/{row['state_name']} product",
+            )
+            feature_score = float(
+                feature_by_scope[scope][row["state_name"]]["product_score"]
+            )
+            param_score = float(
+                param_by_scope[scope][row["state_name"]]["product_score"]
+            )
+            assert_close(
+                product * product,
+                feature_score * param_score,
+                f"PG06 {scope}/{row['state_name']} geometric identity",
+            )
+    expected_plots = {
+        f"{scope}_{metric}.png"
+        for scope in ("all", "main", "bn")
+        for metric in ("cross", "natural", "product")
+    }
+    if {path.name for path in PG06.glob("*.png")} != expected_plots:
+        raise ValueError("PG06 不是 all/main/bn 各三张联合归一化残差图。")
+    for name in expected_plots:
+        require_nonempty(PG06 / name)
+
+
+def validate_pg07() -> None:
+    payload = load_json(PG07 / "metrics.json")
+    partition = payload.get("query_partition", {})
+    if (
+        payload.get("schema_version") != 1
+        or payload.get("experiment") != "07_topk"
+        or payload.get("scientific_status")
+        != "single_seed_topk_diagnostic_no_multi_seed_claim"
+        or payload.get("protocol") != "MS"
+        or payload.get("attack_protocol") != "soft_query_validation_best_v1"
+        or payload.get("dataset") != "c100"
+        or payload.get("victim_model") != "resnet18"
+        or payload.get("seed") != 42
+        or payload.get("candidate_case_count") != 17
+        or payload.get("candidate_top_k_values") != list(range(17))
+        or payload.get("fixed_structural_states") != list(PG07_STRUCTURAL_STATES)
+        or payload.get("fixed_head_states") != list(HEAD_STATES)
+        or payload.get("label_mode") != "soft"
+        or payload.get("query_budget") != 500
+        or payload.get("query_train_size") != 400
+        or payload.get("query_validation_size") != 100
+        or payload.get("max_epochs") != 100
+        or payload.get("batch_size") != 64
+        or payload.get("checkpoint_selection")
+        != "minimum_validation_soft_cross_entropy"
+        or payload.get("eval_ms_passes_per_case") != 1
+        or partition.get("train_size") != 400
+        or partition.get("validation_size") != 100
+        or partition.get("seed") != 42
+        or partition.get("seed_offset") != 100
+    ):
+        raise ValueError("PG07 的 seed-42 Top-0–16 训练协议不正确。")
+    randomization = payload.get("randomization", {})
+    if (
+        randomization.get("surrogate_initialization")
+        != "formal_victim_then_public_v1"
+        or randomization.get("surrogate_initialization_seed") != 42
+        or randomization.get("query_sampler_seed") != 42
+        or randomization.get("reset_before_each_surrogate_initialization") is not True
+    ):
+        raise ValueError("PG07 没有为 17 组重放 canonical seed-42 初始化。")
+
+    for field, hash_field in (
+        ("victim_checkpoint", "victim_checkpoint_sha256"),
+        ("official_weight", "official_weight_sha256"),
+        ("posterior_path", "posterior_sha256"),
+    ):
+        path = ROOT / str(payload.get(field, ""))
+        require_nonempty(path)
+        if sha256_file(path) != payload.get(hash_field):
+            raise ValueError(f"PG07 {field} 的来源哈希不正确。")
+
+    feature_rows = read_tsv(PG03 / "main.tsv")
+    feature_states = [row["state_name"] for row in feature_rows]
+    feature_scores = [float(row["product_score"]) for row in feature_rows]
+    source = payload.get("feature_rank_source", {})
+    if (
+        len(feature_rows) != 16
+        or [int(row["product_rank"]) for row in feature_rows] != list(range(1, 17))
+        or source.get("metrics")
+        != str((PG03 / "metrics.json").relative_to(ROOT))
+        or source.get("metrics_sha256") != sha256_file(PG03 / "metrics.json")
+        or source.get("main") != str((PG03 / "main.tsv").relative_to(ROOT))
+        or source.get("main_sha256") != sha256_file(PG03 / "main.tsv")
+        or source.get("candidate_count") != 16
+        or source.get("rank_field") != "product_rank"
+        or source.get("score_field") != "product_score"
+        or source.get("states") != feature_states
+        or len(source.get("scores", [])) != 16
+    ):
+        raise ValueError("PG07 没有引用当前 PG03 Feature main 完整排名。")
+    for index, score in enumerate(feature_scores):
+        assert_close(float(source["scores"][index]), score, f"PG07 rank score {index + 1}")
+
+    references = payload.get("references", {})
+    formal_specs = {
+        "soft_blackbox": ("full_protection", "soft"),
+        "hard_blackbox": ("hard_blackbox", "hard"),
+    }
+    for name, (artifact_id, label_mode) in formal_specs.items():
+        reference = references.get(name, {})
+        path = (
+            ROOT / "results" / "MS" / "resnet18" / "c100" / artifact_id / "metrics.json"
+        )
+        formal = load_json(path)
+        if (
+            reference.get("artifact_id") != artifact_id
+            or reference.get("label_mode") != label_mode
+            or reference.get("path") != str(path)
+            or reference.get("sha256") != sha256_file(path)
+        ):
+            raise ValueError(f"PG07 {name} 正式参考不正确。")
+        for metric in ("surrogate_acc", "fidelity", "posterior_kl"):
+            assert_close(
+                float(reference["result"][metric]),
+                float(formal["result"][metric]),
+                f"PG07 {name} {metric}",
+            )
+
+    lab07_path = ROOT / "results" / "lab" / "07_bn" / "feature.json"
+    lab07 = load_json(lab07_path)
+    lab07_result = lab07.get("result", {})
+    lab07_reference = references.get("lab07_top5", {})
+    if (
+        lab07_reference.get("path") != str(lab07_path.relative_to(ROOT))
+        or lab07_reference.get("sha256") != sha256_file(lab07_path)
+        or lab07_reference.get("case") != "feature_conv5_downsample_stem_bn1"
+        or lab07_reference.get("protection_mask_sha256")
+        != lab07_result.get("protection", {}).get("protection_mask_sha256")
+    ):
+        raise ValueError("PG07 Lab07 Top-5 外部复现参考不正确。")
+
+    case_count = int(payload.get("case_count", -1))
+    executed_top_k = payload.get("executed_top_k_values", [])
+    if not 2 <= case_count <= 17 or executed_top_k != list(range(case_count)):
+        raise ValueError("PG07 实际执行的 Top-k 不是从 Top-0 开始的连续前缀。")
+    expected_cases = [f"top_{k}" for k in range(case_count)]
+    results = payload.get("results", [])
+    data_rows = read_tsv(PG07 / "data.tsv")
+    history = read_tsv(PG07 / "history.tsv")
+    if (
+        [row.get("case") for row in results] != expected_cases
+        or [row["case"] for row in data_rows] != expected_cases
+        or len(data_rows) != case_count
+        or len(history) != case_count * 100
+    ):
+        raise ValueError("PG07 实际 Top-k 前缀不是各 100 轮和每组一行主结果。")
+    history_by_case = {
+        case: [row for row in history if row["case"] == case]
+        for case in expected_cases
+    }
+    top0_metrics = results[0]["result"]
+    previous_protected: set[str] = set()
+    previous_cost = -1
+    for k, (result, data) in enumerate(zip(results, data_rows, strict=True)):
+        case = f"top_{k}"
+        selected = feature_states[:k]
+        expected_protected = [*PG07_FIXED_STATES, *selected]
+        if (
+            result.get("case") != case
+            or result.get("k") != k
+            or result.get("added_rank") != (None if k == 0 else k)
+            or result.get("added_state") != (None if k == 0 else feature_states[k - 1])
+            or result.get("selected_conv_states") != selected
+            or result.get("protected_states") != expected_protected
+        ):
+            raise ValueError(f"PG07 {case} 没有使用 PG03 排名前 k 项。")
+        protection = result.get("protection", {})
+        mask_path = ROOT / str(protection.get("mask_path", ""))
+        require_nonempty(mask_path)
+        masks = load_protection_mask(mask_path)
+        actual_protected = {name for name, mask in masks.items() if bool(mask.all())}
+        current_protected = set(expected_protected)
+        if (
+            len(masks) != 122
+            or any(bool(mask.any()) and not bool(mask.all()) for mask in masks.values())
+            or actual_protected != current_protected
+            or protection.get("protected_unit_count") != 6 + k
+            or protection.get("classifier_protected") is not True
+            or protection.get("head_mode") != "replace"
+            or protection.get("total_param_count") != 11_227_812
+            or protection.get("protected_param_count")
+            != sum(masks[name].numel() for name in current_protected)
+            or protection.get("protected_param_count") <= previous_cost
+            or protection_mask_sha256(masks)
+            != protection.get("protection_mask_sha256")
+        ):
+            raise ValueError(f"PG07 {case} 的完整 tensor mask 或保护成本不正确。")
+        if k == 0:
+            if current_protected != set(PG07_FIXED_STATES):
+                raise ValueError("PG07 Top-0 不是固定结构集合。")
+        elif current_protected - previous_protected != {feature_states[k - 1]}:
+            raise ValueError(f"PG07 {case} 不是前一级只新增 rank-{k} Conv。")
+        previous_protected = current_protected
+        previous_cost = int(protection["protected_param_count"])
+        if [unit.get("state_name") for unit in protection.get("selected_units", [])] != expected_protected:
+            raise ValueError(f"PG07 {case} selected_units 顺序不正确。")
+
+        case_history = history_by_case[case]
+        if (
+            len(case_history) != 100
+            or [int(row["epoch"]) for row in case_history] != list(range(1, 101))
+            or any(
+                int(row["k"]) != k
+                or int(row["query_count"]) != 400
+                or int(row["validation_count"]) != 100
+                for row in case_history
+            )
+        ):
+            raise ValueError(f"PG07 {case} query history 不完整。")
+        best_loss = math.inf
+        expected_best_epoch = -1
+        for epoch_row in case_history:
+            loss = float(epoch_row["validation_loss"])
+            is_best = loss < best_loss
+            if (epoch_row["is_best"] == "True") != is_best:
+                raise ValueError(f"PG07 {case} is_best 不是严格更低更新。")
+            if is_best:
+                best_loss = loss
+                expected_best_epoch = int(epoch_row["epoch"])
+        primary = result.get("primary", {})
+        selection = result.get("selection", {})
+        if (
+            primary.get("checkpoint") != "best.pth"
+            or primary.get("epoch") != expected_best_epoch
+            or primary.get("selection_metric") != "validation_soft_cross_entropy"
+            or selection.get("epoch") != expected_best_epoch
+            or selection.get("tie_break") != "earliest_epoch"
+        ):
+            raise ValueError(f"PG07 {case} 没有选择最早 validation-best。")
+        metrics = result.get("result", {})
+        if (
+            metrics.get("eval_count") != 10_000
+            or metrics.get("eval_passes") != 1
+            or int(metrics.get("surrogate_correct", -1)) / 10_000
+            != metrics.get("surrogate_acc")
+            or int(metrics.get("agreement_count", -1)) / 10_000
+            != metrics.get("fidelity")
+            or not math.isfinite(float(metrics.get("posterior_kl", math.nan)))
+        ):
+            raise ValueError(f"PG07 {case} 单次 eval_ms 结果不正确。")
+        if (
+            int(data["k"]) != k
+            or data["added_state"] != ("" if k == 0 else feature_states[k - 1])
+            or data["selected_conv_states"] != ",".join(selected)
+            or data["protected_states"] != ",".join(expected_protected)
+            or int(data["best_epoch"]) != expected_best_epoch
+            or data["protection_mask_sha256"]
+            != protection["protection_mask_sha256"]
+        ):
+            raise ValueError(f"PG07 {case} data.tsv 与 metrics.json 不一致。")
+        for metric in ("surrogate_acc", "fidelity", "posterior_kl"):
+            assert_close(float(data[metric]), float(metrics[metric]), f"PG07 {case} {metric}")
+        previous_metrics = results[k - 1]["result"] if k > 0 else metrics
+        for metric, prefix in (
+            ("surrogate_acc", "accuracy"),
+            ("fidelity", "fidelity"),
+            ("posterior_kl", "posterior_kl"),
+        ):
+            assert_close(
+                float(data[f"{prefix}_minus_top0"]),
+                float(metrics[metric]) - float(top0_metrics[metric]),
+                f"PG07 {case} {prefix} minus Top-0",
+            )
+            assert_close(
+                float(data[f"{prefix}_minus_previous"]),
+                float(metrics[metric]) - float(previous_metrics[metric]),
+                f"PG07 {case} {prefix} minus previous",
+            )
+
+    rebound_indices = []
+    for index in range(1, case_count):
+        current = results[index]["result"]
+        previous = results[index - 1]["result"]
+        if (
+            float(current["surrogate_acc"]) > float(previous["surrogate_acc"])
+            or float(current["fidelity"]) > float(previous["fidelity"])
+            or float(current["posterior_kl"]) < float(previous["posterior_kl"])
+        ):
+            rebound_indices.append(index)
+    early_stopping = payload.get("early_stopping", {})
+    expected_triggered = bool(rebound_indices)
+    expected_stop_k = rebound_indices[0] if rebound_indices else None
+    if (
+        early_stopping.get("criterion")
+        != "accuracy_up_or_fidelity_up_or_posterior_kl_down_vs_previous_k"
+        or early_stopping.get("comparison") != "strict"
+        or early_stopping.get("retain_trigger_case") is not True
+        or early_stopping.get("triggered") != expected_triggered
+        or early_stopping.get("stop_k") != expected_stop_k
+        or (expected_triggered and expected_stop_k != case_count - 1)
+        or (not expected_triggered and case_count != 17)
+    ):
+        raise ValueError("PG07 没有在首次任一指标反弹处保留触发点并早停。")
+
+    reproduction = payload.get("top5_reproduction", {})
+    if case_count > 5:
+        top5 = results[5]
+        if (
+            reproduction.get("reached") is not True
+            or reproduction.get("same_mask") is not True
+            or top5["protection"]["protection_mask_sha256"]
+            != lab07_reference["protection_mask_sha256"]
+        ):
+            raise ValueError("PG07 Top-5 没有复现 Lab07 相同 mask。")
+        lab07_metrics = lab07_reference["result"]
+        for metric in ("surrogate_acc", "fidelity", "posterior_kl"):
+            assert_close(
+                float(reproduction["metric_differences_pg07_minus_lab07"][metric]),
+                float(top5["result"][metric]) - float(lab07_metrics[metric]),
+                f"PG07 Top-5 reproduction {metric}",
+            )
+    elif reproduction != {
+        "reached": False,
+        "same_mask": None,
+        "metric_differences_pg07_minus_lab07": None,
+    }:
+        raise ValueError("PG07 在早于 Top-5 停止时错误生成了复现指标。")
+
+    expected_outputs = {
+        "data": "results/playground/07_topk/data.tsv",
+        "history": "results/playground/07_topk/history.tsv",
+        "plot_by_k": "results/playground/07_topk/metrics_by_k.png",
+        "plot_by_cost": "results/playground/07_topk/metrics_by_cost.png",
+        "masks": {
+            case: f"results/playground/07_topk/{case}_mask.pt"
+            for case in expected_cases
+        },
+    }
+    if payload.get("outputs") != expected_outputs:
+        raise ValueError("PG07 outputs 索引不正确。")
+    expected_plots = {"metrics_by_k.png", "metrics_by_cost.png"}
+    if {path.name for path in PG07.glob("*.png")} != expected_plots:
+        raise ValueError("PG07 不是按 k 和保护成本绘制的两张曲线图。")
+    for name in expected_plots:
+        require_nonempty(PG07 / name)
+
+
 def validate_readmes_and_removed_paths() -> None:
     result_readmes = (
         PG01 / "README.md",
@@ -808,6 +1279,8 @@ def validate_readmes_and_removed_paths() -> None:
         PG03 / "README.md",
         PG04 / "README.md",
         PG05 / "README.md",
+        PG06 / "README.md",
+        PG07 / "README.md",
     )
     for path in result_readmes:
         text = path.read_text(encoding="utf-8")
@@ -858,10 +1331,12 @@ def main() -> int:
         raw_rows=raw_rows,
     )
     validate_pg05()
+    validate_mixed_normalization(raw_rows)
+    validate_pg07()
     validate_readmes_and_removed_paths()
     print(
-        "[OK] PG01–PG05 原始四路输出、all/main/bn 排名与 "
-        "seed-42 Top-5 保护诊断均有效。"
+        "[OK] PG01–PG07 原始四路输出、all/main/bn 排名、联合归一化、"
+        "Top-5 诊断与 seed-42 Feature Conv Top-k 扫描均有效。"
     )
     return 0
 
